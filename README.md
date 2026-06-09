@@ -1,6 +1,6 @@
 # Instagram Comment-to-DM Automation
 
-Local Dockerized FastAPI backend with PostgreSQL, Redis, Meta webhook validation, authentication, encrypted token storage, Celery workers, campaign management, keyword matching, comment processing, lead creation, and message sending.
+Self-hosted Instagram automation platform (ManyChat alternative). Keyword-triggered campaigns reply to Instagram comments with private DMs — using a Next.js dashboard, FastAPI backend, PostgreSQL, Redis, and Celery workers.
 
 ## Quick Start
 
@@ -46,7 +46,7 @@ Expected response:
 {"status":"ok","service":"Instagram Automation","environment":"development","database":"ok"}
 ```
 
-The internal marketing dashboard runs at:
+The dashboard runs at:
 
 ```text
 http://localhost:3000
@@ -54,7 +54,7 @@ http://localhost:3000
 
 Docker Compose starts it as the `dashboard` service with `NEXT_PUBLIC_API_URL=http://localhost:8000`.
 
-## Marketing Dashboard MVP
+## Marketing Dashboard
 
 ### Login flow
 
@@ -63,15 +63,30 @@ Docker Compose starts it as the `dashboard` service with `NEXT_PUBLIC_API_URL=ht
 3. Open `http://localhost:3000/login`.
 4. Log in with the admin email and password. The MVP stores the access token in browser `localStorage`.
 
-### Mock connecting an Instagram account
+### Connecting a real Instagram account
 
-In development, open `Accounts` and use the `Mock connect account` form. It calls:
+From the dashboard, open `Accounts` and click the **Connect Instagram** button in the top right. This:
+
+1. Calls `GET /meta/connect/start` to generate an OAuth URL with a CSRF state token (stored in Redis for 10 minutes).
+2. Redirects your browser to the Meta OAuth dialog.
+3. After you approve permissions, Meta redirects back to `/meta/connect/callback`.
+4. The backend exchanges the authorization code for a long-lived token (60-day), fetches your Instagram Business account metadata, encrypts the token, and saves the account.
+5. You are redirected back to `/accounts?connected=true` and the account appears in the table.
+
+Requirements:
+- A **Meta Business App** with the "Manage messaging & content on Instagram" use case.
+- The user completing OAuth must be an admin of the Facebook Page linked to the Instagram Business account.
+- The redirect URI `https://yourdomain.com/meta/connect/callback` must be registered in the Meta App dashboard.
+
+### Mock connecting an account (development only)
+
+In development (`NEXT_PUBLIC_APP_ENV != production`), the `Accounts` page shows a **Mock connect account** form. It calls:
 
 ```text
 POST /meta/connect/mock
 ```
 
-Use any local test values for `ig_user_id`, `username`, `account_type`, and `access_token`. Connected accounts appear in the accounts table and can be selected when creating campaigns.
+Use any local test values for `ig_user_id`, `username`, `account_type`, and `access_token`. This form is completely absent from production builds.
 
 ### Creating and activating a campaign
 
@@ -106,7 +121,7 @@ The modal shows whether a keyword matched and the rendered message body.
 
 ### Running a dry webhook test
 
-Use the signed webhook flow below in `Webhook Comment Processing` to send a local comment event. Then inspect `Overview`, `Logs`, `Leads`, and `Messages` in the dashboard.
+Use the signed webhook flow in `Webhook Comment Processing` below to send a local comment event. Then inspect `Overview`, `Logs`, `Leads`, and `Messages` in the dashboard.
 
 ## Authentication
 
@@ -145,9 +160,51 @@ curl -X POST http://localhost:8000/auth/logout
 
 ## Meta Integration
 
-### Mock Account Connection (Development Only)
+### Real OAuth Flow
 
-Use this endpoint to simulate connecting an Instagram account without going through Meta App Review:
+The full Meta OAuth flow is implemented end-to-end.
+
+**Step 1 — Start OAuth**
+
+```bash
+GET /meta/connect/start
+Authorization: Bearer <access_token>
+```
+
+Returns `{ "oauth_url": "https://www.facebook.com/v21.0/dialog/oauth?..." }`. Redirect the browser to this URL. A CSRF state token is stored in Redis for 10 minutes.
+
+**Step 2 — Callback**
+
+Meta redirects to:
+
+```text
+GET /meta/connect/callback?code=<code>&state=<state>
+```
+
+The backend:
+1. Validates the `state` against Redis (one-time use, deleted immediately after check).
+2. Exchanges `code` for a short-lived token via `POST https://graph.facebook.com/v21.0/oauth/access_token`.
+3. Exchanges the short-lived token for a long-lived token (60 days) via `GET .../oauth/access_token?grant_type=fb_exchange_token`.
+4. Calls `GET /me/accounts` to find linked Facebook Pages, then fetches the connected Instagram Business Account ID and username.
+5. Upserts the `InstagramAccount` record, encrypts and stores the long-lived token.
+6. Redirects to `{FRONTEND_URL}/accounts?connected=true`.
+
+On any error, redirects to `{FRONTEND_URL}/accounts?error=oauth_failed`.
+
+**Required Meta App setup**
+
+| Setting | Value |
+|---------|-------|
+| App type | Business |
+| Use case | Manage messaging & content on Instagram |
+| Permissions | `instagram_business_basic`, `instagram_business_manage_messages`, `instagram_business_manage_comments`, `pages_show_list` |
+| Valid OAuth redirect URI | `https://yourdomain.com/meta/connect/callback` |
+| Webhook URL | `https://yourdomain.com/webhooks/meta` |
+| Webhook fields | `comments` |
+
+### Mock Account Connection (development only)
+
+Use this endpoint to connect an account without going through Meta App Review. Only available when `APP_ENV=development`.
 
 ```bash
 curl -X POST http://localhost:8000/meta/connect/mock \
@@ -344,6 +401,97 @@ Or run a one-off test container:
 docker compose run --rm backend pytest
 ```
 
+## Production Deployment
+
+### Prerequisites
+
+- VPS with Ubuntu 22.04+
+- Docker and Docker Compose installed
+- Domain DNS pointed to VPS IP
+- Ports 80 and 443 open in firewall
+
+### 1. Clone and configure
+
+```bash
+git clone https://github.com/YOUR_ORG/ManyOsirisChat.git
+cd ManyOsirisChat
+cp .env.production.example .env.production
+nano .env.production   # fill in all real values
+```
+
+### 2. Generate required secret values
+
+```bash
+# JWT_SECRET and APP_SECRET_KEY (run twice, use separate values)
+openssl rand -hex 32
+
+# TOKEN_ENCRYPTION_KEY (Fernet format)
+python3 -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
+
+# META_WEBHOOK_VERIFY_TOKEN
+openssl rand -hex 32
+```
+
+### 3. Issue the first SSL certificate
+
+```bash
+docker compose -f docker-compose.prod.yml run --rm certbot certonly \
+  --webroot -w /var/www/certbot \
+  --email your@email.com \
+  --agree-tos --no-eff-email \
+  -d yourdomain.com
+```
+
+### 4. Start the stack
+
+```bash
+docker compose -f docker-compose.prod.yml up -d --build
+```
+
+Services started: `nginx`, `backend`, `dashboard`, `worker`, `beat`, `postgres`, `redis`, `certbot` (auto-renews every 12 hours).
+
+### 5. Run migrations
+
+```bash
+docker compose -f docker-compose.prod.yml exec backend alembic upgrade head
+```
+
+### 6. Create admin user
+
+```bash
+docker compose -f docker-compose.prod.yml exec backend \
+  python -m app.scripts.create_admin \
+  --email owner@yourcompany.com \
+  --password yourpassword \
+  --name "Owner"
+```
+
+### 7. Register webhook in Meta App dashboard
+
+| Field | Value |
+|-------|-------|
+| Callback URL | `https://yourdomain.com/webhooks/meta` |
+| Verify Token | value of `META_WEBHOOK_VERIFY_TOKEN` from `.env.production` |
+| Subscribed fields | `comments` |
+
+### 8. Register OAuth redirect URI in Meta App dashboard
+
+```text
+https://yourdomain.com/meta/connect/callback
+```
+
+### 9. Verify the stack
+
+```bash
+curl https://yourdomain.com/health
+```
+
+Expected response:
+
+```json
+{"status":"ok","service":"Instagram Automation","environment":"production","database":"ok"}
+```
+
 ## Project Structure
 
 ```
@@ -446,29 +594,45 @@ backend/
 | `APP_ENV` | Runtime environment | `development` |
 | `APP_NAME` | Service name | `Instagram Automation` |
 | `APP_SECRET_KEY` | General app secret | `change_me_local_app_secret` |
-| `APP_BASE_URL` | Base URL for OAuth callbacks | `http://localhost:8000` |
-| `META_APP_ID` | Meta app ID | `local_meta_app_id` |
-| `META_APP_SECRET` | Meta app secret for HMAC verification | *(required)* |
-| `META_WEBHOOK_VERIFY_TOKEN` | Token for webhook subscription verification | *(required)* |
-| `META_GRAPH_API_VERSION` | Meta Graph API version | `v21.0` |
+| `APP_BASE_URL` | Backend public URL (used in OAuth redirect URIs) | `http://localhost:8000` |
+| `FRONTEND_URL` | Frontend URL for OAuth success/error redirects | `http://localhost:3000` |
+| `ALLOWED_ORIGINS` | CORS allowed origins (comma-separated) | `http://localhost:3000` |
+| `DISABLE_DOCS` | Disable FastAPI `/docs` and `/redoc` in production | `false` |
 | `LOG_LEVEL` | Logging level | `INFO` |
+| `SENTRY_DSN` | Sentry error tracking DSN | *(optional)* |
+| `META_APP_ID` | Meta App ID | `local_meta_app_id` |
+| `META_APP_SECRET` | Meta App Secret — used for HMAC webhook verification and token exchange | *(required)* |
+| `META_WEBHOOK_VERIFY_TOKEN` | Token for webhook subscription challenge verification | *(required)* |
+| `META_GRAPH_API_VERSION` | Meta Graph API version | `v21.0` |
+| `META_MOCK_PRIVATE_REPLIES` | Bypass real Meta API calls for message sending (dev only) | `false` |
 | `DATABASE_URL` | PostgreSQL connection string | *(required)* |
 | `REDIS_URL` | Redis connection string | `redis://redis:6379/0` |
 | `POSTGRES_USER` | PostgreSQL username | `postgres` |
-| `POSTGRES_PASSWORD` | PostgreSQL password | `postgres` |
+| `POSTGRES_PASSWORD` | PostgreSQL password | *(required)* |
 | `POSTGRES_DB` | PostgreSQL database name | `instagram_automation` |
 | `JWT_SECRET` | Secret key for JWT signing | *(required)* |
 | `JWT_ACCESS_TOKEN_EXPIRE_MINUTES` | Access token expiry in minutes | `30` |
 | `JWT_REFRESH_TOKEN_EXPIRE_DAYS` | Refresh token expiry in days | `7` |
-| `TOKEN_ENCRYPTION_KEY` | Fernet key for encrypting Meta tokens | *(required)* |
+| `TOKEN_ENCRYPTION_KEY` | Fernet key for encrypting Meta access tokens at rest | *(required)* |
+| `NEXT_PUBLIC_API_URL` | Backend URL used by the frontend at build time | `http://localhost:8000` |
+| `NEXT_PUBLIC_APP_ENV` | Frontend environment — set to `production` to hide dev-only UI | `development` |
+| `BACKUP_DIR` | Directory for database backup files | `./backups` |
 
-## What's Not Included (Future Phases)
+## Roadmap
 
-- Real Meta OAuth flow (structure ready with TODOs)
-- Dashboard / frontend
-- Multi-step conversations
-- Story replies
-- DM keyword automations
-- AI replies
-- Real token refresh (placeholder only)
-- Redis caching logic
+### v1 — Complete
+- Real Meta OAuth with encrypted long-lived token storage
+- Instagram Business account connection via OAuth
+- Keyword-triggered campaign automation
+- Follow prompt flow
+- Target media (any media or specific post/reel)
+- Lead capture and CSV export
+- Message delivery tracking with retry
+- Role-based access control (Owner, Admin, Operator, Viewer)
+- Rate limiting and HMAC webhook verification
+- Audit logging
+- Production Docker + Nginx + SSL infrastructure
+
+### v2 — Planned
+- AI conversation continuation (GPT-4o mini picks up non-keyword replies after campaign trigger)
+- Real follow verification gate before releasing campaign message
