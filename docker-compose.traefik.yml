@@ -1,0 +1,126 @@
+services:
+  backend:
+    build: ./backend
+    restart: unless-stopped
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --proxy-headers --forwarded-allow-ips="*"
+    env_file:
+      - .env.production
+    depends_on:
+      - postgres
+      - redis
+    networks:
+      - dokploy-network
+      - internal
+    labels:
+      - "traefik.enable=true"
+      - "traefik.docker.network=dokploy-network"
+
+      # --- /api/ route (strips /api prefix before hitting backend) ---
+      - "traefik.http.routers.manyosiris-api.rule=Host(`manyosirischat.theosirislabs.com`) && PathPrefix(`/api/`)"
+      - "traefik.http.routers.manyosiris-api.entrypoints=websecure"
+      - "traefik.http.routers.manyosiris-api.tls=true"
+      - "traefik.http.routers.manyosiris-api.tls.certresolver=letsencrypt"
+      - "traefik.http.routers.manyosiris-api.priority=30"
+      - "traefik.http.routers.manyosiris-api.middlewares=manyosiris-strip-api@docker"
+      - "traefik.http.routers.manyosiris-api.service=manyosiris-backend-svc"
+
+      # --- Strip /api prefix middleware ---
+      - "traefik.http.middlewares.manyosiris-strip-api.stripprefix.prefixes=/api"
+
+      # --- /health route ---
+      - "traefik.http.routers.manyosiris-health.rule=Host(`manyosirischat.theosirislabs.com`) && Path(`/health`)"
+      - "traefik.http.routers.manyosiris-health.entrypoints=websecure"
+      - "traefik.http.routers.manyosiris-health.tls=true"
+      - "traefik.http.routers.manyosiris-health.tls.certresolver=letsencrypt"
+      - "traefik.http.routers.manyosiris-health.priority=30"
+      - "traefik.http.routers.manyosiris-health.service=manyosiris-backend-svc"
+
+      # --- All other backend routes (no prefix stripping) ---
+      - "traefik.http.routers.manyosiris-backend.rule=Host(`manyosirischat.theosirislabs.com`) && (PathPrefix(`/auth/`) || PathPrefix(`/meta/`) || PathPrefix(`/instagram/`) || PathPrefix(`/campaigns/`) || PathPrefix(`/leads/`) || PathPrefix(`/messages/`) || PathPrefix(`/logs/`) || PathPrefix(`/stats/`) || PathPrefix(`/webhooks/`))"
+      - "traefik.http.routers.manyosiris-backend.entrypoints=websecure"
+      - "traefik.http.routers.manyosiris-backend.tls=true"
+      - "traefik.http.routers.manyosiris-backend.tls.certresolver=letsencrypt"
+      - "traefik.http.routers.manyosiris-backend.priority=20"
+      - "traefik.http.routers.manyosiris-backend.service=manyosiris-backend-svc"
+
+      # --- Backend service port ---
+      - "traefik.http.services.manyosiris-backend-svc.loadbalancer.server.port=8000"
+
+  dashboard:
+    build:
+      context: ./dashboard
+      args:
+        NEXT_PUBLIC_API_URL: https://manyosirischat.theosirislabs.com
+        NEXT_PUBLIC_APP_ENV: production
+    restart: unless-stopped
+    env_file:
+      - .env.production
+    depends_on:
+      - backend
+    networks:
+      - dokploy-network
+      - internal
+    labels:
+      - "traefik.enable=true"
+      - "traefik.docker.network=dokploy-network"
+
+      # --- Catch-all: frontend dashboard (lowest priority) ---
+      - "traefik.http.routers.manyosiris-dashboard.rule=Host(`manyosirischat.theosirislabs.com`)"
+      - "traefik.http.routers.manyosiris-dashboard.entrypoints=websecure"
+      - "traefik.http.routers.manyosiris-dashboard.tls=true"
+      - "traefik.http.routers.manyosiris-dashboard.tls.certresolver=letsencrypt"
+      - "traefik.http.routers.manyosiris-dashboard.priority=10"
+      - "traefik.http.services.manyosiris-dashboard.loadbalancer.server.port=3000"
+
+  worker:
+    build: ./backend
+    restart: unless-stopped
+    command: celery -A app.workers.celery_app worker --loglevel=info
+    env_file:
+      - .env.production
+    depends_on:
+      - postgres
+      - redis
+    networks:
+      - internal
+
+  beat:
+    build: ./backend
+    restart: unless-stopped
+    command: celery -A app.workers.celery_app beat --loglevel=info
+    env_file:
+      - .env.production
+    depends_on:
+      - postgres
+      - redis
+    networks:
+      - internal
+
+  postgres:
+    image: postgres:15
+    restart: unless-stopped
+    env_file:
+      - .env.production
+    volumes:
+      - manyosiris_pgdata:/var/lib/postgresql/data
+    networks:
+      - internal
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    command: redis-server --appendonly yes
+    volumes:
+      - manyosiris_redisdata:/data
+    networks:
+      - internal
+
+networks:
+  dokploy-network:
+    external: true
+  internal:
+    driver: bridge
+
+volumes:
+  manyosiris_pgdata:
+  manyosiris_redisdata:
