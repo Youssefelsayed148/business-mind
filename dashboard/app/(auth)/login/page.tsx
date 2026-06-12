@@ -2,6 +2,7 @@
 
 import { FormEvent, useState } from "react";
 import Image from "next/image";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/Button";
 import { Field } from "@/components/ui/Field";
@@ -52,6 +53,16 @@ export default function LoginPage() {
         <Field label="Password" type="password" value={password} onChange={(event) => setPassword(event.target.value)} required />
         {error ? <p className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm font-medium text-danger">{error}</p> : null}
         <Button type="submit" disabled={loading}>{loading ? "Logging in..." : "Login"}</Button>
+        <p className="text-center text-xs text-muted">
+          By logging in you agree to our{" "}
+          <Link href="/terms" className="text-accent hover:text-accentHover underline-offset-2 hover:underline transition-colors">
+            Terms of Service
+          </Link>{" "}
+          and{" "}
+          <Link href="/privacy" className="text-accent hover:text-accentHover underline-offset-2 hover:underline transition-colors">
+            Privacy Policy
+          </Link>
+        </p>
       </form>
     </main>
   );
