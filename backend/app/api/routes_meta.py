@@ -68,14 +68,24 @@ async def meta_connect_start(
 @router.get("/meta/connect/callback")
 async def meta_connect_callback(
     request: Request,
-    code: str,
-    state: str,
     db: Session = Depends(get_db),
 ):
+    params = request.query_params
+    code = params.get("code")
+    state = params.get("state")
+    error_code = params.get("error_code")
+    error_message = params.get("error_message")
+
+    # Meta sends error_code when user denies or scopes are invalid.
+    if error_code or not code or not state:
+        logger.warning(
+            "OAuth callback error from Meta",
+            extra={"error_code": error_code, "error_message": error_message},
+        )
+        return RedirectResponse(url=f"{settings.FRONTEND_URL}/accounts?error=oauth_failed")
     logger.info("Meta OAuth callback received", extra={"state": state})
 
-    # CSRF check: state must match a key we issued in /connect/start or
-    # /instagram/accounts/{id}/reconnect (one-time use).
+    # CSRF check
     try:
         _r = _redis()
         state_value = _r.get(f"oauth_state:{state}")
