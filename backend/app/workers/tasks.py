@@ -1,6 +1,4 @@
 import logging
-import inspect
-import asyncio
 
 from sqlalchemy.orm import Session
 
@@ -39,12 +37,6 @@ logger = logging.getLogger(__name__)
 
 def _get_db() -> Session:
     return SessionLocal()
-
-
-def _resolve_maybe_awaitable(value):
-    if inspect.isawaitable(value):
-        return asyncio.run(value)
-    return value
 
 
 def _message_flow_details(
@@ -400,16 +392,16 @@ def _send_private_reply_impl(task, message_id: str, final_after_prompt: bool = F
         # Find comment_id string
         comment_id_str, trigger_keyword = _matched_keyword_for_message(db, message)
 
-        # Send via Meta API
+        # Send via Meta API (sync client — no asyncio needed in Celery workers)
         client = MetaMessagingClient()
         try:
-            result = _resolve_maybe_awaitable(client.send_private_reply(
+            result = client.send_private_reply(
                 access_token=access_token,
                 comment_id=comment_id_str,
                 text=message.rendered_body or "",
-            ))
+            )
         finally:
-            _resolve_maybe_awaitable(client.close())
+            client.close()
 
         if result.success:
             mark_message_sent(db, message.id, result.provider_message_id)
@@ -464,7 +456,6 @@ def _send_private_reply_impl(task, message_id: str, final_after_prompt: bool = F
                     **_message_flow_details(campaign.delivery_mode, message.message_type, comment_id_str, trigger_keyword, str(message.lead_id)),
                 },
             )
-            # Retry with exponential backoff
             raise task.retry(countdown=60 * (2 ** task.request.retries), exc=Exception(result.error_message))
 
         # Token/permission/policy errors - permanent failure
@@ -502,7 +493,6 @@ def _send_private_reply_impl(task, message_id: str, final_after_prompt: bool = F
         )
     except Exception as exc:
         exc_name = type(exc).__name__
-        # Let Celery retry exceptions propagate naturally
         if exc_name in ("Retry", "MaxRetriesExceededError"):
             raise
         logger.exception("send_private_reply failed", extra={"message_id": message_id})
@@ -549,17 +539,18 @@ def send_follow_prompt_card(self, message_id: str):
         comment_id_str, trigger_keyword = _matched_keyword_for_message(db, message)
         mark_message_sending(db, message.id)
 
+        # Send via Meta API (sync client — no asyncio needed in Celery workers)
         client = MetaMessagingClient()
         try:
-            result = _resolve_maybe_awaitable(client.send_follow_prompt_card(
+            result = client.send_follow_prompt_card(
                 access_token=access_token,
                 recipient_id=comment_id_str or "",
                 title=campaign.follow_prompt_title or "",
                 description=campaign.follow_prompt_description or "",
                 profile_url=campaign.follow_prompt_profile_url or "",
-            ))
+            )
         finally:
-            _resolve_maybe_awaitable(client.close())
+            client.close()
 
         details = _message_flow_details(
             campaign.delivery_mode,

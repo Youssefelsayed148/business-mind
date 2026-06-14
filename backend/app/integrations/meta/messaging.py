@@ -3,7 +3,7 @@ import logging
 import httpx
 
 from app.core.config import settings
-from app.integrations.meta.errors import MetaAPIError, classify_meta_error
+from app.integrations.meta.errors import classify_meta_error
 
 logger = logging.getLogger(__name__)
 
@@ -25,11 +25,17 @@ class MetaMessageResult:
 
 
 class MetaMessagingClient:
+    """Synchronous Meta Graph API client for use inside Celery tasks.
+
+    Uses httpx.Client (sync) instead of httpx.AsyncClient to avoid
+    event-loop lifecycle issues when called from Celery worker processes.
+    """
+
     def __init__(self, base_url: str | None = None):
         self.base_url = base_url or f"https://graph.facebook.com/{settings.META_GRAPH_API_VERSION}"
-        self._client = httpx.AsyncClient(timeout=30.0)
+        self._client = httpx.Client(timeout=30.0)
 
-    async def send_private_reply(
+    def send_private_reply(
         self,
         access_token: str,
         comment_id: str,
@@ -37,8 +43,7 @@ class MetaMessagingClient:
     ) -> MetaMessageResult:
         """Send a private reply to an Instagram comment.
 
-        Uses the official Meta Graph API private_replies endpoint.
-        Endpoint pattern: POST /{comment_id}/private_replies
+        Endpoint: POST /{comment_id}/private_replies
         """
         if settings.META_MOCK_PRIVATE_REPLIES:
             return MetaMessageResult(
@@ -47,27 +52,18 @@ class MetaMessagingClient:
                 raw_response={"recipient_id": "mock", "message_id": f"mock_message_{comment_id}"},
             )
 
-        path = f"/{comment_id}/private_replies"
-        url = f"{self.base_url}{path}"
-        payload = {"message": text}
+        url = f"{self.base_url}/{comment_id}/private_replies"
         params = {"access_token": access_token}
+        payload = {"message": text}
 
         try:
-            response = await self._client.post(url, params=params, json=payload)
+            response = self._client.post(url, params=params, json=payload)
         except httpx.NetworkError as exc:
             logger.warning("Meta messaging network error", extra={"error": str(exc)})
-            return MetaMessageResult(
-                success=False,
-                error_code="network_error",
-                error_message=str(exc),
-            )
+            return MetaMessageResult(success=False, error_code="network_error", error_message=str(exc))
         except httpx.TimeoutException as exc:
             logger.warning("Meta messaging timeout", extra={"error": str(exc)})
-            return MetaMessageResult(
-                success=False,
-                error_code="timeout",
-                error_message="Request timed out",
-            )
+            return MetaMessageResult(success=False, error_code="timeout", error_message="Request timed out")
 
         try:
             data = response.json()
@@ -82,21 +78,29 @@ class MetaMessagingClient:
         if response.status_code >= 400 or "error" in data:
             classification = classify_meta_error(response.status_code, data)
             error = data.get("error", {})
+            error_msg = error.get("message", "Meta API error")
+            logger.error(
+                "Meta private_reply API error",
+                extra={
+                    "comment_id": comment_id,
+                    "status_code": response.status_code,
+                    "error_code": error.get("code"),
+                    "error_subcode": error.get("error_subcode"),
+                    "error_message": error_msg,
+                    "raw_response": data,
+                },
+            )
             return MetaMessageResult(
                 success=False,
                 error_code=classification.category,
-                error_message=error.get("message", "Meta API error"),
+                error_message=error_msg,
                 raw_response=data,
             )
 
         message_id = data.get("id") or data.get("message_id")
-        return MetaMessageResult(
-            success=True,
-            provider_message_id=message_id,
-            raw_response=data,
-        )
+        return MetaMessageResult(success=True, provider_message_id=message_id, raw_response=data)
 
-    async def send_follow_prompt_card(
+    def send_follow_prompt_card(
         self,
         access_token: str,
         recipient_id: str,
@@ -104,10 +108,7 @@ class MetaMessagingClient:
         description: str,
         profile_url: str,
     ) -> MetaMessageResult:
-        """Send a generic template card with a fixed Follow URL button.
-
-        This opens the profile URL only; it does not follow or verify follow state.
-        """
+        """Send a generic template card with a Follow URL button."""
         if settings.META_MOCK_PRIVATE_REPLIES:
             return MetaMessageResult(
                 success=True,
@@ -115,8 +116,8 @@ class MetaMessagingClient:
                 raw_response={"recipient_id": "mock", "message_id": f"mock_follow_prompt_{recipient_id}"},
             )
 
-        path = f"/{recipient_id}/private_replies"
-        url = f"{self.base_url}{path}"
+        url = f"{self.base_url}/{recipient_id}/private_replies"
+        params = {"access_token": access_token}
         payload = {
             "message": {
                 "attachment": {
@@ -140,10 +141,9 @@ class MetaMessagingClient:
                 }
             }
         }
-        params = {"access_token": access_token}
 
         try:
-            response = await self._client.post(url, params=params, json=payload)
+            response = self._client.post(url, params=params, json=payload)
         except httpx.NetworkError as exc:
             logger.warning("Meta follow prompt network error", extra={"error": str(exc)})
             return MetaMessageResult(success=False, error_code="network_error", error_message=str(exc))
@@ -164,15 +164,28 @@ class MetaMessagingClient:
         if response.status_code >= 400 or "error" in data:
             classification = classify_meta_error(response.status_code, data)
             error = data.get("error", {})
+            error_msg = error.get("message", "Meta API error")
+            logger.error(
+                "Meta follow_prompt API error",
+                extra={
+                    "recipient_id": recipient_id,
+                    "status_code": response.status_code,
+                    "error_code": error.get("code"),
+                    "error_subcode": error.get("error_subcode"),
+                    "error_message": error_msg,
+                    "raw_response": data,
+                },
+            )
             return MetaMessageResult(
                 success=False,
                 error_code=classification.category,
-                error_message=error.get("message", "Meta API error"),
+                error_message=error_msg,
                 raw_response=data,
             )
 
         message_id = data.get("id") or data.get("message_id")
         return MetaMessageResult(success=True, provider_message_id=message_id, raw_response=data)
 
-    async def close(self):
-        await self._client.aclose()
+    def close(self):
+        """Close the underlying HTTP client."""
+        self._client.close()
