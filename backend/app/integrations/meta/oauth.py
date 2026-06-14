@@ -17,7 +17,7 @@ def build_oauth_url(state: str) -> str:
         f"{META_OAUTH_BASE}"
         f"?client_id={settings.META_APP_ID}"
         f"&redirect_uri={redirect_uri}"
-        f"&scope=instagram_business_basic,instagram_business_manage_messages,instagram_business_manage_comments,pages_show_list"
+        f"&scope=instagram_basic,instagram_manage_messages,instagram_manage_comments,pages_show_list,pages_read_engagement"
         f"&state={state}"
         f"&response_type=code"
     )
