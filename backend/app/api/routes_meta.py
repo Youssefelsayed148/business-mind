@@ -56,6 +56,7 @@ async def meta_connect_start(
     _limit_account_mutation(current_user)
     state = str(uuid.uuid4())
     try:
+        # Value "1" = fresh connect (no existing account_id).
         _redis().setex(f"oauth_state:{state}", 600, "1")
     except RedisError:
         logger.error("Failed to store OAuth state in Redis")
@@ -73,16 +74,23 @@ async def meta_connect_callback(
 ):
     logger.info("Meta OAuth callback received", extra={"state": state})
 
-    # CSRF check: state must match a key we issued in /connect/start (one-time use)
+    # CSRF check: state must match a key we issued in /connect/start or
+    # /instagram/accounts/{id}/reconnect (one-time use).
     try:
         _r = _redis()
-        if not _r.exists(f"oauth_state:{state}"):
+        state_value = _r.get(f"oauth_state:{state}")
+        if not state_value:
             logger.warning("OAuth state not found or expired", extra={"state": state})
             return RedirectResponse(url=f"{settings.FRONTEND_URL}/accounts?error=oauth_failed")
         _r.delete(f"oauth_state:{state}")
     except RedisError:
         logger.error("Failed to validate OAuth state in Redis")
         return RedirectResponse(url=f"{settings.FRONTEND_URL}/accounts?error=oauth_failed")
+
+    # state_value == "1"  → fresh connect (no target account)
+    # state_value == "<uuid>"  → reconnect for a specific existing account
+    is_reconnect = state_value != "1"
+    reconnect_account_id = state_value if is_reconnect else None
 
     redirect_uri = f"{settings.APP_BASE_URL}/meta/connect/callback"
 
@@ -100,6 +108,53 @@ async def meta_connect_callback(
     if not workspace:
         raise HTTPException(status_code=404, detail="Default workspace not found")
 
+    if is_reconnect and reconnect_account_id:
+        # Reconnect: find the specific account by its DB id, update it in place.
+        # If the returned ig_user_id differs from what's stored (user authed wrong account),
+        # we fall through to the normal upsert-by-ig_user_id path so we don't corrupt data.
+        import uuid as _uuid
+        try:
+            target_id = _uuid.UUID(reconnect_account_id)
+            account = db.query(InstagramAccount).filter(InstagramAccount.id == target_id).first()
+            if account and account.ig_user_id == metadata["ig_user_id"]:
+                account.ig_username = metadata["username"]
+                account.status = "connected"
+                db.commit()
+                db.refresh(account)
+                store_encrypted_token(
+                    db=db,
+                    workspace_id=workspace.id,
+                    instagram_account_id=account.id,
+                    access_token=long_lived["access_token"],
+                    expires_at=expires_at,
+                )
+                write_audit_log(
+                    db,
+                    "account_reconnected",
+                    f"OAuth reconnected account {account.ig_username or account.ig_user_id}",
+                    actor=None,
+                    entity_type="account",
+                    entity_id=account.id,
+                    entity_name=account.ig_username or account.ig_user_id,
+                    metadata={"ig_user_id": account.ig_user_id, "mock": False},
+                )
+                logger.info(
+                    "Meta account reconnected via OAuth",
+                    extra={"ig_user_id": metadata["ig_user_id"], "username": metadata["username"]},
+                )
+                return RedirectResponse(url=f"{settings.FRONTEND_URL}/accounts?reconnected=true")
+            else:
+                logger.warning(
+                    "Reconnect ig_user_id mismatch — falling through to upsert",
+                    extra={
+                        "expected": account.ig_user_id if account else "not_found",
+                        "received": metadata["ig_user_id"],
+                    },
+                )
+        except (ValueError, AttributeError):
+            logger.error("Invalid reconnect_account_id in Redis state", extra={"value": reconnect_account_id})
+
+    # Normal connect flow: upsert by ig_user_id.
     existing = (
         db.query(InstagramAccount)
         .filter(InstagramAccount.ig_user_id == metadata["ig_user_id"])

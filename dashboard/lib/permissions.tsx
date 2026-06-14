@@ -4,7 +4,7 @@ import { createContext, useContext } from "react";
 import type { User } from "./types";
 
 const permissions: Record<string, string[]> = {
-  owner: ["manage_campaigns", "delete_campaigns", "manage_accounts", "disconnect_accounts", "view_audit_logs", "retry_messages"],
+  owner: ["manage_campaigns", "delete_campaigns", "manage_accounts", "disconnect_accounts", "delete_accounts", "view_audit_logs", "retry_messages"],
   admin: ["manage_campaigns", "delete_campaigns", "manage_accounts", "disconnect_accounts", "view_audit_logs", "retry_messages"],
   operator: ["manage_campaigns", "view_audit_logs"],
   viewer: ["view_audit_logs"],

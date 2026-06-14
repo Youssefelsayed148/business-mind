@@ -13,6 +13,7 @@ ROLE_PERMISSIONS: dict[str, set[str]] = {
         "delete_campaigns",
         "manage_accounts",
         "disconnect_accounts",
+        "delete_accounts",
         "view_audit_logs",
         "retry_messages",
     },
