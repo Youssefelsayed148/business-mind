@@ -215,12 +215,6 @@ async def hard_delete_account(
             {"comment_id": None}, synchronize_session=False
         )
 
-    # 2. Nullify leads.comment_id (nullable FK → comments).
-    if comment_ids:
-        db.query(Lead).filter(Lead.comment_id.in_(comment_ids)).update(
-            {"comment_id": None}, synchronize_session=False
-        )
-
     # 3. Delete messages (FK → campaigns).
     if campaign_ids:
         db.query(Message).filter(Message.campaign_id.in_(campaign_ids)).delete(
