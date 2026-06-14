@@ -346,18 +346,20 @@ def hard_delete_campaign(
             detail="Only archived campaigns can be permanently deleted",
         )
 
-    message_count = db.query(Message).filter(Message.campaign_id == campaign_id).count()
-    if message_count:
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail="This campaign has message history. Keep it archived to preserve the Messages page.",
-        )
-
     entity_name = campaign.name
     account_id = campaign.instagram_account_id
     previous_status = campaign.status
     keyword_count = len(campaign.keywords)
 
+    # Delete messages first — Message.campaign_id FK has no ORM cascade,
+    # so deleting the campaign directly raises an IntegrityError (was the 409).
+    deleted_messages = (
+        db.query(Message)
+        .filter(Message.campaign_id == campaign_id)
+        .delete(synchronize_session=False)
+    )
+
+    # Nullify FK references in dependent tables (preserve rows for audit history).
     db.query(UserCooldown).filter(UserCooldown.campaign_id == campaign_id).delete(
         synchronize_session=False
     )
@@ -369,7 +371,11 @@ def hard_delete_campaign(
         {AutomationLog.campaign_id: None},
         synchronize_session=False,
     )
+
+    # CampaignKeyword rows cascade via the ORM relationship
+    # (cascade="all, delete-orphan" on Campaign.keywords), so db.delete handles them.
     db.delete(campaign)
+
     write_audit_log(
         db,
         "campaign_deleted",
@@ -383,6 +389,7 @@ def hard_delete_campaign(
             "account_id": str(account_id),
             "previous_status": previous_status,
             "keyword_count": keyword_count,
+            "deleted_messages": deleted_messages,
         },
         commit=False,
     )

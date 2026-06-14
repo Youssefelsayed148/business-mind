@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Link2 } from "lucide-react";
+import { Link2, Trash2 } from "lucide-react";
 import { MockConnect } from "@/components/accounts/MockConnect";
 import { Avatar } from "@/components/ui/Avatar";
 import { Badge } from "@/components/ui/Badge";
@@ -32,10 +32,15 @@ export default function AccountsPage() {
   const [accounts, setAccounts] = useState<InstagramAccount[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  const [connecting, setConnecting] = useState(false);
+  const [reconnectingId, setReconnectingId] = useState<string | null>(null);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
+
   const canManageAccounts = useCan("manage_accounts");
   const canDisconnectAccounts = useCan("disconnect_accounts");
+  const canDeleteAccounts = useCan("delete_accounts");
   const toast = useToast();
-  const [connecting, setConnecting] = useState(false);
 
   async function connectInstagram() {
     setConnecting(true);
@@ -63,9 +68,15 @@ export default function AccountsPage() {
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     const connected = params.get("connected");
+    const reconnected = params.get("reconnected");
     const errorParam = params.get("error");
+
     if (connected === "true") {
       toast.success("Instagram account connected successfully");
+      window.history.replaceState({}, "", "/accounts");
+      load();
+    } else if (reconnected === "true") {
+      toast.success("Instagram account reconnected successfully");
       window.history.replaceState({}, "", "/accounts");
       load();
     } else if (errorParam === "oauth_failed") {
@@ -84,19 +95,45 @@ export default function AccountsPage() {
     }
   }
 
+  /**
+   * Reconnect via real OAuth — backend returns an oauth_url, we redirect there.
+   * The callback updates the existing account row in place.
+   */
   async function reconnect(id: string) {
+    setReconnectingId(id);
     try {
-      await api.post(`/instagram/accounts/${id}/reconnect`);
-      toast.success("Account reconnected.");
-      load();
+      const { oauth_url } = await api.post<{ oauth_url: string }>(
+        `/instagram/accounts/${id}/reconnect`
+      );
+      window.location.href = oauth_url;
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Failed to reconnect account");
+      toast.error(err instanceof Error ? err.message : "Failed to start reconnect");
+      setReconnectingId(null);
     }
   }
 
+  async function hardDelete(id: string) {
+    setDeletingId(id);
+    setConfirmDeleteId(null);
+    try {
+      await api.delete(`/instagram/accounts/${id}/hard`);
+      toast.success("Account permanently deleted.");
+      load();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Failed to delete account");
+    } finally {
+      setDeletingId(null);
+    }
+  }
+
+  const confirmTarget = accounts.find((a) => a.id === confirmDeleteId);
+
   return (
     <div className="grid gap-6">
-      <PageHeader title="Accounts" description="Manage connected Instagram accounts. Use Connect Instagram to link a new Business account via OAuth.">
+      <PageHeader
+        title="Accounts"
+        description="Manage connected Instagram accounts. Use Connect Instagram to link a new Business account via OAuth."
+      >
         {canManageAccounts ? (
           <Button type="button" className="gap-2" onClick={connectInstagram} disabled={connecting}>
             <Link2 className="h-4 w-4" aria-hidden="true" />
@@ -104,60 +141,156 @@ export default function AccountsPage() {
           </Button>
         ) : null}
       </PageHeader>
-      {canManageAccounts && process.env.NEXT_PUBLIC_APP_ENV !== "production" ? <MockConnect onConnected={load} /> : null}
+
+      {canManageAccounts && process.env.NEXT_PUBLIC_APP_ENV !== "production" ? (
+        <MockConnect onConnected={load} />
+      ) : null}
+
+      {/* Confirm delete dialog */}
+      {confirmDeleteId && confirmTarget ? (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
+          <Panel className="max-w-md w-full mx-4">
+            <div className="flex items-start gap-3">
+              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-red-100">
+                <Trash2 className="h-5 w-5 text-red-600" />
+              </div>
+              <div>
+                <h3 className="text-base font-bold text-ink">Delete account permanently?</h3>
+                <p className="mt-1 text-sm text-muted">
+                  This will permanently delete{" "}
+                  <span className="font-semibold text-ink">
+                    @{confirmTarget.username || confirmTarget.ig_user_id}
+                  </span>{" "}
+                  and all associated campaigns, messages, and tokens. This action cannot be undone.
+                </p>
+              </div>
+            </div>
+            <div className="mt-5 flex justify-end gap-2">
+              <Button
+                type="button"
+                variant="secondary"
+                onClick={() => setConfirmDeleteId(null)}
+              >
+                Cancel
+              </Button>
+              <Button
+                type="button"
+                variant="danger"
+                disabled={deletingId === confirmDeleteId}
+                onClick={() => hardDelete(confirmDeleteId)}
+              >
+                {deletingId === confirmDeleteId ? "Deleting..." : "Delete permanently"}
+              </Button>
+            </div>
+          </Panel>
+        </div>
+      ) : null}
+
       <Panel>
         <div className="mb-4">
           <h2 className="text-lg font-bold text-ink">Connected accounts</h2>
-          <p className="mt-1 text-sm text-muted">Review account status, token expiry, and lifecycle actions.</p>
+          <p className="mt-1 text-sm text-muted">
+            Review account status, token expiry, and lifecycle actions.
+          </p>
         </div>
         <DataState loading={loading} error={error} />
         {loading ? <TableSkeleton rows={4} columns={6} /> : null}
-        {!loading && !error && accounts.length === 0 ? <EmptyState title="No accounts connected" message="Use the mock connector above in development to add an Instagram account." /> : null}
+        {!loading && !error && accounts.length === 0 ? (
+          <EmptyState
+            title="No accounts connected"
+            message="Use the mock connector above in development to add an Instagram account."
+          />
+        ) : null}
         {accounts.length > 0 ? (
-        <TableWrap>
-          <table className={`${tableClass} min-w-[760px]`}>
-            <thead>
-              <tr className={theadRowClass}>
-                <th className={thClass}>Username</th>
-                <th className={thClass}>Account type</th>
-                <th className={thClass}>Status</th>
-                <th className={thClass}>Token expiry</th>
-                <th className={thClass}>Last active</th>
-                <th className={thClass}>Actions</th>
-              </tr>
-            </thead>
-            <tbody>
-              {accounts.map((account) => {
-                const isConnected = account.status === "connected" || !account.status;
-                const isDisconnected = account.status === "disconnected";
-                return (
-                  <tr key={account.id} className={trClass}>
-                    <td className={`${tdClass} font-semibold text-ink`}>
-                      <span className="inline-flex items-center gap-2">
-                        <Avatar label={account.username || account.ig_user_id} size="sm" />
-                        {account.username || account.ig_user_id}
-                      </span>
-                    </td>
-                    <td className={tdClass}>{account.account_type || "Business"}</td>
-                    <td className={tdClass}>
-                      <span className="inline-flex items-center gap-2">
-                        <LiveStatusDot tone={isConnected ? "success" : "warning"} />
-                        <Badge value={expiryStatus(account).toLowerCase().replaceAll(" ", "_")} />
-                      </span>
-                    </td>
-                    <td className={tdClass}>{account.expires_at ? new Date(account.expires_at).toLocaleString() : "Not available"}</td>
-                    <td className={tdClass}>{account.updated_at || account.created_at ? new Date(account.updated_at || account.created_at || "").toLocaleString() : "Not available"}</td>
-                    <td className={`${tdClass} flex gap-2`}>
-                      {canManageAccounts ? <Button type="button" variant="secondary" disabled={!isDisconnected} onClick={() => reconnect(account.id)}>Reconnect</Button> : null}
-                      {canDisconnectAccounts ? <Button type="button" variant="danger" disabled={!isConnected} onClick={() => disconnect(account.id)}>Disconnect</Button> : null}
-                      {!canManageAccounts && !canDisconnectAccounts ? <span className="text-sm text-muted">Read only</span> : null}
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </TableWrap>
+          <TableWrap>
+            <table className={`${tableClass} min-w-[860px]`}>
+              <thead>
+                <tr className={theadRowClass}>
+                  <th className={thClass}>Username</th>
+                  <th className={thClass}>Account type</th>
+                  <th className={thClass}>Status</th>
+                  <th className={thClass}>Token expiry</th>
+                  <th className={thClass}>Last active</th>
+                  <th className={thClass}>Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                {accounts.map((account) => {
+                  const isConnected = account.status === "connected" || !account.status;
+                  const isDisconnected = account.status === "disconnected";
+                  const isReconnecting = reconnectingId === account.id;
+                  const isDeleting = deletingId === account.id;
+
+                  return (
+                    <tr key={account.id} className={trClass}>
+                      <td className={`${tdClass} font-semibold text-ink`}>
+                        <span className="inline-flex items-center gap-2">
+                          <Avatar label={account.username || account.ig_user_id} size="sm" />
+                          {account.username || account.ig_user_id}
+                        </span>
+                      </td>
+                      <td className={tdClass}>{account.account_type || "Business"}</td>
+                      <td className={tdClass}>
+                        <span className="inline-flex items-center gap-2">
+                          <LiveStatusDot tone={isConnected ? "success" : "warning"} />
+                          <Badge value={expiryStatus(account).toLowerCase().replaceAll(" ", "_")} />
+                        </span>
+                      </td>
+                      <td className={tdClass}>
+                        {account.expires_at
+                          ? new Date(account.expires_at).toLocaleString()
+                          : "Not available"}
+                      </td>
+                      <td className={tdClass}>
+                        {account.updated_at || account.created_at
+                          ? new Date(
+                              account.updated_at || account.created_at || ""
+                            ).toLocaleString()
+                          : "Not available"}
+                      </td>
+                      <td className={`${tdClass} flex gap-2`}>
+                        {canManageAccounts ? (
+                          <Button
+                            type="button"
+                            variant="secondary"
+                            disabled={!isDisconnected || isReconnecting}
+                            onClick={() => reconnect(account.id)}
+                          >
+                            {isReconnecting ? "Redirecting..." : "Reconnect"}
+                          </Button>
+                        ) : null}
+                        {canDisconnectAccounts ? (
+                          <Button
+                            type="button"
+                            variant="danger"
+                            disabled={!isConnected}
+                            onClick={() => disconnect(account.id)}
+                          >
+                            Disconnect
+                          </Button>
+                        ) : null}
+                        {canDeleteAccounts ? (
+                          <Button
+                            type="button"
+                            variant="danger"
+                            disabled={isDeleting}
+                            onClick={() => setConfirmDeleteId(account.id)}
+                            title="Permanently delete account and all data"
+                          >
+                            <Trash2 className="h-4 w-4" aria-hidden="true" />
+                            <span className="sr-only">Delete</span>
+                          </Button>
+                        ) : null}
+                        {!canManageAccounts && !canDisconnectAccounts && !canDeleteAccounts ? (
+                          <span className="text-sm text-muted">Read only</span>
+                        ) : null}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </TableWrap>
         ) : null}
       </Panel>
     </div>
