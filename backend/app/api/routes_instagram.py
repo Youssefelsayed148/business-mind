@@ -15,6 +15,7 @@ from app.db.session import get_db
 from app.integrations.meta.oauth import build_oauth_url
 from app.models.automation_log import AutomationLog
 from app.models.campaign import Campaign
+from app.models.campaign_keyword import CampaignKeyword
 from app.models.comment import Comment
 from app.models.instagram_account import InstagramAccount
 from app.models.lead import Lead
@@ -152,7 +153,7 @@ async def reconnect_account(
 
 
 @router.delete("/accounts/{account_id}/hard")
-async def hard_delete_account(
+async def hard_delete_account(  # noqa: C901
     account_id: UUID,
     db: Session = Depends(get_db),
     current_user: User = Depends(require_permission("delete_accounts")),
@@ -160,29 +161,31 @@ async def hard_delete_account(
     """
     Permanently delete an Instagram account and all associated data.
 
-    Full dependency graph discovered from FK constraints:
-      instagram_accounts
-      ├── comments            (NOT NULL FK) ← messages.comment_id (nullable)
-      │                                     ← leads.comment_id (nullable)
-      ├── leads               (NOT NULL FK)
-      ├── meta_tokens         (NOT NULL FK)
-      ├── campaigns           (NOT NULL FK)
-      │   ├── messages        (NOT NULL FK) → also refs comments (nullable, nullified above)
-      │   ├── user_cooldowns  (NOT NULL FK)
-      │   └── keywords        (cascade via ORM relationship)
-      └── automation_logs     (nullable FK → nullify, preserve for audit history)
+    Full FK map (from DB introspection of instagram_automation):
+      automation_logs   → campaigns (nullable), instagram_accounts (nullable), leads (nullable)
+      campaign_keywords → campaigns
+      campaigns         → instagram_accounts
+      comments          → instagram_accounts
+      leads             → instagram_accounts, campaigns (source, nullable), comments (source, nullable)
+      messages          → campaigns, comments (nullable), leads
+      meta_tokens       → instagram_accounts
+      user_cooldowns    → campaigns
 
     Deletion order:
-      1. Nullify messages.comment_id   — breaks comments → messages cycle
-      2. Nullify leads.comment_id      — breaks comments → leads cycle
-      3. Delete messages               — FK → campaigns
-      4. Delete user_cooldowns         — FK → campaigns
-      5. Delete leads                  — FK → instagram_accounts
-      6. Delete comments               — FK → instagram_accounts
-      7. Delete campaigns              — FK → instagram_accounts (keywords cascade via ORM)
-      8. Delete meta_tokens            — FK → instagram_accounts
-      9. Nullify automation_logs       — preserve rows, remove FK reference
-     10. Delete instagram_account row
+      1.  Nullify automation_logs.lead_id           (leads about to be deleted)
+      2.  Nullify automation_logs.campaign_id       (campaigns about to be deleted)
+      3.  Nullify automation_logs.instagram_account_id
+      4.  Nullify messages.comment_id               (comments about to be deleted)
+      5.  Nullify leads.source_comment_id           (comments about to be deleted)
+      6.  Nullify leads.source_campaign_id          (campaigns about to be deleted)
+      7.  Delete  messages                          (FK → campaigns, leads)
+      8.  Delete  user_cooldowns                    (FK → campaigns)
+      9.  Delete  campaign_keywords                 (FK → campaigns)
+      10. Delete  leads                             (FK → instagram_accounts)
+      11. Delete  comments                          (FK → instagram_accounts)
+      12. Delete  campaigns                         (FK → instagram_accounts)
+      13. Delete  meta_tokens                       (FK → instagram_accounts)
+      14. Delete  instagram_account row
     """
     _limit_account_mutation(current_user)
 
@@ -193,66 +196,98 @@ async def hard_delete_account(
     account_name = _account_name(account)
     ig_user_id = account.ig_user_id
 
-    # Collect campaign IDs — needed for message/cooldown deletion scoping.
+    # Collect IDs needed for scoped deletes/nullifies.
     campaign_ids = [
-        row[0]
-        for row in db.query(Campaign.id)
-        .filter(Campaign.instagram_account_id == account_id)
-        .all()
+        row[0] for row in db.query(Campaign.id)
+        .filter(Campaign.instagram_account_id == account_id).all()
     ]
-
-    # Collect comment IDs for this account — needed to nullify FK references before deletion.
     comment_ids = [
-        row[0]
-        for row in db.query(Comment.id)
-        .filter(Comment.instagram_account_id == account_id)
-        .all()
+        row[0] for row in db.query(Comment.id)
+        .filter(Comment.instagram_account_id == account_id).all()
+    ]
+    lead_ids = [
+        row[0] for row in db.query(Lead.id)
+        .filter(Lead.instagram_account_id == account_id).all()
     ]
 
-    # 1. Nullify messages.comment_id (nullable FK → comments).
+    # 1. Nullify automation_logs.lead_id
+    if lead_ids:
+        db.query(AutomationLog).filter(AutomationLog.lead_id.in_(lead_ids)).update(
+            {"lead_id": None}, synchronize_session=False
+        )
+
+    # 2. Nullify automation_logs.campaign_id
+    if campaign_ids:
+        db.query(AutomationLog).filter(AutomationLog.campaign_id.in_(campaign_ids)).update(
+            {"campaign_id": None}, synchronize_session=False
+        )
+
+    # 3. Nullify automation_logs.instagram_account_id
+    db.query(AutomationLog).filter(
+        AutomationLog.instagram_account_id == account_id
+    ).update({"instagram_account_id": None}, synchronize_session=False)
+
+    # 4. Nullify messages.comment_id
     if comment_ids:
         db.query(Message).filter(Message.comment_id.in_(comment_ids)).update(
             {"comment_id": None}, synchronize_session=False
         )
 
-    # 3. Delete messages (FK → campaigns).
+    # 5. Nullify leads.source_comment_id
+    if comment_ids:
+        db.query(Lead).filter(Lead.source_comment_id.in_(comment_ids)).update(
+            {"source_comment_id": None}, synchronize_session=False
+        )
+
+    # 6. Nullify leads.source_campaign_id
+    if campaign_ids:
+        db.query(Lead).filter(Lead.source_campaign_id.in_(campaign_ids)).update(
+            {"source_campaign_id": None}, synchronize_session=False
+        )
+
+    # 7. Delete messages (FK → campaigns NOT NULL, FK → leads NOT NULL)
     if campaign_ids:
         db.query(Message).filter(Message.campaign_id.in_(campaign_ids)).delete(
             synchronize_session=False
         )
+    if lead_ids:
+        db.query(Message).filter(Message.lead_id.in_(lead_ids)).delete(
+            synchronize_session=False
+        )
 
-    # 4. Delete user_cooldowns (FK → campaigns).
+    # 8. Delete user_cooldowns (FK → campaigns)
     if campaign_ids:
         db.query(UserCooldown).filter(UserCooldown.campaign_id.in_(campaign_ids)).delete(
             synchronize_session=False
         )
 
-    # 5. Delete leads (FK → instagram_accounts, NOT NULL).
+    # 9. Delete campaign_keywords (FK → campaigns)
+    if campaign_ids:
+        db.query(CampaignKeyword).filter(CampaignKeyword.campaign_id.in_(campaign_ids)).delete(
+            synchronize_session=False
+        )
+
+    # 10. Delete leads (FK → instagram_accounts)
     db.query(Lead).filter(Lead.instagram_account_id == account_id).delete(
         synchronize_session=False
     )
 
-    # 6. Delete comments (FK → instagram_accounts, NOT NULL).
+    # 11. Delete comments (FK → instagram_accounts)
     db.query(Comment).filter(Comment.instagram_account_id == account_id).delete(
         synchronize_session=False
     )
 
-    # 7. Delete campaigns (keywords cascade via ORM cascade="all, delete-orphan").
+    # 12. Delete campaigns (FK → instagram_accounts)
     db.query(Campaign).filter(Campaign.instagram_account_id == account_id).delete(
         synchronize_session=False
     )
 
-    # 8. Delete meta_tokens (FK → instagram_accounts, NOT NULL).
+    # 13. Delete meta_tokens (FK → instagram_accounts)
     db.query(MetaToken).filter(MetaToken.instagram_account_id == account_id).delete(
         synchronize_session=False
     )
 
-    # 9. Nullify automation_logs (nullable FK — preserve rows for audit history).
-    db.query(AutomationLog).filter(
-        AutomationLog.instagram_account_id == account_id
-    ).update({"instagram_account_id": None}, synchronize_session=False)
-
-    # 10. Delete the account row itself.
+    # 14. Delete the account row itself.
     db.delete(account)
 
     write_audit_log(
@@ -268,6 +303,7 @@ async def hard_delete_account(
             "ig_user_id": ig_user_id,
             "deleted_campaigns": len(campaign_ids),
             "deleted_comments": len(comment_ids),
+            "deleted_leads": len(lead_ids),
         },
         commit=False,
     )
