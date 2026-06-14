@@ -114,7 +114,7 @@ function DeleteCampaignModal({
 }) {
   const [confirmation, setConfirmation] = useState("");
   const requiredText = campaigns.length === 1 ? `delete ${campaigns[0].name}` : "delete campaigns";
-  const canDelete = confirmation === requiredText && campaigns.length > 0 && !deleting;
+  const canDelete = confirmation.trim().toLowerCase() === requiredText.toLowerCase() && campaigns.length > 0 && !deleting;
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/35 p-4 backdrop-blur-sm">
