@@ -26,6 +26,7 @@ class Settings(BaseSettings):
 
     META_APP_ID: str = "local_meta_app_id"
     META_APP_SECRET: str
+    META_WEBHOOK_SECRET: str = ""
     META_WEBHOOK_VERIFY_TOKEN: str
     META_GRAPH_API_VERSION: str = "v21.0"
     META_MOCK_PRIVATE_REPLIES: bool = False
