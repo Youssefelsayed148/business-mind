@@ -114,6 +114,40 @@ async def meta_connect_callback(
 
     expires_at = datetime.utcnow() + timedelta(seconds=long_lived.get("expires_in", 5184000))
 
+    # Exchange user token for page token — private_replies requires a PAGE token not a USER token.
+    # Fetch pages managed by this user and find the one linked to this IG account.
+    import httpx as _httpx
+    token_to_store = long_lived["access_token"]  # fallback to user token if page token fetch fails
+    try:
+        async with _httpx.AsyncClient(timeout=15.0) as _http:
+            pages_resp = await _http.get(
+                f"https://graph.facebook.com/{settings.META_GRAPH_API_VERSION}/me/accounts",
+                params={
+                    "access_token": long_lived["access_token"],
+                    "fields": "id,name,access_token,instagram_business_account",
+                },
+            )
+        if pages_resp.status_code == 200:
+            pages = pages_resp.json().get("data", [])
+            for page in pages:
+                iba = page.get("instagram_business_account", {})
+                if iba.get("id") == metadata["ig_user_id"]:
+                    token_to_store = page["access_token"]
+                    logger.info(
+                        "Stored page token for private_replies",
+                        extra={"page_id": page["id"], "ig_user_id": metadata["ig_user_id"]},
+                    )
+                    break
+            else:
+                logger.warning(
+                    "No page matched IG account — falling back to user token",
+                    extra={"ig_user_id": metadata["ig_user_id"]},
+                )
+        else:
+            logger.warning("Failed to fetch pages — falling back to user token", extra={"status": pages_resp.status_code})
+    except Exception as exc:
+        logger.warning("Page token fetch error — falling back to user token", extra={"error": str(exc)})
+
     workspace = db.query(Workspace).filter(Workspace.slug == "default").first()
     if not workspace:
         raise HTTPException(status_code=404, detail="Default workspace not found")
@@ -135,7 +169,7 @@ async def meta_connect_callback(
                     db=db,
                     workspace_id=workspace.id,
                     instagram_account_id=account.id,
-                    access_token=long_lived["access_token"],
+                    access_token=token_to_store,
                     expires_at=expires_at,
                 )
                 write_audit_log(
@@ -190,7 +224,7 @@ async def meta_connect_callback(
         db=db,
         workspace_id=workspace.id,
         instagram_account_id=account.id,
-        access_token=long_lived["access_token"],
+        access_token=token_to_store,
         expires_at=expires_at,
     )
     write_audit_log(
