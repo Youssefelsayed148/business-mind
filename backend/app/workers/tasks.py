@@ -379,6 +379,11 @@ def _send_private_reply_impl(task, message_id: str, final_after_prompt: bool = F
             log_action(db, "message_skipped", campaign_id=campaign.id, details={"reason": "campaign_not_active"})
             return
 
+        account = db.query(InstagramAccount).filter(InstagramAccount.id == campaign.instagram_account_id).first()
+        if not account:
+            mark_message_skipped(db, message.id, "Instagram account not found")
+            return
+
         # Get decrypted token
         access_token = get_decrypted_token(db, campaign.instagram_account_id)
         if not access_token:
@@ -397,6 +402,7 @@ def _send_private_reply_impl(task, message_id: str, final_after_prompt: bool = F
         try:
             result = client.send_private_reply(
                 access_token=access_token,
+                ig_user_id=account.ig_user_id,
                 comment_id=comment_id_str,
                 text=message.rendered_body or "",
             )
@@ -530,6 +536,11 @@ def send_follow_prompt_card(self, message_id: str):
             log_action(db, "message_skipped", campaign_id=campaign.id, details={"reason": "campaign_not_active"})
             return
 
+        account = db.query(InstagramAccount).filter(InstagramAccount.id == campaign.instagram_account_id).first()
+        if not account:
+            mark_message_skipped(db, message.id, "Instagram account not found")
+            return
+
         access_token = get_decrypted_token(db, campaign.instagram_account_id)
         if not access_token:
             mark_message_failed(db, message.id, "no_token", "No valid access token", retryable=False)
@@ -544,7 +555,8 @@ def send_follow_prompt_card(self, message_id: str):
         try:
             result = client.send_follow_prompt_card(
                 access_token=access_token,
-                recipient_id=comment_id_str or "",
+                ig_user_id=account.ig_user_id,
+                comment_id=comment_id_str or "",
                 title=campaign.follow_prompt_title or "",
                 description=campaign.follow_prompt_description or "",
                 profile_url=campaign.follow_prompt_profile_url or "",

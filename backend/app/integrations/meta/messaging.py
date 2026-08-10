@@ -38,12 +38,13 @@ class MetaMessagingClient:
     def send_private_reply(
         self,
         access_token: str,
+        ig_user_id: str,
         comment_id: str,
         text: str,
     ) -> MetaMessageResult:
         """Send a private reply to an Instagram comment.
 
-        Endpoint: POST /{comment_id}/private_replies
+        Endpoint: POST /{ig_user_id}/messages with recipient.comment_id
         """
         if settings.META_MOCK_PRIVATE_REPLIES:
             return MetaMessageResult(
@@ -52,9 +53,9 @@ class MetaMessagingClient:
                 raw_response={"recipient_id": "mock", "message_id": f"mock_message_{comment_id}"},
             )
 
-        url = f"{self.base_url}/{comment_id}/private_replies"
+        url = f"{self.base_url}/{ig_user_id}/messages"
         params = {"access_token": access_token}
-        payload = {"message": text}
+        payload = {"recipient": {"comment_id": comment_id}, "message": {"text": text}}
 
         try:
             response = self._client.post(url, params=params, json=payload)
@@ -103,22 +104,27 @@ class MetaMessagingClient:
     def send_follow_prompt_card(
         self,
         access_token: str,
-        recipient_id: str,
+        ig_user_id: str,
+        comment_id: str,
         title: str,
         description: str,
         profile_url: str,
     ) -> MetaMessageResult:
-        """Send a generic template card with a Follow URL button."""
+        """Send a follow-prompt template card with a Follow URL button.
+
+        Endpoint: POST /{ig_user_id}/messages with recipient.comment_id
+        """
         if settings.META_MOCK_PRIVATE_REPLIES:
             return MetaMessageResult(
                 success=True,
-                provider_message_id=f"mock_follow_prompt_{recipient_id}",
-                raw_response={"recipient_id": "mock", "message_id": f"mock_follow_prompt_{recipient_id}"},
+                provider_message_id=f"mock_follow_prompt_{comment_id}",
+                raw_response={"recipient_id": "mock", "message_id": f"mock_follow_prompt_{comment_id}"},
             )
 
-        url = f"{self.base_url}/{recipient_id}/private_replies"
+        url = f"{self.base_url}/{ig_user_id}/messages"
         params = {"access_token": access_token}
         payload = {
+            "recipient": {"comment_id": comment_id},
             "message": {
                 "attachment": {
                     "type": "template",
@@ -168,7 +174,7 @@ class MetaMessagingClient:
             logger.error(
                 "Meta follow_prompt API error",
                 extra={
-                    "recipient_id": recipient_id,
+                    "comment_id": comment_id,
                     "status_code": response.status_code,
                     "error_code": error.get("code"),
                     "error_subcode": error.get("error_subcode"),
