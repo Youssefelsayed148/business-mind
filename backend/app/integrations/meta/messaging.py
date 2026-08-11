@@ -32,7 +32,10 @@ class MetaMessagingClient:
     """
 
     def __init__(self, base_url: str | None = None):
-        self.base_url = base_url or f"https://graph.facebook.com/{settings.META_GRAPH_API_VERSION}"
+        # Instagram API with Instagram Login: messaging endpoints live on
+        # graph.instagram.com, not graph.facebook.com. Tokens issued by the
+        # Instagram Login flow are rejected by graph.facebook.com.
+        self.base_url = base_url or f"https://graph.instagram.com/{settings.META_GRAPH_API_VERSION}"
         self._client = httpx.Client(timeout=30.0)
 
     def send_private_reply(
