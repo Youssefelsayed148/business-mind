@@ -72,6 +72,8 @@ def create_campaign(
         follow_prompt_title=payload.follow_prompt_title,
         follow_prompt_description=payload.follow_prompt_description,
         follow_prompt_profile_url=payload.follow_prompt_profile_url,
+        comment_reply_enabled=payload.comment_reply_enabled,
+        comment_reply_text=payload.comment_reply_text,
     )
     db.add(campaign)
     db.commit()
@@ -158,10 +160,13 @@ def update_campaign(
     for field, value in update_data.items():
         setattr(campaign, field, value)
 
-    if campaign.target_scope == "specific_media" and not campaign.target_media_url:
+    if campaign.target_scope == "specific_media" and not campaign.target_media_id:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-            detail="Post/Reel URL is required for a specific post or reel.",
+            detail=(
+                "Select a post or reel for this campaign. A specific-post campaign "
+                "needs a post chosen from your connected account."
+            ),
         )
 
     _validate_follow_prompt_config(campaign)
@@ -214,6 +219,18 @@ def _validate_campaign_can_activate(db: Session, campaign: Campaign) -> None:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
             detail="Campaign cannot be activated without keywords",
+        )
+
+    # A specific-post campaign without a resolved numeric media id can never
+    # match an incoming comment webhook — it would activate and silently do
+    # nothing. Fail loudly at activation instead.
+    if campaign.target_scope == "specific_media" and not campaign.target_media_id:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=(
+                "This campaign has no post selected. Edit the campaign and choose "
+                "a post or reel from your connected account before activating."
+            ),
         )
 
     try:

@@ -59,8 +59,9 @@ def find_matching_campaigns(
     for campaign in campaigns:
         if campaign.target_scope == "specific_media":
             if not campaign.target_media_id:
-                logger.debug(
-                    "Specific media campaign waiting for media_id mapping",
+                logger.warning(
+                    "Active specific_media campaign has no target_media_id and can "
+                    "never match; re-select its post",
                     extra={"campaign_id": str(campaign.id), "media_id": media_id},
                 )
                 continue

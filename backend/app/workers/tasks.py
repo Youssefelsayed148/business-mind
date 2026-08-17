@@ -413,6 +413,66 @@ def _send_private_reply_impl(task, message_id: str, final_after_prompt: bool = F
             mark_message_sent(db, message.id, result.provider_message_id)
             campaign.successful_sends += 1
             db.commit()
+
+            if campaign.comment_reply_enabled and campaign.comment_reply_text and comment_id_str:
+                # Fully isolated: the DM is already delivered and committed above.
+                # No failure here may propagate to the outer handler, which would
+                # otherwise mark an already-sent message as failed.
+                try:
+                    reply_client = MetaMessagingClient()
+                    try:
+                        reply_result = reply_client.reply_to_comment(
+                            access_token=access_token,
+                            comment_id=comment_id_str,
+                            message=campaign.comment_reply_text,
+                        )
+                    finally:
+                        reply_client.close()
+
+                    if reply_result.success:
+                        log_action(
+                            db,
+                            "comment_reply_sent",
+                            campaign_id=campaign.id,
+                            lead_id=message.lead_id,
+                            details={"message_id": message_id, "comment_id": comment_id_str},
+                        )
+                    else:
+                        logger.warning(
+                            "Comment reply failed after successful DM",
+                            extra={"comment_id": comment_id_str, "error": reply_result.error_message},
+                        )
+                        log_action(
+                            db,
+                            "comment_reply_failed",
+                            campaign_id=campaign.id,
+                            lead_id=message.lead_id,
+                            details={
+                                "message_id": message_id,
+                                "comment_id": comment_id_str,
+                                "error": reply_result.error_message,
+                            },
+                        )
+                except Exception as reply_exc:
+                    logger.exception(
+                        "Comment reply raised after successful DM",
+                        extra={"comment_id": comment_id_str, "message_id": message_id},
+                    )
+                    try:
+                        log_action(
+                            db,
+                            "comment_reply_failed",
+                            campaign_id=campaign.id,
+                            lead_id=message.lead_id,
+                            details={
+                                "message_id": message_id,
+                                "comment_id": comment_id_str,
+                                "error": f"exception: {reply_exc}",
+                            },
+                        )
+                    except Exception:
+                        pass
+
             action = "final_delivery_sent" if final_after_prompt else "message_sent"
             log_action(
                 db,

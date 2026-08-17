@@ -1,7 +1,7 @@
 import uuid
 from datetime import datetime
 
-from sqlalchemy import DateTime, ForeignKey, Integer, String, Text, func
+from sqlalchemy import Boolean, DateTime, ForeignKey, Integer, String, Text, func
 from sqlalchemy.dialects.postgresql import UUID as PGUUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -39,6 +39,8 @@ class Campaign(Base):
     follow_prompt_title: Mapped[str | None] = mapped_column(Text, nullable=True)
     follow_prompt_description: Mapped[str | None] = mapped_column(Text, nullable=True)
     follow_prompt_profile_url: Mapped[str | None] = mapped_column(Text, nullable=True)
+    comment_reply_enabled: Mapped[bool] = mapped_column(Boolean, default=False)
+    comment_reply_text: Mapped[str | None] = mapped_column(Text, nullable=True)
     total_triggers: Mapped[int] = mapped_column(Integer, default=0)
     successful_sends: Mapped[int] = mapped_column(Integer, default=0)
     failed_sends: Mapped[int] = mapped_column(Integer, default=0)

@@ -195,6 +195,73 @@ class MetaMessagingClient:
         message_id = data.get("id") or data.get("message_id")
         return MetaMessageResult(success=True, provider_message_id=message_id, raw_response=data)
 
+    def reply_to_comment(
+        self,
+        access_token: str,
+        comment_id: str,
+        message: str,
+    ) -> MetaMessageResult:
+        """Post a public reply on an Instagram comment.
+
+        Endpoint: POST /{comment-id}/replies
+        Used after a private reply DM is sent, to publicly let the
+        commenter know a DM is on its way.
+        """
+        if settings.META_MOCK_PRIVATE_REPLIES:
+            return MetaMessageResult(
+                success=True,
+                provider_message_id=f"mock_comment_reply_{comment_id}",
+                raw_response={"id": f"mock_comment_reply_{comment_id}"},
+            )
+
+        url = f"{self.base_url}/{comment_id}/replies"
+        params = {"access_token": access_token}
+        payload = {"message": message}
+
+        try:
+            response = self._client.post(url, params=params, json=payload)
+        except httpx.NetworkError as exc:
+            logger.warning("Meta comment reply network error", extra={"error": str(exc)})
+            return MetaMessageResult(success=False, error_code="network_error", error_message=str(exc))
+        except httpx.TimeoutException as exc:
+            logger.warning("Meta comment reply timeout", extra={"error": str(exc)})
+            return MetaMessageResult(success=False, error_code="timeout", error_message="Request timed out")
+
+        try:
+            data = response.json()
+        except Exception:
+            return MetaMessageResult(
+                success=False,
+                error_code="invalid_json",
+                error_message=f"Invalid JSON response (HTTP {response.status_code})",
+                raw_response={"status_code": response.status_code, "text": response.text},
+            )
+
+        if response.status_code >= 400 or "error" in data:
+            classification = classify_meta_error(response.status_code, data)
+            error = data.get("error", {})
+            error_msg = error.get("message", "Meta API error")
+            logger.error(
+                "Meta comment_reply API error",
+                extra={
+                    "comment_id": comment_id,
+                    "status_code": response.status_code,
+                    "error_code": error.get("code"),
+                    "error_subcode": error.get("error_subcode"),
+                    "error_message": error_msg,
+                    "raw_response": data,
+                },
+            )
+            return MetaMessageResult(
+                success=False,
+                error_code=classification.category,
+                error_message=error_msg,
+                raw_response=data,
+            )
+
+        reply_id = data.get("id")
+        return MetaMessageResult(success=True, provider_message_id=reply_id, raw_response=data)
+
     def close(self):
         """Close the underlying HTTP client."""
         self._client.close()

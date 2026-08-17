@@ -37,6 +37,8 @@ export type Campaign = {
   follow_prompt_title?: string | null;
   follow_prompt_description?: string | null;
   follow_prompt_profile_url?: string | null;
+  comment_reply_enabled?: boolean;
+  comment_reply_text?: string | null;
   total_triggers: number;
   successful_sends: number;
   failed_sends: number;
@@ -67,6 +69,8 @@ export type CampaignPayload = {
   follow_prompt_title?: string | null;
   follow_prompt_description?: string | null;
   follow_prompt_profile_url?: string | null;
+  comment_reply_enabled?: boolean;
+  comment_reply_text?: string | null;
 };
 
 export type InstagramAccount = {
@@ -164,6 +168,8 @@ export type CampaignStats = {
   follow_prompt_title?: string | null;
   follow_prompt_description?: string | null;
   follow_prompt_profile_url?: string | null;
+  comment_reply_enabled?: boolean;
+  comment_reply_text?: string | null;
   last_triggered_at?: string | null;
   new_leads: number;
   total_triggers: number;
@@ -179,4 +185,21 @@ export type SimulationResult = {
   matched: boolean;
   matched_keyword?: string | null;
   rendered_message?: string | null;
+};
+
+export type InstagramMedia = {
+  media_id: string;
+  caption: string;
+  label: string;
+  media_type: string;
+  media_url?: string | null;
+  permalink?: string | null;
+  thumbnail_url?: string | null;
+  timestamp?: string | null;
+};
+
+export type InstagramMediaResponse = {
+  account_id: string;
+  media: InstagramMedia[];
+  next_cursor?: string | null;
 };

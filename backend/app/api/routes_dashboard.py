@@ -247,6 +247,8 @@ async def campaign_stats(
         "follow_prompt_title": campaign.follow_prompt_title,
         "follow_prompt_description": campaign.follow_prompt_description,
         "follow_prompt_profile_url": campaign.follow_prompt_profile_url,
+        "comment_reply_enabled": campaign.comment_reply_enabled,
+        "comment_reply_text": campaign.comment_reply_text,
         "last_triggered_at": last_triggered_at.isoformat() if last_triggered_at else None,
         "new_leads": new_leads,
         "total_triggers": campaign.total_triggers,

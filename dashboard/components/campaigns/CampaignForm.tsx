@@ -10,7 +10,8 @@ import { Panel } from "@/components/ui/Panel";
 import { api } from "@/lib/api";
 import { useCan } from "@/lib/permissions";
 import { useToast } from "@/components/ToastProvider";
-import type { Campaign, CampaignPayload, InstagramAccount, SimulationResult } from "@/lib/types";
+import { PostPicker } from "@/components/campaigns/PostPicker";
+import type { Campaign, CampaignPayload, InstagramAccount, InstagramMedia, SimulationResult } from "@/lib/types";
 
 const variables = ["{{username}}", "{{campaign_name}}", "{{keyword}}", "{{link}}", "{{media_url}}"];
 
@@ -20,6 +21,7 @@ type FormState = {
   instagram_account_id: string;
   target_scope: "any_media" | "specific_media";
   target_media_url: string;
+  target_media_id: string;
   target_media_shortcode: string;
   target_media_type: "post" | "reel" | "story" | "unknown";
   target_media_label: string;
@@ -34,6 +36,8 @@ type FormState = {
   follow_prompt_title: string;
   follow_prompt_description: string;
   follow_prompt_profile_url: string;
+  comment_reply_enabled: boolean;
+  comment_reply_text: string;
 };
 
 function extractInstagramShortcode(value: string): string {
@@ -53,6 +57,7 @@ function fromCampaign(campaign?: Campaign): FormState {
     instagram_account_id: campaign?.instagram_account_id || "",
     target_scope: campaign?.target_scope || "any_media",
     target_media_url: campaign?.target_media_url || campaign?.media_url || "",
+    target_media_id: campaign?.target_media_id || "",
     target_media_shortcode: campaign?.target_media_shortcode || "",
     target_media_type: campaign?.target_media_type || "unknown",
     target_media_label: campaign?.target_media_label || "",
@@ -67,6 +72,8 @@ function fromCampaign(campaign?: Campaign): FormState {
     follow_prompt_title: campaign?.follow_prompt_title || "",
     follow_prompt_description: campaign?.follow_prompt_description || "",
     follow_prompt_profile_url: campaign?.follow_prompt_profile_url || "",
+    comment_reply_enabled: campaign?.comment_reply_enabled ?? false,
+    comment_reply_text: campaign?.comment_reply_text || "Check your DMs \u{1F4E9}",
   };
 }
 
@@ -104,7 +111,7 @@ export function CampaignForm({ campaign }: { campaign?: Campaign }) {
       target_scope: form.target_scope,
       target_media_url: form.target_scope === "specific_media" ? form.target_media_url || null : null,
       target_media_shortcode: form.target_scope === "specific_media" ? targetShortcode || null : null,
-      target_media_id: savedCampaign?.target_media_id || null,
+      target_media_id: form.target_scope === "specific_media" ? form.target_media_id || null : null,
       target_media_type: form.target_scope === "specific_media" ? form.target_media_type : "unknown",
       target_media_label: form.target_scope === "specific_media" ? form.target_media_label || null : null,
       match_type: form.match_type,
@@ -117,8 +124,10 @@ export function CampaignForm({ campaign }: { campaign?: Campaign }) {
       follow_prompt_title: form.delivery_mode === "follow_prompt" ? form.follow_prompt_title : null,
       follow_prompt_description: form.delivery_mode === "follow_prompt" ? form.follow_prompt_description : null,
       follow_prompt_profile_url: form.delivery_mode === "follow_prompt" ? form.follow_prompt_profile_url : null,
+      comment_reply_enabled: form.comment_reply_enabled,
+      comment_reply_text: form.comment_reply_enabled ? form.comment_reply_text || null : null,
     };
-  }, [form, savedCampaign?.status, savedCampaign?.target_media_id]);
+  }, [form, savedCampaign?.status]);
 
   function addKeyword() {
     const keyword = form.keywordInput.trim();
@@ -266,40 +275,61 @@ export function CampaignForm({ campaign }: { campaign?: Campaign }) {
           </label>
         </div>
         {form.target_scope === "specific_media" ? (
-          <div className="mt-4 grid gap-4 md:grid-cols-2">
-            <Field
-              label="Instagram post/reel URL"
-              type="url"
-              placeholder="https://www.instagram.com/reel/..."
-              hint="Paste the Instagram URL for the post or reel this campaign should listen to."
-              value={form.target_media_url}
-              onChange={(e) => setForm({ ...form, target_media_url: e.target.value, target_media_shortcode: extractInstagramShortcode(e.target.value) })}
-              required
+          <div className="mt-4 grid gap-4">
+            <div className="grid gap-1">
+              <span className="text-sm font-bold text-ink">Choose the post or reel</span>
+              <span className="text-sm font-medium text-muted">
+                Pick from posts on your connected account. Selecting here links the campaign to
+                Instagram&apos;s own post ID, which is what makes keyword matching work.
+              </span>
+            </div>
+            <PostPicker
+              accountId={form.instagram_account_id}
+              selectedMediaId={form.target_media_id || null}
+              onSelect={(media: InstagramMedia) => {
+                const mediaType: FormState["target_media_type"] =
+                  media.media_type === "VIDEO" ? "reel" : "post";
+                setForm((current) => ({
+                  ...current,
+                  target_media_id: media.media_id,
+                  target_media_url: media.permalink || "",
+                  target_media_shortcode: extractInstagramShortcode(media.permalink || ""),
+                  target_media_type: mediaType,
+                  target_media_label: current.target_media_label || media.label,
+                }));
+              }}
             />
-            <Field
-              label="Post/Reel label"
-              placeholder="May discount reel"
-              hint="A private name to help your team recognize this post or reel."
-              value={form.target_media_label}
-              onChange={(e) => setForm({ ...form, target_media_label: e.target.value })}
-            />
-            <Select
-              label="Media type"
-              value={form.target_media_type}
-              onChange={(e) => setForm({ ...form, target_media_type: e.target.value as FormState["target_media_type"] })}
-            >
-              <option value="reel">Reel</option>
-              <option value="post">Post</option>
-              <option value="story">Story</option>
-              <option value="unknown">Unknown</option>
-            </Select>
-            <p className="self-end text-sm font-medium text-amber-700">
-              The system will match this campaign once the media ID is known from webhook events or account setup.
-            </p>
+            {form.target_media_id ? (
+              <div className="grid gap-4 md:grid-cols-2">
+                <Field
+                  label="Post/Reel label"
+                  placeholder="May discount reel"
+                  hint="A private name to help your team recognize this post or reel."
+                  value={form.target_media_label}
+                  onChange={(e) => setForm({ ...form, target_media_label: e.target.value })}
+                />
+                <div className="grid content-end gap-1">
+                  <p className="text-xs font-semibold text-emerald-700">
+                    Post selected (ID {form.target_media_id})
+                  </p>
+                  {form.target_media_url ? (
+                    <a
+                      href={form.target_media_url}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="text-xs font-medium text-accent underline"
+                    >
+                      View on Instagram
+                    </a>
+                  ) : null}
+                </div>
+              </div>
+            ) : (
+              <p className="text-sm font-semibold text-amber-700">
+                No post selected yet. Choose one above before saving or activating this campaign.
+              </p>
+            )}
           </div>
-        ) : null}
-        {form.target_scope === "specific_media" && form.target_media_shortcode ? (
-          <p className="mt-3 text-xs font-medium text-muted">Shortcode detected: {form.target_media_shortcode}</p>
         ) : null}
       </Panel>
 
@@ -368,6 +398,37 @@ export function CampaignForm({ campaign }: { campaign?: Campaign }) {
             </div>
           ) : null}
         </div>
+      </Panel>
+
+      <Panel>
+        <h2 className="mb-4 text-lg font-bold text-ink">Public comment reply</h2>
+        <label className="flex gap-3 rounded-lg border border-line bg-white p-3">
+          <input
+            type="checkbox"
+            checked={form.comment_reply_enabled}
+            onChange={(e) => setForm({ ...form, comment_reply_enabled: e.target.checked })}
+            className="mt-1 h-4 w-4 rounded border-slate-300 text-accent focus:ring-accent/30"
+          />
+          <span className="grid gap-1">
+            <span className="text-sm font-bold text-ink">Reply publicly to the comment</span>
+            <span className="text-sm font-medium text-muted">
+              After the DM is delivered, post a public reply on the comment so the person knows to
+              check their inbox. Only sent when the DM succeeds.
+            </span>
+          </span>
+        </label>
+        {form.comment_reply_enabled ? (
+          <div className="mt-4">
+            <Field
+              label="Public reply text"
+              placeholder="Check your DMs!"
+              hint="Keep it short. This is visible to everyone on the post."
+              value={form.comment_reply_text}
+              onChange={(e) => setForm({ ...form, comment_reply_text: e.target.value })}
+              maxLength={280}
+            />
+          </div>
+        ) : null}
       </Panel>
 
       <Panel>

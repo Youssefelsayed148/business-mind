@@ -6,6 +6,61 @@ from app.integrations.meta.client import MetaGraphClient
 logger = logging.getLogger(__name__)
 
 
+async def fetch_instagram_media(
+    access_token: str,
+    limit: int = 25,
+    after: str | None = None,
+) -> dict:
+    """Fetch the connected Instagram account's published media for the post picker.
+
+    Returns Instagram's own numeric media ids, which are the same identifier
+    space the comments webhook delivers — so a campaign built from this list
+    can be matched directly against incoming events. Parsing a pasted
+    permalink yields a shortcode instead, which is NOT comparable to the
+    webhook media_id.
+
+    Endpoint: GET /me/media (Instagram Login, instagram_business_basic scope).
+    """
+    logger.info("Fetching Instagram media list", extra={"limit": limit, "has_cursor": bool(after)})
+    client = MetaGraphClient(base_url=f"https://graph.instagram.com/{settings.META_GRAPH_API_VERSION}")
+    params = {
+        "fields": "id,caption,media_type,media_url,permalink,thumbnail_url,timestamp",
+        "limit": limit,
+    }
+    if after:
+        params["after"] = after
+
+    try:
+        result = await client.get("/me/media", access_token=access_token, params=params)
+    finally:
+        await client.close()
+
+    items = result.get("data") or []
+    media = []
+    for item in items:
+        caption = item.get("caption") or ""
+        media.append(
+            {
+                "media_id": str(item.get("id") or ""),
+                "caption": caption,
+                "label": (caption[:80].strip() or "Untitled post"),
+                "media_type": (item.get("media_type") or "unknown"),
+                "media_url": item.get("media_url"),
+                "permalink": item.get("permalink"),
+                # Videos/reels have no media_url usable as an <img> src; use thumbnail.
+                "thumbnail_url": item.get("thumbnail_url") or item.get("media_url"),
+                "timestamp": item.get("timestamp"),
+            }
+        )
+
+    paging = result.get("paging") or {}
+    cursors = paging.get("cursors") or {}
+    return {
+        "media": media,
+        "next_cursor": cursors.get("after") if paging.get("next") else None,
+    }
+
+
 async def fetch_instagram_account_metadata(access_token: str) -> dict:
     """Fetch the app user's Instagram professional account profile.
 

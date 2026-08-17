@@ -79,6 +79,8 @@ class CampaignCreate(BaseModel):
     follow_prompt_title: str | None = None
     follow_prompt_description: str | None = None
     follow_prompt_profile_url: str | None = None
+    comment_reply_enabled: bool = False
+    comment_reply_text: str | None = None
 
     @field_validator("message_template")
     @classmethod
@@ -100,11 +102,19 @@ class CampaignCreate(BaseModel):
     @model_validator(mode="after")
     def validate_follow_prompt_fields(self):
         if self.target_scope == "specific_media":
-            if not self.target_media_url or not self.target_media_url.strip():
-                raise ValueError("Post/Reel URL is required for a specific post or reel.")
-            self.target_media_shortcode = extract_instagram_shortcode(self.target_media_url)
             if not self.target_media_id and self.media_id:
                 self.target_media_id = self.media_id
+            # target_media_id must be Instagram's numeric media id (from the post
+            # picker / GET /me/media). A shortcode parsed from a permalink is a
+            # different identifier space and can never match the webhook's
+            # media_id, which would leave the campaign silently non-firing.
+            if not self.target_media_id or not str(self.target_media_id).strip():
+                raise ValueError(
+                    "Select a post or reel for this campaign. "
+                    "A specific-post campaign needs a post chosen from your connected account."
+                )
+            if self.target_media_url:
+                self.target_media_shortcode = extract_instagram_shortcode(self.target_media_url)
         else:
             self.target_media_url = None
             self.target_media_shortcode = None
@@ -143,6 +153,8 @@ class CampaignUpdate(BaseModel):
     follow_prompt_title: str | None = None
     follow_prompt_description: str | None = None
     follow_prompt_profile_url: str | None = None
+    comment_reply_enabled: bool | None = None
+    comment_reply_text: str | None = None
 
     @field_validator("message_template")
     @classmethod
@@ -169,6 +181,19 @@ class CampaignUpdate(BaseModel):
             self.media_id = self.target_media_id
         if self.target_media_url and self.media_url is None:
             self.media_url = self.target_media_url
+        # Switching an existing campaign to specific_media requires a real
+        # numeric media id, otherwise the campaign would never match a webhook.
+        if self.target_scope == "specific_media":
+            if not self.target_media_id or not str(self.target_media_id).strip():
+                raise ValueError(
+                    "Select a post or reel for this campaign. "
+                    "A specific-post campaign needs a post chosen from your connected account."
+                )
+        elif self.target_scope == "any_media":
+            self.target_media_url = None
+            self.target_media_shortcode = None
+            self.target_media_id = None
+            self.target_media_label = None
         return self
 
 
@@ -195,6 +220,8 @@ class CampaignResponse(BaseModel):
     follow_prompt_title: str | None = None
     follow_prompt_description: str | None = None
     follow_prompt_profile_url: str | None = None
+    comment_reply_enabled: bool = False
+    comment_reply_text: str | None = None
     total_triggers: int = 0
     successful_sends: int = 0
     failed_sends: int = 0

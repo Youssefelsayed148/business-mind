@@ -22,3 +22,4 @@ node_modules/
 .next/
 dashboard/dashboard-dev.*.log
 ".claude/" 
+backend/app/workers/tasks.py.server

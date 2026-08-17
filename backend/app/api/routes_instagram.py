@@ -12,6 +12,8 @@ from app.api.routes_auth import get_current_user
 from app.authz import require_permission
 from app.core.config import settings
 from app.db.session import get_db
+from app.integrations.meta.accounts import fetch_instagram_media
+from app.integrations.meta.errors import MetaAPIError
 from app.integrations.meta.oauth import build_oauth_url
 from app.models.automation_log import AutomationLog
 from app.models.campaign import Campaign
@@ -394,4 +396,48 @@ async def account_health(
         "account_id": str(account_id),
         "has_token": token is not None,
         "status": "healthy" if token else "missing_token",
+    }
+
+@router.get("/accounts/{account_id}/media")
+async def list_account_media(
+    account_id: UUID,
+    limit: int = 25,
+    after: str | None = None,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """List the connected account's published media, for the campaign post picker.
+
+    Returns Instagram's numeric media ids so a selected post can be matched
+    against incoming comment webhooks.
+    """
+    account = db.query(InstagramAccount).filter(InstagramAccount.id == account_id).first()
+    if not account:
+        raise HTTPException(status_code=404, detail="Account not found")
+
+    access_token = get_decrypted_token(db, account.id)
+    if not access_token:
+        raise HTTPException(
+            status_code=400,
+            detail="This Instagram account has no valid access token. Please reconnect it.",
+        )
+
+    limit = max(1, min(limit, 50))
+
+    try:
+        result = await fetch_instagram_media(access_token, limit=limit, after=after)
+    except MetaAPIError as exc:
+        logger.warning(
+            "Failed to fetch Instagram media",
+            extra={"account_id": str(account_id), "error": str(exc), "status_code": exc.status_code},
+        )
+        raise HTTPException(
+            status_code=502,
+            detail=f"Could not load posts from Instagram: {exc}",
+        )
+
+    return {
+        "account_id": str(account_id),
+        "media": result["media"],
+        "next_cursor": result["next_cursor"],
     }
