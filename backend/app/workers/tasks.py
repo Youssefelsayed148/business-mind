@@ -4,7 +4,7 @@ from sqlalchemy.orm import Session
 
 from app.db.session import SessionLocal
 from app.integrations.meta.messaging import MetaMessagingClient
-from app.integrations.meta.webhooks import parse_instagram_comment_events
+from app.integrations.meta.webhooks import parse_instagram_comment_events, parse_instagram_postback_events
 from app.models.automation_log import AutomationLog
 from app.models.campaign import Campaign
 from app.models.comment import Comment
@@ -95,10 +95,11 @@ def process_webhook_event(webhook_event_id: str):
         log_action(db, "webhook_received", details={"event_id": webhook_event_id})
 
         comment_events = parse_instagram_comment_events(event.payload or {})
-        if not comment_events:
+        postback_events = parse_instagram_postback_events(event.payload or {})
+        if not comment_events and not postback_events:
             event.processing_status = "skipped"
             db.commit()
-            log_action(db, "webhook_skipped", details={"reason": "no_comment_events", "event_id": webhook_event_id})
+            log_action(db, "webhook_skipped", details={"reason": "no_comment_or_postback_events", "event_id": webhook_event_id})
             return
 
         for parsed in comment_events:
@@ -344,6 +345,40 @@ def process_webhook_event(webhook_event_id: str):
                 else:
                     send_private_reply.delay(str(message.id))
 
+        for pb in postback_events:
+            if not pb.payload.startswith("FOLLOW_CHECK:"):
+                # Not a payload shape this feature owns — ignore rather than
+                # error, so other/future postback payloads aren't disrupted.
+                continue
+
+            follow_prompt_message_id = pb.payload.split("FOLLOW_CHECK:", 1)[1].strip()
+            if not follow_prompt_message_id:
+                continue
+
+            # Dedup on the message id (Meta may re-deliver the same postback
+            # notification). Falls back to mid if present, else timestamp,
+            # so repeated taps of the *same* button by the user each still
+            # trigger a fresh check (only true duplicate deliveries are
+            # collapsed).
+            dedup_suffix = pb.mid or str(pb.timestamp or "")
+            pb_event_key = f"ig_postback:{follow_prompt_message_id}:{dedup_suffix}" if dedup_suffix else f"ig_postback:{follow_prompt_message_id}:{pb.sender_ig_id}"
+            is_new_pb = check_and_mark_processed(
+                db,
+                event_key=pb_event_key,
+                event_type="ig_postback",
+                metadata={"payload": pb.payload, "sender_ig_id": pb.sender_ig_id},
+            )
+            if not is_new_pb:
+                logger.debug("Duplicate postback event skipped", extra={"event_key": pb_event_key})
+                continue
+
+            log_action(
+                db,
+                "follow_check_postback_received",
+                details={"message_id": follow_prompt_message_id, "sender_ig_id": pb.sender_ig_id},
+            )
+            check_follow_and_deliver.delay(follow_prompt_message_id, pb.sender_ig_id)
+
         event.processing_status = "processed"
         db.commit()
         log_action(db, "webhook_processed", details={"event_id": webhook_event_id})
@@ -358,7 +393,20 @@ def process_webhook_event(webhook_event_id: str):
         db.close()
 
 
-def _send_private_reply_impl(task, message_id: str, final_after_prompt: bool = False):
+def _send_private_reply_impl(
+    task,
+    message_id: str,
+    final_after_prompt: bool = False,
+    direct_recipient_id: str | None = None,
+):
+    """Send a queued message.
+
+    When direct_recipient_id is provided, the message is delivered via
+    recipient.id through the open 24-hour messaging window rather than via
+    recipient.comment_id. This is required for any send that follows a
+    postback tap, because Meta permits only one private reply per comment
+    (further attempts fail with error subcode 2534014).
+    """
     db = _get_db()
     try:
         message = get_message_for_send(db, message_id)
@@ -400,12 +448,20 @@ def _send_private_reply_impl(task, message_id: str, final_after_prompt: bool = F
         # Send via Meta API (sync client — no asyncio needed in Celery workers)
         client = MetaMessagingClient()
         try:
-            result = client.send_private_reply(
-                access_token=access_token,
-                ig_user_id=account.ig_user_id,
-                comment_id=comment_id_str,
-                text=message.rendered_body or "",
-            )
+            if direct_recipient_id:
+                result = client.send_direct_message(
+                    access_token=access_token,
+                    ig_user_id=account.ig_user_id,
+                    recipient_id=direct_recipient_id,
+                    text=message.rendered_body or "",
+                )
+            else:
+                result = client.send_private_reply(
+                    access_token=access_token,
+                    ig_user_id=account.ig_user_id,
+                    comment_id=comment_id_str,
+                    text=message.rendered_body or "",
+                )
         finally:
             client.close()
 
@@ -620,6 +676,7 @@ def send_follow_prompt_card(self, message_id: str):
                 title=campaign.follow_prompt_title or "",
                 description=campaign.follow_prompt_description or "",
                 profile_url=campaign.follow_prompt_profile_url or "",
+                message_id=str(message.id),
             )
         finally:
             client.close()
@@ -693,10 +750,10 @@ def send_follow_prompt_card(self, message_id: str):
 
         log_action(
             db,
-            "follow_prompt_delay_started",
+            "follow_prompt_awaiting_tap",
             campaign_id=campaign.id,
             lead_id=message.lead_id,
-            details={"message_id": str(final_message.id), "delay_seconds": 10, **details},
+            details={"message_id": str(final_message.id), **details},
         )
         log_action(
             db,
@@ -705,7 +762,10 @@ def send_follow_prompt_card(self, message_id: str):
             lead_id=message.lead_id,
             details={"message_id": str(final_message.id), **_message_flow_details(campaign.delivery_mode, "final_delivery", comment_id_str, trigger_keyword, str(message.lead_id))},
         )
-        send_final_delivery_after_follow_prompt.apply_async(args=[str(final_message.id)], countdown=10)
+        # No timer here. Delivery of final_message is now triggered only when
+        # the user taps the postback button on this follow-prompt card,
+        # handled by check_follow_and_deliver() below via the messaging_postbacks
+        # webhook. See process_webhook_event() for the dispatch point.
     except Exception as exc:
         exc_name = type(exc).__name__
         if exc_name in ("Retry", "MaxRetriesExceededError"):
@@ -725,5 +785,188 @@ def send_private_reply(self, message_id: str):
 
 
 @celery_app.task(bind=True, max_retries=4)
-def send_final_delivery_after_follow_prompt(self, message_id: str):
-    return _send_private_reply_impl(self, message_id, final_after_prompt=True)
+def send_final_delivery_after_follow_prompt(self, message_id: str, direct_recipient_id: str | None = None):
+    return _send_private_reply_impl(
+        self,
+        message_id,
+        final_after_prompt=True,
+        direct_recipient_id=direct_recipient_id,
+    )
+
+
+@celery_app.task
+def check_follow_and_deliver(message_id: str, sender_ig_id: str | None = None):
+    """Real, event-driven replacement for the old 10s-delay fallback.
+
+    Triggered by process_webhook_event() when a messaging_postbacks webhook
+    event is received for a follow-prompt card's button. Checks live follow
+    status via the Instagram User Profile API and either:
+      - delivers the final message immediately (follow confirmed), or
+      - re-sends the same follow-prompt card so the user can tap again
+        after actually following (follow not confirmed / check inconclusive)
+
+    message_id here is the id of the *follow_prompt* Message row (encoded
+    in the button's postback payload), not the final_delivery row.
+    """
+    db = _get_db()
+    try:
+        message = get_message_for_send(db, message_id)
+        if not message:
+            logger.warning("Follow-check: follow_prompt message not found", extra={"message_id": message_id})
+            return
+        if message.message_type != "follow_prompt":
+            logger.warning(
+                "Follow-check: message is not a follow_prompt",
+                extra={"message_id": message_id, "message_type": message.message_type},
+            )
+            return
+
+        campaign = db.query(Campaign).filter(Campaign.id == message.campaign_id).first()
+        if not campaign:
+            logger.warning("Follow-check: campaign not found", extra={"message_id": message_id})
+            return
+        if campaign.status != "active":
+            log_action(
+                db,
+                "follow_check_skipped",
+                campaign_id=campaign.id,
+                details={"reason": "campaign_not_active", "message_id": message_id},
+            )
+            return
+
+        account = db.query(InstagramAccount).filter(InstagramAccount.id == campaign.instagram_account_id).first()
+        if not account:
+            logger.warning("Follow-check: instagram account not found", extra={"message_id": message_id})
+            return
+
+        access_token = get_decrypted_token(db, campaign.instagram_account_id)
+        if not access_token:
+            log_action(
+                db,
+                "token_expired",
+                campaign_id=campaign.id,
+                details={"message_id": message_id, "context": "follow_check"},
+            )
+            return
+
+        from app.models.lead import Lead
+
+        lead = db.query(Lead).filter(Lead.id == message.lead_id).first()
+        ig_scoped_id = (lead.ig_user_id if lead else None) or sender_ig_id
+        if not ig_scoped_id:
+            logger.warning("Follow-check: no IGSID available", extra={"message_id": message_id})
+            return
+
+        comment_id_str, trigger_keyword = _matched_keyword_for_message(db, message)
+
+        client = MetaMessagingClient()
+        try:
+            is_following = client.get_is_user_follow_business(access_token, ig_scoped_id)
+        finally:
+            client.close()
+
+        details = _message_flow_details(
+            campaign.delivery_mode,
+            "follow_prompt",
+            comment_id_str,
+            trigger_keyword,
+            str(message.lead_id),
+            campaign.follow_prompt_profile_url,
+        )
+
+        if is_following:
+            final_message = get_message_by_context(db, campaign.id, message.comment_id, "final_delivery")
+            if not final_message:
+                # Defensive fallback — send_follow_prompt_card already creates
+                # this row when the prompt is first sent, so this branch
+                # should not normally be hit.
+                try:
+                    rendered = render_campaign_message(
+                        campaign.message_template,
+                        username=(lead.ig_username if lead else None) or "there",
+                        campaign_name=campaign.name,
+                        keyword=trigger_keyword,
+                        link=campaign.link_url,
+                        media_url=campaign.media_url,
+                    )
+                except Exception as exc:
+                    logger.exception("Follow-check: final delivery render failed", extra={"campaign_id": str(campaign.id)})
+                    log_action(
+                        db,
+                        "message_render_failed",
+                        campaign_id=campaign.id,
+                        lead_id=message.lead_id,
+                        details={"error": str(exc), **details},
+                    )
+                    return
+
+                final_message = create_queued_message(
+                    db,
+                    campaign_id=campaign.id,
+                    lead_id=message.lead_id,
+                    comment_id=message.comment_id,
+                    rendered_body=rendered,
+                    message_type="final_delivery",
+                    source_media_id=message.source_media_id,
+                    source_media_type=message.source_media_type,
+                    source_media_label=message.source_media_label,
+                )
+
+            log_action(
+                db,
+                "follow_confirmed_delivering",
+                campaign_id=campaign.id,
+                lead_id=message.lead_id,
+                details={"message_id": str(final_message.id), **details},
+            )
+            # Deliver via recipient.id (24h window opened by the tap), NOT via
+            # comment_id — the single permitted private reply per comment was
+            # already consumed by the follow-prompt card itself.
+            send_final_delivery_after_follow_prompt.delay(str(final_message.id), ig_scoped_id)
+        else:
+            # Not following, or the check was inconclusive (None) — treat
+            # both the same way: re-send the identical follow-prompt card so
+            # the button is live again.
+            #
+            # Sent via recipient.id, not comment_id: Meta permits only one
+            # private reply per comment (subcode 2534014 on repeats), and
+            # that allowance was consumed by the original prompt. The tap
+            # that brought us here opened the 24-hour messaging window, so
+            # recipient.id is both valid and the correct channel.
+            #
+            # No new Message row is created — the unique constraint on
+            # (campaign_id, comment_id, message_type) forbids a second
+            # follow_prompt row for the same comment, and the existing row
+            # keeps its "sent" status.
+            resend_client = MetaMessagingClient()
+            try:
+                resend_result = resend_client.send_follow_prompt_card(
+                    access_token=access_token,
+                    ig_user_id=account.ig_user_id,
+                    comment_id=comment_id_str or "",
+                    title=campaign.follow_prompt_title or "",
+                    description=campaign.follow_prompt_description or "",
+                    profile_url=campaign.follow_prompt_profile_url or "",
+                    message_id=str(message.id),
+                    recipient_id=ig_scoped_id,
+                )
+            finally:
+                resend_client.close()
+
+            log_action(
+                db,
+                "follow_not_confirmed_reprompted" if resend_result.success else "follow_reprompt_failed",
+                campaign_id=campaign.id,
+                lead_id=message.lead_id,
+                details={
+                    "message_id": message_id,
+                    "is_following": is_following,
+                    "resend_success": resend_result.success,
+                    "resend_error": resend_result.error_message,
+                    **details,
+                },
+            )
+    except Exception:
+        logger.exception("check_follow_and_deliver failed", extra={"message_id": message_id})
+    finally:
+        db.close()

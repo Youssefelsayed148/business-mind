@@ -19,6 +19,16 @@ class ParsedCommentEvent:
     raw_event: dict
 
 
+@dataclass
+class ParsedPostbackEvent:
+    instagram_account_ig_user_id: str
+    sender_ig_id: str
+    payload: str
+    mid: str | None
+    timestamp: int | None
+    raw_event: dict
+
+
 def verify_meta_signature(raw_body: bytes, signature_header: str | None, app_secret: str) -> bool:
     if not signature_header:
         return False
@@ -101,6 +111,84 @@ def parse_instagram_comment_events(payload: dict) -> list[ParsedCommentEvent]:
 
     if not events and payload.get("object") == "instagram":
         logger.info("No comment events found in Instagram webhook", extra={"payload_summary": str(payload)[:500]})
+    return events
+
+
+def parse_instagram_postback_events(payload: dict) -> list[ParsedPostbackEvent]:
+    """Defensively parse Instagram messaging postback / quick-reply button-tap
+    events from a Meta webhook payload.
+
+    These arrive under entry[].messaging[] (distinct from entry[].changes[]
+    used by comment events) and are only present once the app is subscribed
+    to the "messaging_postbacks" and/or "messages" webhook fields.
+
+    Handles both button shapes:
+      - Generic Template "postback" buttons -> messaging[].postback.payload
+      - Quick Reply buttons -> messaging[].message.quick_reply.payload
+
+    Echoes of our own outbound messages (messaging[].message.is_echo) are
+    skipped, since they are not user-initiated taps.
+    """
+    events: list[ParsedPostbackEvent] = []
+    if not isinstance(payload, dict):
+        return events
+    entries = payload.get("entry", [])
+    if not isinstance(entries, list):
+        return events
+
+    for entry in entries:
+        if not isinstance(entry, dict):
+            continue
+        messaging = entry.get("messaging", [])
+        if not isinstance(messaging, list):
+            continue
+
+        ig_user_id = str(entry.get("id", ""))
+
+        for item in messaging:
+            if not isinstance(item, dict):
+                continue
+
+            sender = item.get("sender", {})
+            sender_id = str(sender.get("id", "")) if isinstance(sender, dict) else ""
+            if not sender_id:
+                continue
+
+            payload_str: str | None = None
+            mid: str | None = None
+
+            postback = item.get("postback")
+            if isinstance(postback, dict) and postback.get("payload"):
+                payload_str = str(postback.get("payload"))
+                mid = postback.get("mid")
+
+            if payload_str is None:
+                message = item.get("message")
+                if isinstance(message, dict):
+                    if message.get("is_echo"):
+                        # Our own outbound message reflected back — not a tap.
+                        continue
+                    quick_reply = message.get("quick_reply")
+                    if isinstance(quick_reply, dict) and quick_reply.get("payload"):
+                        payload_str = str(quick_reply.get("payload"))
+                        mid = message.get("mid")
+
+            if not payload_str:
+                # Not a postback/quick-reply event (could be a plain text
+                # message, read receipt, reaction, etc.) — ignore.
+                continue
+
+            events.append(
+                ParsedPostbackEvent(
+                    instagram_account_ig_user_id=ig_user_id,
+                    sender_ig_id=sender_id,
+                    payload=payload_str,
+                    mid=str(mid) if mid else None,
+                    timestamp=item.get("timestamp"),
+                    raw_event=item,
+                )
+            )
+
     return events
 
 
