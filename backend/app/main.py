@@ -3,7 +3,17 @@ import logging
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.api import routes_auth, routes_campaigns, routes_dashboard, routes_health, routes_instagram, routes_meta, routes_messages, routes_webhooks
+from app.api import (
+    routes_auth,
+    routes_campaigns,
+    routes_conversations,
+    routes_dashboard,
+    routes_health,
+    routes_instagram,
+    routes_meta,
+    routes_messages,
+    routes_webhooks,
+)
 from app.core.config import get_allowed_origins, settings
 from app.core.logging import setup_logging
 
@@ -47,6 +57,7 @@ app.include_router(routes_meta.router)
 app.include_router(routes_instagram.router)
 app.include_router(routes_campaigns.router)
 app.include_router(routes_messages.router)
+app.include_router(routes_conversations.router)
 app.include_router(routes_dashboard.router)
 
 

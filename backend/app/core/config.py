@@ -54,6 +54,13 @@ class Settings(BaseSettings):
 
     TOKEN_ENCRYPTION_KEY: str = ""
 
+    # --- AI conversation-continuation layer ---
+    AI_ENABLED_GLOBAL: bool = True  # kill switch, independent of per-account toggles
+    OPENAI_API_KEY: str = ""
+    AI_MODEL_NAME: str = "gpt-4o-mini"
+    AI_REQUEST_TIMEOUT_SECONDS: float = 15.0
+    AI_MAX_CONTEXT_TURNS: int = 10
+
 
 settings = Settings()
 

@@ -23,6 +23,11 @@ const labelMap: Record<string, string> = {
   starts_with: "Starts With",
   final_delivery: "Final Delivery",
   follow_prompt_message: "Follow Prompt",
+  bot_active: "Bot Active",
+  handed_off: "Handed Off",
+  closed: "Closed",
+  ai_conversation: "AI Reply",
+  received: "Received",
 };
 
 const toneMap: Record<string, string> = {
@@ -43,6 +48,9 @@ const toneMap: Record<string, string> = {
   skipped: "border-amber-200 bg-amber-50 text-amber-700",
   draft: "border-slate-200 bg-slate-50 text-slate-600",
   archived: "border-slate-200 bg-slate-50 text-slate-600",
+  bot_active: "border-emerald-200 bg-mint text-emerald-700",
+  handed_off: "border-amber-200 bg-amber-50 text-amber-700",
+  closed: "border-slate-200 bg-slate-50 text-slate-600",
   info: "border-blue-200 bg-blue-50 text-blue-700",
   warning: "border-amber-200 bg-amber-50 text-amber-700",
   error: "border-red-200 bg-red-50 text-danger",

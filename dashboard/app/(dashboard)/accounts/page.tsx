@@ -1,13 +1,14 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Link2, Trash2 } from "lucide-react";
+import { Bot, Link2, Trash2 } from "lucide-react";
 import { MockConnect } from "@/components/accounts/MockConnect";
 import { Avatar } from "@/components/ui/Avatar";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { DataState } from "@/components/ui/DataState";
 import { EmptyState } from "@/components/ui/EmptyState";
+import { Field, Select, TextArea } from "@/components/ui/Field";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { Panel } from "@/components/ui/Panel";
 import { LiveStatusDot } from "@/components/ui/LiveStatusDot";
@@ -16,7 +17,114 @@ import { TableWrap, tableClass, tdClass, thClass, theadRowClass, trClass } from 
 import { api } from "@/lib/api";
 import { useCan } from "@/lib/permissions";
 import { useToast } from "@/components/ToastProvider";
-import type { InstagramAccount } from "@/lib/types";
+import type { AISettingsPayload, InstagramAccount } from "@/lib/types";
+
+function AISettingsPanel({
+  account,
+  canManage,
+  onSaved,
+}: {
+  account: InstagramAccount;
+  canManage: boolean;
+  onSaved: (updated: InstagramAccount) => void;
+}) {
+  const [form, setForm] = useState<AISettingsPayload>({
+    business_vertical: (account.business_vertical as AISettingsPayload["business_vertical"]) || "general",
+    ai_enabled: account.ai_enabled || false,
+    ai_business_profile: account.ai_business_profile || "",
+    ai_tone_instructions: account.ai_tone_instructions || "",
+    ai_daily_message_cap: account.ai_daily_message_cap ?? 100,
+  });
+  const [saving, setSaving] = useState(false);
+  const toast = useToast();
+
+  async function save() {
+    setSaving(true);
+    try {
+      const updated = await api.patch<InstagramAccount>(`/instagram/accounts/${account.id}/ai-settings`, form);
+      toast.success("AI settings saved.");
+      onSaved(updated);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Failed to save AI settings");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <div className="grid gap-4 rounded-lg border border-line/70 bg-slate-50/60 p-4">
+      <div className="flex items-center justify-between">
+        <div>
+          <h4 className="text-sm font-bold text-ink">AI conversation assistant</h4>
+          <p className="text-xs text-muted">
+            Shared across all campaigns on this account. Used only once a lead replies inside a DM thread.
+          </p>
+        </div>
+        <label className="inline-flex items-center gap-2 text-sm font-semibold text-ink">
+          <input
+            type="checkbox"
+            checked={form.ai_enabled}
+            disabled={!canManage}
+            onChange={(e) => setForm((f) => ({ ...f, ai_enabled: e.target.checked }))}
+            className="h-4 w-4 rounded border-line accent-accent"
+          />
+          Enabled
+        </label>
+      </div>
+
+      <div className="grid gap-4 sm:grid-cols-2">
+        <Select
+          label="Business vertical"
+          hint="Applies non-overridable safety rules (e.g. clinics never give medical advice)."
+          value={form.business_vertical}
+          disabled={!canManage}
+          onChange={(e) => setForm((f) => ({ ...f, business_vertical: e.target.value as AISettingsPayload["business_vertical"] }))}
+        >
+          <option value="general">General</option>
+          <option value="restaurant">Restaurant</option>
+          <option value="real_estate">Real estate</option>
+          <option value="clinical">Clinical</option>
+        </Select>
+        <Field
+          label="Daily message cap"
+          type="number"
+          min={0}
+          max={5000}
+          hint={`Shared budget across all campaigns on this account. Sent today: ${account.ai_messages_sent_today ?? 0}.`}
+          value={form.ai_daily_message_cap}
+          disabled={!canManage}
+          onChange={(e) => setForm((f) => ({ ...f, ai_daily_message_cap: Number(e.target.value) }))}
+        />
+      </div>
+
+      <TextArea
+        label="Business profile"
+        hint="Facts the AI should know: what the business offers, hours, delivery area, contact for humans. Be specific — a sparse profile leads to vague or unsafe answers."
+        rows={5}
+        value={form.ai_business_profile || ""}
+        disabled={!canManage}
+        onChange={(e) => setForm((f) => ({ ...f, ai_business_profile: e.target.value }))}
+      />
+
+      <TextArea
+        label="Tone / style (optional)"
+        hint="e.g. 'Friendly and casual, use emojis sparingly.'"
+        rows={2}
+        value={form.ai_tone_instructions || ""}
+        disabled={!canManage}
+        onChange={(e) => setForm((f) => ({ ...f, ai_tone_instructions: e.target.value }))}
+      />
+
+      {canManage ? (
+        <div className="flex justify-end">
+          <Button type="button" disabled={saving} onClick={save}>
+            {saving ? "Saving..." : "Save AI settings"}
+          </Button>
+        </div>
+      ) : null}
+    </div>
+  );
+}
 
 function expiryStatus(account: InstagramAccount) {
   if (account.status === "disconnected") return "Disconnected";
@@ -36,6 +144,7 @@ export default function AccountsPage() {
   const [reconnectingId, setReconnectingId] = useState<string | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
+  const [expandedId, setExpandedId] = useState<string | null>(null);
 
   const canManageAccounts = useCan("manage_accounts");
   const canDisconnectAccounts = useCan("disconnect_accounts");
@@ -222,6 +331,7 @@ export default function AccountsPage() {
                   const isDeleting = deletingId === account.id;
 
                   return (
+                    <>
                     <tr key={account.id} className={trClass}>
                       <td className={`${tdClass} font-semibold text-ink`}>
                         <span className="inline-flex items-center gap-2">
@@ -248,7 +358,16 @@ export default function AccountsPage() {
                             ).toLocaleString()
                           : "Not available"}
                       </td>
-                      <td className={`${tdClass} flex gap-2`}>
+                      <td className={`${tdClass} flex flex-wrap gap-2`}>
+                        <Button
+                          type="button"
+                          variant="secondary"
+                          className="gap-2"
+                          onClick={() => setExpandedId(expandedId === account.id ? null : account.id)}
+                        >
+                          <Bot className="h-4 w-4" aria-hidden="true" />
+                          {account.ai_enabled ? "AI Settings" : "Enable AI"}
+                        </Button>
                         {canManageAccounts ? (
                           <Button
                             type="button"
@@ -286,6 +405,20 @@ export default function AccountsPage() {
                         ) : null}
                       </td>
                     </tr>
+                    {expandedId === account.id ? (
+                      <tr>
+                        <td colSpan={6} className="bg-white px-5 pb-4">
+                          <AISettingsPanel
+                            account={account}
+                            canManage={canManageAccounts}
+                            onSaved={(updated) => {
+                              setAccounts((prev) => prev.map((a) => (a.id === updated.id ? updated : a)));
+                            }}
+                          />
+                        </td>
+                      </tr>
+                    ) : null}
+                    </>
                   );
                 })}
               </tbody>

@@ -28,6 +28,11 @@ class Message(Base):
     comment_id: Mapped[uuid.UUID | None] = mapped_column(
         PGUUID(as_uuid=True), ForeignKey("comments.id"), nullable=True
     )
+    conversation_id: Mapped[uuid.UUID | None] = mapped_column(
+        PGUUID(as_uuid=True), ForeignKey("conversations.id"), nullable=True
+    )
+    # inbound (from lead) | outbound (from us, includes AI replies)
+    direction: Mapped[str] = mapped_column(String(20), default="outbound")
     source_media_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
     source_media_type: Mapped[str | None] = mapped_column(String(50), nullable=True)
     source_media_label: Mapped[str | None] = mapped_column(String(255), nullable=True)

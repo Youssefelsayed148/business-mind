@@ -42,6 +42,8 @@ export type Campaign = {
   total_triggers: number;
   successful_sends: number;
   failed_sends: number;
+  ai_enabled?: boolean;
+  ai_handoff_after_turns?: number;
   created_at: string;
   updated_at: string;
   keywords: CampaignKeyword[];
@@ -71,6 +73,8 @@ export type CampaignPayload = {
   follow_prompt_profile_url?: string | null;
   comment_reply_enabled?: boolean;
   comment_reply_text?: string | null;
+  ai_enabled?: boolean;
+  ai_handoff_after_turns?: number;
 };
 
 export type InstagramAccount = {
@@ -80,8 +84,50 @@ export type InstagramAccount = {
   account_type?: string | null;
   status?: string | null;
   expires_at?: string | null;
+  business_vertical?: "general" | "restaurant" | "real_estate" | "clinical" | string;
+  ai_enabled?: boolean;
+  ai_business_profile?: string | null;
+  ai_tone_instructions?: string | null;
+  ai_daily_message_cap?: number;
+  ai_messages_sent_today?: number;
   created_at?: string | null;
   updated_at?: string | null;
+};
+
+export type AISettingsPayload = {
+  business_vertical?: "general" | "restaurant" | "real_estate" | "clinical";
+  ai_enabled?: boolean;
+  ai_business_profile?: string | null;
+  ai_tone_instructions?: string | null;
+  ai_daily_message_cap?: number;
+};
+
+export type Conversation = {
+  id: Id;
+  lead_id: Id;
+  lead_username?: string | null;
+  campaign_id: Id;
+  campaign_name?: string | null;
+  instagram_account_id: Id;
+  status: "bot_active" | "handed_off" | "closed" | string;
+  handoff_reason?: string | null;
+  turn_count: number;
+  last_message_at?: string | null;
+  last_message_preview?: string | null;
+  created_at?: string | null;
+};
+
+export type ConversationMessage = {
+  id: Id;
+  direction: "inbound" | "outbound" | null;
+  content?: string | null;
+  status: string;
+  error_message?: string | null;
+  created_at?: string | null;
+};
+
+export type ConversationDetail = Conversation & {
+  messages: ConversationMessage[];
 };
 
 export type OverviewStats = {
@@ -135,7 +181,9 @@ export type Message = {
   source_media_label?: string | null;
   status: string;
   rendered_body?: string | null;
-  message_type?: "follow_prompt" | "final_delivery" | string | null;
+  message_type?: "follow_prompt" | "final_delivery" | "ai_conversation" | string | null;
+  direction?: "inbound" | "outbound" | null;
+  conversation_id?: Id | null;
   provider_message_id?: string | null;
   error_code?: string | null;
   error_message?: string | null;

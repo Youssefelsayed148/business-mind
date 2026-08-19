@@ -155,6 +155,8 @@ class CampaignUpdate(BaseModel):
     follow_prompt_profile_url: str | None = None
     comment_reply_enabled: bool | None = None
     comment_reply_text: str | None = None
+    ai_enabled: bool | None = None
+    ai_handoff_after_turns: int | None = Field(default=None, ge=1, le=50)
 
     @field_validator("message_template")
     @classmethod
@@ -222,6 +224,8 @@ class CampaignResponse(BaseModel):
     follow_prompt_profile_url: str | None = None
     comment_reply_enabled: bool = False
     comment_reply_text: str | None = None
+    ai_enabled: bool = False
+    ai_handoff_after_turns: int = 8
     total_triggers: int = 0
     successful_sends: int = 0
     failed_sends: int = 0

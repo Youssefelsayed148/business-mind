@@ -3,6 +3,7 @@ from app.models.audit_log import AuditLog
 from app.models.campaign import Campaign
 from app.models.campaign_keyword import CampaignKeyword
 from app.models.comment import Comment
+from app.models.conversation import Conversation
 from app.models.instagram_account import InstagramAccount
 from app.models.lead import Lead
 from app.models.message import Message
@@ -19,6 +20,7 @@ __all__ = [
     "Campaign",
     "CampaignKeyword",
     "Comment",
+    "Conversation",
     "InstagramAccount",
     "Lead",
     "Message",

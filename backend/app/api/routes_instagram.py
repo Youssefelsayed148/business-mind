@@ -1,9 +1,11 @@
 import logging
 import uuid
 from datetime import datetime, timezone
+from typing import Literal
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException
+from pydantic import BaseModel, Field
 from redis import Redis
 from redis.exceptions import RedisError
 from sqlalchemy.orm import Session
@@ -59,6 +61,12 @@ def _account_response(account: InstagramAccount) -> dict:
         "ig_user_id": account.ig_user_id,
         "username": account.ig_username,
         "status": account.status,
+        "business_vertical": account.business_vertical,
+        "ai_enabled": account.ai_enabled,
+        "ai_business_profile": account.ai_business_profile,
+        "ai_tone_instructions": account.ai_tone_instructions,
+        "ai_daily_message_cap": account.ai_daily_message_cap,
+        "ai_messages_sent_today": account.ai_messages_sent_today,
         "created_at": account.created_at.isoformat() if account.created_at else None,
         "updated_at": account.updated_at.isoformat() if account.updated_at else None,
     }
@@ -104,6 +112,38 @@ async def get_account(
     account = db.query(InstagramAccount).filter(InstagramAccount.id == account_id).first()
     if not account:
         raise HTTPException(status_code=404, detail="Account not found")
+    return _account_response(account)
+
+
+class AISettingsUpdate(BaseModel):
+    business_vertical: Literal["general", "restaurant", "real_estate", "clinical"] | None = None
+    ai_enabled: bool | None = None
+    ai_business_profile: str | None = Field(default=None, max_length=4000)
+    ai_tone_instructions: str | None = Field(default=None, max_length=1000)
+    ai_daily_message_cap: int | None = Field(default=None, ge=0, le=5000)
+
+
+@router.patch("/accounts/{account_id}/ai-settings")
+async def update_ai_settings(
+    account_id: UUID,
+    payload: AISettingsUpdate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_permission("manage_accounts")),
+):
+    _limit_account_mutation(current_user)
+    account = db.query(InstagramAccount).filter(InstagramAccount.id == account_id).first()
+    if not account:
+        raise HTTPException(status_code=404, detail="Account not found")
+
+    update_data = payload.model_dump(exclude_unset=True)
+    for field, value in update_data.items():
+        setattr(account, field, value)
+    db.commit()
+    db.refresh(account)
+
+    _add_account_log(db, "ai_settings_updated", account, details=update_data)
+    db.commit()
+
     return _account_response(account)
 
 

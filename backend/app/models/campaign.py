@@ -41,6 +41,8 @@ class Campaign(Base):
     follow_prompt_profile_url: Mapped[str | None] = mapped_column(Text, nullable=True)
     comment_reply_enabled: Mapped[bool] = mapped_column(Boolean, default=False)
     comment_reply_text: Mapped[str | None] = mapped_column(Text, nullable=True)
+    ai_enabled: Mapped[bool] = mapped_column(Boolean, default=False)
+    ai_handoff_after_turns: Mapped[int] = mapped_column(Integer, default=8)
     total_triggers: Mapped[int] = mapped_column(Integer, default=0)
     successful_sends: Mapped[int] = mapped_column(Integer, default=0)
     failed_sends: Mapped[int] = mapped_column(Integer, default=0)

@@ -4,13 +4,20 @@ from sqlalchemy.orm import Session
 
 from app.db.session import SessionLocal
 from app.integrations.meta.messaging import MetaMessagingClient
-from app.integrations.meta.webhooks import parse_instagram_comment_events, parse_instagram_postback_events
+from app.integrations.meta.webhooks import (
+    parse_instagram_comment_events,
+    parse_instagram_message_events,
+    parse_instagram_postback_events,
+)
 from app.models.automation_log import AutomationLog
 from app.models.campaign import Campaign
 from app.models.comment import Comment
+from app.models.conversation import Conversation
 from app.models.instagram_account import InstagramAccount
+from app.models.lead import Lead
 from app.models.message import Message
 from app.models.webhook_event import WebhookEvent
+from app.services import ai_service, conversation_service
 from app.services.campaign_matcher import find_matching_campaigns, find_matching_keyword
 from app.services.comment_service import upsert_comment
 from app.services.cooldown_service import is_in_cooldown, record_cooldown
@@ -96,10 +103,11 @@ def process_webhook_event(webhook_event_id: str):
 
         comment_events = parse_instagram_comment_events(event.payload or {})
         postback_events = parse_instagram_postback_events(event.payload or {})
-        if not comment_events and not postback_events:
+        message_events = parse_instagram_message_events(event.payload or {})
+        if not comment_events and not postback_events and not message_events:
             event.processing_status = "skipped"
             db.commit()
-            log_action(db, "webhook_skipped", details={"reason": "no_comment_or_postback_events", "event_id": webhook_event_id})
+            log_action(db, "webhook_skipped", details={"reason": "no_comment_postback_or_message_events", "event_id": webhook_event_id})
             return
 
         for parsed in comment_events:
@@ -378,6 +386,100 @@ def process_webhook_event(webhook_event_id: str):
                 details={"message_id": follow_prompt_message_id, "sender_ig_id": pb.sender_ig_id},
             )
             check_follow_and_deliver.delay(follow_prompt_message_id, pb.sender_ig_id)
+
+        for msg_evt in message_events:
+            # Dedup on mid if present, else fall back to timestamp+sender so
+            # Meta re-deliveries of the same DM don't trigger duplicate AI turns.
+            dedup_suffix = msg_evt.mid or str(msg_evt.timestamp or "")
+            msg_event_key = (
+                f"ig_message:{msg_evt.sender_ig_id}:{dedup_suffix}"
+                if dedup_suffix
+                else f"ig_message:{msg_evt.sender_ig_id}:{msg_evt.text[:50]}"
+            )
+            is_new_msg = check_and_mark_processed(
+                db,
+                event_key=msg_event_key,
+                event_type="ig_message",
+                metadata={"sender_ig_id": msg_evt.sender_ig_id, "text": msg_evt.text[:200]},
+            )
+            if not is_new_msg:
+                logger.debug("Duplicate inbound message event skipped", extra={"event_key": msg_event_key})
+                continue
+
+            account = (
+                db.query(InstagramAccount)
+                .filter(InstagramAccount.ig_user_id == msg_evt.instagram_account_ig_user_id)
+                .first()
+            )
+            if not account:
+                logger.warning(
+                    "Instagram account not found for inbound message",
+                    extra={"ig_user_id": msg_evt.instagram_account_ig_user_id},
+                )
+                continue
+
+            if not account.ai_enabled:
+                # AI layer is opt-in at the account level. Without it, an
+                # inbound DM reply is simply not actioned automatically —
+                # this is intentional, not a bug: no campaign context exists
+                # to reply from without a human or the AI layer involved.
+                continue
+
+            lead = (
+                db.query(Lead)
+                .filter(
+                    Lead.workspace_id == account.workspace_id,
+                    Lead.instagram_account_id == account.id,
+                    Lead.ig_user_id == msg_evt.sender_ig_id,
+                )
+                .first()
+            )
+            if not lead or not lead.source_campaign_id:
+                # No known lead / originating campaign for this sender —
+                # nothing to continue. Do not guess which campaign applies.
+                logger.info(
+                    "Inbound message from unknown lead, skipping AI reply",
+                    extra={"sender_ig_id": msg_evt.sender_ig_id, "instagram_account_id": str(account.id)},
+                )
+                continue
+
+            campaign = db.query(Campaign).filter(Campaign.id == lead.source_campaign_id).first()
+            if not campaign or not campaign.ai_enabled:
+                continue
+
+            conversation = conversation_service.get_or_create_conversation(
+                db,
+                workspace_id=account.workspace_id,
+                lead_id=lead.id,
+                campaign_id=campaign.id,
+                instagram_account_id=account.id,
+            )
+
+            # Store the inbound message regardless of conversation status,
+            # so a human taking over still sees the full thread.
+            inbound_message = Message(
+                campaign_id=campaign.id,
+                lead_id=lead.id,
+                conversation_id=conversation.id,
+                direction="inbound",
+                content=msg_evt.text,
+                rendered_body=msg_evt.text,
+                message_type="ai_conversation",
+                status="received",
+            )
+            db.add(inbound_message)
+            conversation_service.touch_conversation(db, conversation)
+            db.commit()
+            db.refresh(inbound_message)
+
+            if conversation.status != "bot_active":
+                logger.debug(
+                    "Conversation not bot_active, skipping AI reply",
+                    extra={"conversation_id": str(conversation.id), "status": conversation.status},
+                )
+                continue
+
+            process_ai_conversation_turn.delay(str(conversation.id), str(inbound_message.id))
 
         event.processing_status = "processed"
         db.commit()
@@ -968,5 +1070,163 @@ def check_follow_and_deliver(message_id: str, sender_ig_id: str | None = None):
             )
     except Exception:
         logger.exception("check_follow_and_deliver failed", extra={"message_id": message_id})
+    finally:
+        db.close()
+
+
+@celery_app.task
+def process_ai_conversation_turn(conversation_id: str, inbound_message_id: str):
+    """Take one AI conversation turn: check handoff/budget conditions,
+    generate a reply, send it, and log the result.
+
+    Fails closed: any error here (API failure, timeout, missing token)
+    stops this turn without retrying and without sending anything. It does
+    NOT hand the conversation off automatically — a transient failure
+    should not permanently kill the bot for that lead — but it also never
+    silently retries in a way that could spam the user or the AI API.
+    """
+    # Celery serializes task args to JSON, so these normally arrive as str.
+    # Normalize anyway: `details` is written to a JSONB column and a raw UUID
+    # object is not JSON-serializable, which would raise *after* the reply was
+    # already sent to the user.
+    conversation_id = str(conversation_id)
+    inbound_message_id = str(inbound_message_id)
+
+    db = _get_db()
+    try:
+        conversation = db.query(Conversation).filter(Conversation.id == conversation_id).first()
+        if not conversation:
+            logger.warning("Conversation not found for AI turn", extra={"conversation_id": conversation_id})
+            return
+
+        if conversation.status != "bot_active":
+            logger.debug(
+                "Conversation no longer bot_active, aborting AI turn",
+                extra={"conversation_id": conversation_id, "status": conversation.status},
+            )
+            return
+
+        campaign = db.query(Campaign).filter(Campaign.id == conversation.campaign_id).first()
+        if not campaign or not campaign.ai_enabled or campaign.status != "active":
+            conversation_service.hand_off(db, conversation, "campaign_inactive")
+            return
+
+        account = (
+            db.query(InstagramAccount).filter(InstagramAccount.id == conversation.instagram_account_id).first()
+        )
+        if not account or not account.ai_enabled:
+            conversation_service.hand_off(db, conversation, "ai_disabled")
+            return
+
+        # --- Handoff conditions, checked before any model call ---
+        if conversation.turn_count >= campaign.ai_handoff_after_turns:
+            conversation_service.hand_off(db, conversation, "turn_limit")
+            log_action(
+                db,
+                "ai_conversation_handed_off",
+                campaign_id=campaign.id,
+                lead_id=conversation.lead_id,
+                instagram_account_id=account.id,
+                details={"conversation_id": conversation_id, "reason": "turn_limit"},
+            )
+            return
+
+        if conversation_service.is_budget_exhausted(db, account):
+            conversation_service.hand_off(db, conversation, "daily_cap_reached")
+            log_action(
+                db,
+                "ai_conversation_handed_off",
+                campaign_id=campaign.id,
+                lead_id=conversation.lead_id,
+                instagram_account_id=account.id,
+                details={"conversation_id": conversation_id, "reason": "daily_cap_reached"},
+            )
+            return
+
+        access_token = get_decrypted_token(db, account.id)
+        if not access_token:
+            # Don't hand off — this is an infra problem, not a conversation
+            # problem. Leave bot_active so the next inbound message retries.
+            logger.warning("No access token for AI reply", extra={"instagram_account_id": str(account.id)})
+            return
+
+        lead = db.query(Lead).filter(Lead.id == conversation.lead_id).first()
+        if not lead:
+            logger.warning("Lead not found for AI turn", extra={"conversation_id": conversation_id})
+            return
+
+        result = ai_service.generate_reply(db, account, campaign, conversation.id)
+        if not result.success:
+            logger.warning(
+                "AI reply generation failed, no message sent",
+                extra={"conversation_id": conversation_id, "error": result.error},
+            )
+            log_action(
+                db,
+                "ai_reply_failed",
+                campaign_id=campaign.id,
+                lead_id=lead.id,
+                instagram_account_id=account.id,
+                details={"conversation_id": conversation_id, "error": result.error},
+            )
+            return
+
+        client = MetaMessagingClient()
+        try:
+            send_result = client.send_direct_message(
+                access_token=access_token,
+                ig_user_id=account.ig_user_id,
+                recipient_id=lead.ig_user_id,
+                text=result.text,
+            )
+        finally:
+            client.close()
+
+        outbound_message = Message(
+            campaign_id=campaign.id,
+            lead_id=lead.id,
+            conversation_id=conversation.id,
+            direction="outbound",
+            content=result.text,
+            rendered_body=result.text,
+            message_type="ai_conversation",
+            status="sent" if send_result.success else "failed",
+            provider_message_id=send_result.provider_message_id,
+            error_code=send_result.error_code,
+            error_message=send_result.error_message,
+        )
+        db.add(outbound_message)
+        db.commit()
+
+        if send_result.success:
+            conversation_service.increment_turn(db, conversation)
+            conversation_service.touch_conversation(db, conversation)
+            conversation_service.record_ai_send(db, account)
+            log_action(
+                db,
+                "ai_reply_sent",
+                campaign_id=campaign.id,
+                lead_id=lead.id,
+                instagram_account_id=account.id,
+                details={"conversation_id": conversation_id, "turn_count": conversation.turn_count},
+            )
+        else:
+            # Fail closed: do not retry automatically. Leave conversation
+            # bot_active so the next inbound message from the user gives
+            # the bot another chance, rather than looping on the same send.
+            logger.warning(
+                "AI reply send failed",
+                extra={"conversation_id": conversation_id, "error": send_result.error_message},
+            )
+            log_action(
+                db,
+                "ai_reply_send_failed",
+                campaign_id=campaign.id,
+                lead_id=lead.id,
+                instagram_account_id=account.id,
+                details={"conversation_id": conversation_id, "error": send_result.error_message},
+            )
+    except Exception:
+        logger.exception("process_ai_conversation_turn failed", extra={"conversation_id": conversation_id})
     finally:
         db.close()

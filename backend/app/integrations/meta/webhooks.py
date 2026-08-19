@@ -29,6 +29,22 @@ class ParsedPostbackEvent:
     raw_event: dict
 
 
+@dataclass
+class ParsedMessageEvent:
+    """A plain-text inbound DM (not a postback/quick-reply tap).
+
+    This is the event type the AI conversation-continuation layer acts on:
+    a lead replying with free text inside an existing DM thread.
+    """
+
+    instagram_account_ig_user_id: str
+    sender_ig_id: str
+    text: str
+    mid: str | None
+    timestamp: str | None
+    raw_event: dict
+
+
 def verify_meta_signature(raw_body: bytes, signature_header: str | None, app_secret: str) -> bool:
     if not signature_header:
         return False
@@ -184,6 +200,74 @@ def parse_instagram_postback_events(payload: dict) -> list[ParsedPostbackEvent]:
                     sender_ig_id=sender_id,
                     payload=payload_str,
                     mid=str(mid) if mid else None,
+                    timestamp=item.get("timestamp"),
+                    raw_event=item,
+                )
+            )
+
+    return events
+
+
+def parse_instagram_message_events(payload: dict) -> list[ParsedMessageEvent]:
+    """Parse plain-text inbound DM events from a Meta webhook payload.
+
+    Mirrors parse_instagram_postback_events' entry[].messaging[] traversal,
+    but picks up exactly the case that function ignores: a message.text
+    with no postback and no quick_reply payload. This is what the AI
+    conversation-continuation layer responds to.
+
+    Echoes of our own outbound messages (message.is_echo) are skipped,
+    same guard as the postback parser, to avoid the bot replying to itself.
+    """
+    events: list[ParsedMessageEvent] = []
+    if not isinstance(payload, dict):
+        return events
+    entries = payload.get("entry", [])
+    if not isinstance(entries, list):
+        return events
+
+    for entry in entries:
+        if not isinstance(entry, dict):
+            continue
+        messaging = entry.get("messaging", [])
+        if not isinstance(messaging, list):
+            continue
+
+        ig_user_id = str(entry.get("id", ""))
+
+        for item in messaging:
+            if not isinstance(item, dict):
+                continue
+
+            sender = item.get("sender", {})
+            sender_id = str(sender.get("id", "")) if isinstance(sender, dict) else ""
+            if not sender_id:
+                continue
+
+            # Postback/quick-reply taps are handled by parse_instagram_postback_events.
+            if isinstance(item.get("postback"), dict) and item["postback"].get("payload"):
+                continue
+
+            message = item.get("message")
+            if not isinstance(message, dict):
+                continue
+            if message.get("is_echo"):
+                continue
+            if isinstance(message.get("quick_reply"), dict) and message["quick_reply"].get("payload"):
+                continue
+
+            text = message.get("text")
+            if not text or not isinstance(text, str):
+                # Attachments (images/stickers) with no text — not handled by
+                # the AI layer yet; ignore rather than guess.
+                continue
+
+            events.append(
+                ParsedMessageEvent(
+                    instagram_account_ig_user_id=ig_user_id,
+                    sender_ig_id=sender_id,
+                    text=text,
+                    mid=message.get("mid"),
                     timestamp=item.get("timestamp"),
                     raw_event=item,
                 )

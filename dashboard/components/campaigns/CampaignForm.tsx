@@ -38,6 +38,8 @@ type FormState = {
   follow_prompt_profile_url: string;
   comment_reply_enabled: boolean;
   comment_reply_text: string;
+  ai_enabled: boolean;
+  ai_handoff_after_turns: number;
 };
 
 function extractInstagramShortcode(value: string): string {
@@ -74,6 +76,8 @@ function fromCampaign(campaign?: Campaign): FormState {
     follow_prompt_profile_url: campaign?.follow_prompt_profile_url || "",
     comment_reply_enabled: campaign?.comment_reply_enabled ?? false,
     comment_reply_text: campaign?.comment_reply_text || "Check your DMs \u{1F4E9}",
+    ai_enabled: campaign?.ai_enabled ?? false,
+    ai_handoff_after_turns: campaign?.ai_handoff_after_turns ?? 8,
   };
 }
 
@@ -126,6 +130,8 @@ export function CampaignForm({ campaign }: { campaign?: Campaign }) {
       follow_prompt_profile_url: form.delivery_mode === "follow_prompt" ? form.follow_prompt_profile_url : null,
       comment_reply_enabled: form.comment_reply_enabled,
       comment_reply_text: form.comment_reply_enabled ? form.comment_reply_text || null : null,
+      ai_enabled: form.ai_enabled,
+      ai_handoff_after_turns: Number(form.ai_handoff_after_turns) || 8,
     };
   }, [form, savedCampaign?.status]);
 
@@ -426,6 +432,39 @@ export function CampaignForm({ campaign }: { campaign?: Campaign }) {
               value={form.comment_reply_text}
               onChange={(e) => setForm({ ...form, comment_reply_text: e.target.value })}
               maxLength={280}
+            />
+          </div>
+        ) : null}
+      </Panel>
+
+      <Panel>
+        <h2 className="mb-4 text-lg font-bold text-ink">AI conversation continuation</h2>
+        <label className="flex gap-3 rounded-lg border border-line bg-white p-3">
+          <input
+            type="checkbox"
+            checked={form.ai_enabled}
+            onChange={(e) => setForm({ ...form, ai_enabled: e.target.checked })}
+            className="mt-1 h-4 w-4 rounded border-slate-300 text-accent focus:ring-accent/30"
+          />
+          <span className="grid gap-1">
+            <span className="text-sm font-bold text-ink">Let AI continue this campaign&apos;s conversations</span>
+            <span className="text-sm font-medium text-muted">
+              If a lead replies inside the DM after receiving this campaign&apos;s message, the AI assistant
+              takes over and keeps the conversation going using the business profile configured on the
+              connected account. Requires AI to also be enabled on the account in the Accounts tab.
+            </span>
+          </span>
+        </label>
+        {form.ai_enabled ? (
+          <div className="mt-4">
+            <Field
+              label="Hand off to a human after"
+              type="number"
+              min={1}
+              max={50}
+              hint="Number of AI turns before the conversation is automatically handed off and shows up for manual reply."
+              value={form.ai_handoff_after_turns}
+              onChange={(e) => setForm({ ...form, ai_handoff_after_turns: Number(e.target.value) })}
             />
           </div>
         ) : null}

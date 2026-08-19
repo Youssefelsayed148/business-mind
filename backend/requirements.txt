@@ -15,3 +15,4 @@ email-validator
 cryptography
 celery
 sentry-sdk[fastapi]
+openai>=1.40,<4
