@@ -403,7 +403,10 @@ def process_webhook_event(webhook_event_id: str):
                 metadata={"sender_ig_id": msg_evt.sender_ig_id, "text": msg_evt.text[:200]},
             )
             if not is_new_msg:
-                logger.debug("Duplicate inbound message event skipped", extra={"event_key": msg_event_key})
+                logger.info(
+                    "Inbound message skipped: duplicate webhook delivery (already processed)",
+                    extra={"event_key": msg_event_key, "sender_ig_id": msg_evt.sender_ig_id},
+                )
                 continue
 
             account = (
@@ -413,8 +416,17 @@ def process_webhook_event(webhook_event_id: str):
             )
             if not account:
                 logger.warning(
-                    "Instagram account not found for inbound message",
+                    "Inbound message skipped: Instagram account not found",
                     extra={"ig_user_id": msg_evt.instagram_account_ig_user_id},
+                )
+                log_action(
+                    db,
+                    "ai_continuation_skipped",
+                    details={
+                        "reason": "account_not_found",
+                        "ig_user_id": msg_evt.instagram_account_ig_user_id,
+                        "sender_ig_id": msg_evt.sender_ig_id,
+                    },
                 )
                 continue
 
@@ -423,6 +435,23 @@ def process_webhook_event(webhook_event_id: str):
                 # inbound DM reply is simply not actioned automatically —
                 # this is intentional, not a bug: no campaign context exists
                 # to reply from without a human or the AI layer involved.
+                # Still logged so the skip is diagnosable from logs alone.
+                logger.info(
+                    "Inbound message skipped: account-level AI is disabled",
+                    extra={
+                        "instagram_account_id": str(account.id),
+                        "sender_ig_id": msg_evt.sender_ig_id,
+                    },
+                )
+                log_action(
+                    db,
+                    "ai_continuation_skipped",
+                    instagram_account_id=account.id,
+                    details={
+                        "reason": "account_ai_disabled",
+                        "sender_ig_id": msg_evt.sender_ig_id,
+                    },
+                )
                 continue
 
             lead = (
@@ -437,14 +466,56 @@ def process_webhook_event(webhook_event_id: str):
             if not lead or not lead.source_campaign_id:
                 # No known lead / originating campaign for this sender —
                 # nothing to continue. Do not guess which campaign applies.
+                reason = "lead_not_found" if not lead else "lead_has_no_source_campaign"
                 logger.info(
-                    "Inbound message from unknown lead, skipping AI reply",
-                    extra={"sender_ig_id": msg_evt.sender_ig_id, "instagram_account_id": str(account.id)},
+                    "Inbound message skipped: no known lead / originating campaign for sender",
+                    extra={
+                        "reason": reason,
+                        "sender_ig_id": msg_evt.sender_ig_id,
+                        "instagram_account_id": str(account.id),
+                        "lead_id": str(lead.id) if lead else None,
+                    },
+                )
+                log_action(
+                    db,
+                    "ai_continuation_skipped",
+                    instagram_account_id=account.id,
+                    lead_id=lead.id if lead else None,
+                    details={
+                        "reason": reason,
+                        "sender_ig_id": msg_evt.sender_ig_id,
+                    },
                 )
                 continue
 
             campaign = db.query(Campaign).filter(Campaign.id == lead.source_campaign_id).first()
             if not campaign or not campaign.ai_enabled:
+                # Campaign-level AI continuation is a separate opt-in from the
+                # account-level toggle (Campaign.ai_enabled, default false).
+                # Account AI being on does NOT cascade to its campaigns.
+                reason = "campaign_not_found" if not campaign else "campaign_ai_disabled"
+                logger.info(
+                    "Inbound message skipped: campaign-level AI continuation is not enabled",
+                    extra={
+                        "reason": reason,
+                        "sender_ig_id": msg_evt.sender_ig_id,
+                        "instagram_account_id": str(account.id),
+                        "lead_id": str(lead.id),
+                        "campaign_id": str(lead.source_campaign_id),
+                    },
+                )
+                log_action(
+                    db,
+                    "ai_continuation_skipped",
+                    campaign_id=campaign.id if campaign else None,
+                    instagram_account_id=account.id,
+                    lead_id=lead.id,
+                    details={
+                        "reason": reason,
+                        "campaign_id": str(lead.source_campaign_id),
+                        "sender_ig_id": msg_evt.sender_ig_id,
+                    },
+                )
                 continue
 
             conversation = conversation_service.get_or_create_conversation(
@@ -473,12 +544,38 @@ def process_webhook_event(webhook_event_id: str):
             db.refresh(inbound_message)
 
             if conversation.status != "bot_active":
-                logger.debug(
-                    "Conversation not bot_active, skipping AI reply",
+                # A human has taken over (or the thread is closed). The inbound
+                # message is already stored above so the operator sees it; the
+                # bot just doesn't reply. Logged so the skip is visible.
+                logger.info(
+                    "Inbound message stored but AI reply skipped: conversation not bot_active",
                     extra={"conversation_id": str(conversation.id), "status": conversation.status},
+                )
+                log_action(
+                    db,
+                    "ai_continuation_skipped",
+                    campaign_id=campaign.id,
+                    instagram_account_id=account.id,
+                    lead_id=lead.id,
+                    details={
+                        "reason": "conversation_not_bot_active",
+                        "conversation_id": str(conversation.id),
+                        "conversation_status": conversation.status,
+                    },
                 )
                 continue
 
+            log_action(
+                db,
+                "ai_continuation_dispatched",
+                campaign_id=campaign.id,
+                instagram_account_id=account.id,
+                lead_id=lead.id,
+                details={
+                    "conversation_id": str(conversation.id),
+                    "inbound_message_id": str(inbound_message.id),
+                },
+            )
             process_ai_conversation_turn.delay(str(conversation.id), str(inbound_message.id))
 
         event.processing_status = "processed"
@@ -1109,6 +1206,23 @@ def process_ai_conversation_turn(conversation_id: str, inbound_message_id: str):
         campaign = db.query(Campaign).filter(Campaign.id == conversation.campaign_id).first()
         if not campaign or not campaign.ai_enabled or campaign.status != "active":
             conversation_service.hand_off(db, conversation, "campaign_inactive")
+            logger.info(
+                "AI turn aborted: campaign missing / AI disabled / not active",
+                extra={
+                    "conversation_id": conversation_id,
+                    "campaign_id": str(conversation.campaign_id),
+                    "campaign_ai_enabled": bool(campaign and campaign.ai_enabled),
+                    "campaign_status": campaign.status if campaign else None,
+                },
+            )
+            log_action(
+                db,
+                "ai_conversation_handed_off",
+                campaign_id=campaign.id if campaign else None,
+                lead_id=conversation.lead_id,
+                instagram_account_id=conversation.instagram_account_id,
+                details={"conversation_id": conversation_id, "reason": "campaign_inactive"},
+            )
             return
 
         account = (
@@ -1116,6 +1230,21 @@ def process_ai_conversation_turn(conversation_id: str, inbound_message_id: str):
         )
         if not account or not account.ai_enabled:
             conversation_service.hand_off(db, conversation, "ai_disabled")
+            logger.info(
+                "AI turn aborted: account missing or account-level AI disabled",
+                extra={
+                    "conversation_id": conversation_id,
+                    "instagram_account_id": str(conversation.instagram_account_id),
+                },
+            )
+            log_action(
+                db,
+                "ai_conversation_handed_off",
+                campaign_id=campaign.id,
+                lead_id=conversation.lead_id,
+                instagram_account_id=conversation.instagram_account_id,
+                details={"conversation_id": conversation_id, "reason": "ai_disabled"},
+            )
             return
 
         # --- Handoff conditions, checked before any model call ---

@@ -187,6 +187,10 @@ export function CampaignForm({ campaign }: { campaign?: Campaign }) {
           follow_prompt_title: nextPayload.follow_prompt_title,
           follow_prompt_description: nextPayload.follow_prompt_description,
           follow_prompt_profile_url: nextPayload.follow_prompt_profile_url,
+          comment_reply_enabled: nextPayload.comment_reply_enabled,
+          comment_reply_text: nextPayload.comment_reply_text,
+          ai_enabled: nextPayload.ai_enabled,
+          ai_handoff_after_turns: nextPayload.ai_handoff_after_turns,
         });
         await syncKeywords(saved.id, saved.keywords);
         saved = await api.get<Campaign>(`/campaigns/${saved.id}`);
@@ -198,7 +202,9 @@ export function CampaignForm({ campaign }: { campaign?: Campaign }) {
       }
       setSavedCampaign(saved);
       toast.success(status === "active" ? "Campaign activated." : "Campaign saved.");
-      router.push(status === "active" ? `/campaigns/${saved.id}` : `/campaigns/${saved.id}`);
+      // Activation is a terminal action — send the user back to the campaigns
+      // list. Saving a draft keeps them in the editor on the saved campaign.
+      router.push(status === "active" ? "/campaigns" : `/campaigns/${saved.id}`);
       return saved;
     } catch (err) {
       const message = err instanceof Error ? err.message : "Failed to save campaign";
