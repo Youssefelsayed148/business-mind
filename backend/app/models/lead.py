@@ -30,6 +30,9 @@ class Lead(Base):
     )
     ig_user_id: Mapped[str] = mapped_column(String(255))
     ig_username: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    # 'campaign' — came through a comment-trigger -> DM campaign pipeline
+    # 'cold_dm'  — DM'd the business directly, no prior campaign interaction
+    lead_source: Mapped[str] = mapped_column(String(50), default="campaign", server_default="campaign")
     last_seen_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True
     )

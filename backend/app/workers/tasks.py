@@ -1,4 +1,6 @@
 import logging
+from datetime import datetime, timezone
+from uuid import uuid4
 
 from sqlalchemy.orm import Session
 
@@ -88,6 +90,85 @@ def _matched_keyword_for_message(db: Session, message: Message) -> tuple[str | N
         value = match_log.details.get("matched_keyword")
         keyword = value if isinstance(value, str) else None
     return comment.comment_id, keyword
+
+
+def _dispatch_ai_turn(
+    db: Session,
+    *,
+    account,
+    lead,
+    campaign,
+    inbound_text: str,
+) -> None:
+    """Create/find the conversation, store the inbound message, and dispatch
+    an AI turn unless a human has taken the thread over.
+
+    Shared by the campaign-continuation and cold-DM paths. `campaign` is None
+    for cold DMs — the conversation and message rows then carry a NULL
+    campaign_id and the AI context is built from account-level fields only.
+    """
+    campaign_id = campaign.id if campaign is not None else None
+
+    conversation = conversation_service.get_or_create_conversation(
+        db,
+        workspace_id=account.workspace_id,
+        lead_id=lead.id,
+        campaign_id=campaign_id,
+        instagram_account_id=account.id,
+    )
+
+    # Store the inbound message regardless of conversation status, so a human
+    # taking over still sees the full thread.
+    inbound_message = Message(
+        campaign_id=campaign_id,
+        lead_id=lead.id,
+        conversation_id=conversation.id,
+        direction="inbound",
+        content=inbound_text,
+        rendered_body=inbound_text,
+        message_type="ai_conversation",
+        status="received",
+    )
+    db.add(inbound_message)
+    conversation_service.touch_conversation(db, conversation)
+    db.commit()
+    db.refresh(inbound_message)
+
+    if conversation.status != "bot_active":
+        # A human has taken over (or the thread is closed). The inbound message
+        # is already stored above so the operator sees it; the bot just doesn't
+        # reply. Logged so the skip is visible.
+        logger.info(
+            "Inbound message stored but AI reply skipped: conversation not bot_active",
+            extra={"conversation_id": str(conversation.id), "status": conversation.status},
+        )
+        log_action(
+            db,
+            "ai_continuation_skipped",
+            campaign_id=campaign_id,
+            instagram_account_id=account.id,
+            lead_id=lead.id,
+            details={
+                "reason": "conversation_not_bot_active",
+                "conversation_id": str(conversation.id),
+                "conversation_status": conversation.status,
+            },
+        )
+        return
+
+    log_action(
+        db,
+        "ai_continuation_dispatched",
+        campaign_id=campaign_id,
+        instagram_account_id=account.id,
+        lead_id=lead.id,
+        details={
+            "conversation_id": str(conversation.id),
+            "inbound_message_id": str(inbound_message.id),
+            "lead_source": lead.lead_source,
+        },
+    )
+    process_ai_conversation_turn.delay(str(conversation.id), str(inbound_message.id))
 
 
 @celery_app.task
@@ -463,120 +544,157 @@ def process_webhook_event(webhook_event_id: str):
                 )
                 .first()
             )
-            if not lead or not lead.source_campaign_id:
-                # No known lead / originating campaign for this sender —
-                # nothing to continue. Do not guess which campaign applies.
-                reason = "lead_not_found" if not lead else "lead_has_no_source_campaign"
-                logger.info(
-                    "Inbound message skipped: no known lead / originating campaign for sender",
-                    extra={
-                        "reason": reason,
-                        "sender_ig_id": msg_evt.sender_ig_id,
-                        "instagram_account_id": str(account.id),
-                        "lead_id": str(lead.id) if lead else None,
-                    },
-                )
-                log_action(
-                    db,
-                    "ai_continuation_skipped",
-                    instagram_account_id=account.id,
-                    lead_id=lead.id if lead else None,
-                    details={
-                        "reason": reason,
-                        "sender_ig_id": msg_evt.sender_ig_id,
-                    },
-                )
-                continue
 
-            campaign = db.query(Campaign).filter(Campaign.id == lead.source_campaign_id).first()
-            if not campaign or not campaign.ai_enabled:
-                # Campaign-level AI continuation is a separate opt-in from the
-                # account-level toggle (Campaign.ai_enabled, default false).
-                # Account AI being on does NOT cascade to its campaigns.
-                reason = "campaign_not_found" if not campaign else "campaign_ai_disabled"
-                logger.info(
-                    "Inbound message skipped: campaign-level AI continuation is not enabled",
-                    extra={
-                        "reason": reason,
-                        "sender_ig_id": msg_evt.sender_ig_id,
-                        "instagram_account_id": str(account.id),
-                        "lead_id": str(lead.id),
-                        "campaign_id": str(lead.source_campaign_id),
-                    },
+            if lead is None:
+                # No prior campaign interaction for this sender. This is the
+                # cold-DM entry point: only create a lead (and let the AI
+                # respond) if the account has explicitly opted into answering
+                # unsolicited DMs. account.ai_enabled is already known true
+                # here (checked above).
+                if not account.ai_cold_dm_enabled:
+                    logger.info(
+                        "Inbound message skipped: no lead and cold-DM AI is disabled",
+                        extra={
+                            "sender_ig_id": msg_evt.sender_ig_id,
+                            "instagram_account_id": str(account.id),
+                        },
+                    )
+                    log_action(
+                        db,
+                        "ai_continuation_skipped",
+                        instagram_account_id=account.id,
+                        details={
+                            "reason": "no_lead_and_cold_dm_disabled",
+                            "sender_ig_id": msg_evt.sender_ig_id,
+                        },
+                    )
+                    continue
+
+                lead = Lead(
+                    id=uuid4(),
+                    workspace_id=account.workspace_id,
+                    instagram_account_id=account.id,
+                    ig_user_id=msg_evt.sender_ig_id,
+                    ig_username=None,
+                    last_seen_at=datetime.now(timezone.utc),
+                    source_campaign_id=None,
+                    lead_source="cold_dm",
+                    status="new",
                 )
+                db.add(lead)
+                db.commit()
+                db.refresh(lead)
                 log_action(
                     db,
-                    "ai_continuation_skipped",
-                    campaign_id=campaign.id if campaign else None,
+                    "cold_dm_lead_created",
                     instagram_account_id=account.id,
                     lead_id=lead.id,
-                    details={
-                        "reason": reason,
-                        "campaign_id": str(lead.source_campaign_id),
-                        "sender_ig_id": msg_evt.sender_ig_id,
-                    },
+                    details={"sender_ig_id": msg_evt.sender_ig_id},
                 )
-                continue
 
-            conversation = conversation_service.get_or_create_conversation(
-                db,
-                workspace_id=account.workspace_id,
-                lead_id=lead.id,
-                campaign_id=campaign.id,
-                instagram_account_id=account.id,
-            )
+            # --- Dispatch, branched by how this lead entered the system ---
+            if lead.lead_source == "campaign":
+                if not lead.source_campaign_id:
+                    # No known originating campaign for this sender — nothing
+                    # to continue. Do not guess which campaign applies.
+                    reason = "lead_has_no_source_campaign"
+                    logger.info(
+                        "Inbound message skipped: no known originating campaign for sender",
+                        extra={
+                            "reason": reason,
+                            "sender_ig_id": msg_evt.sender_ig_id,
+                            "instagram_account_id": str(account.id),
+                            "lead_id": str(lead.id),
+                        },
+                    )
+                    log_action(
+                        db,
+                        "ai_continuation_skipped",
+                        instagram_account_id=account.id,
+                        lead_id=lead.id,
+                        details={
+                            "reason": reason,
+                            "sender_ig_id": msg_evt.sender_ig_id,
+                        },
+                    )
+                    continue
 
-            # Store the inbound message regardless of conversation status,
-            # so a human taking over still sees the full thread.
-            inbound_message = Message(
-                campaign_id=campaign.id,
-                lead_id=lead.id,
-                conversation_id=conversation.id,
-                direction="inbound",
-                content=msg_evt.text,
-                rendered_body=msg_evt.text,
-                message_type="ai_conversation",
-                status="received",
-            )
-            db.add(inbound_message)
-            conversation_service.touch_conversation(db, conversation)
-            db.commit()
-            db.refresh(inbound_message)
+                campaign = db.query(Campaign).filter(Campaign.id == lead.source_campaign_id).first()
+                if not campaign or not campaign.ai_enabled:
+                    # Campaign-level AI continuation is a separate opt-in from the
+                    # account-level toggle (Campaign.ai_enabled, default false).
+                    # Account AI being on does NOT cascade to its campaigns.
+                    reason = "campaign_not_found" if not campaign else "campaign_ai_disabled"
+                    logger.info(
+                        "Inbound message skipped: campaign-level AI continuation is not enabled",
+                        extra={
+                            "reason": reason,
+                            "sender_ig_id": msg_evt.sender_ig_id,
+                            "instagram_account_id": str(account.id),
+                            "lead_id": str(lead.id),
+                            "campaign_id": str(lead.source_campaign_id),
+                        },
+                    )
+                    log_action(
+                        db,
+                        "ai_continuation_skipped",
+                        campaign_id=campaign.id if campaign else None,
+                        instagram_account_id=account.id,
+                        lead_id=lead.id,
+                        details={
+                            "reason": reason,
+                            "campaign_id": str(lead.source_campaign_id),
+                            "sender_ig_id": msg_evt.sender_ig_id,
+                        },
+                    )
+                    continue
 
-            if conversation.status != "bot_active":
-                # A human has taken over (or the thread is closed). The inbound
-                # message is already stored above so the operator sees it; the
-                # bot just doesn't reply. Logged so the skip is visible.
-                logger.info(
-                    "Inbound message stored but AI reply skipped: conversation not bot_active",
-                    extra={"conversation_id": str(conversation.id), "status": conversation.status},
-                )
-                log_action(
+                _dispatch_ai_turn(
                     db,
-                    "ai_continuation_skipped",
-                    campaign_id=campaign.id,
-                    instagram_account_id=account.id,
-                    lead_id=lead.id,
-                    details={
-                        "reason": "conversation_not_bot_active",
-                        "conversation_id": str(conversation.id),
-                        "conversation_status": conversation.status,
-                    },
+                    account=account,
+                    lead=lead,
+                    campaign=campaign,
+                    inbound_text=msg_evt.text,
                 )
                 continue
 
-            log_action(
-                db,
-                "ai_continuation_dispatched",
-                campaign_id=campaign.id,
-                instagram_account_id=account.id,
-                lead_id=lead.id,
-                details={
-                    "conversation_id": str(conversation.id),
-                    "inbound_message_id": str(inbound_message.id),
-                },
+            if lead.lead_source == "cold_dm":
+                if not account.ai_cold_dm_enabled:
+                    # The account toggle was switched off after this cold-DM
+                    # lead was created. Fail closed, but keep it diagnosable.
+                    logger.info(
+                        "Inbound message skipped: cold-DM AI disabled for account",
+                        extra={
+                            "sender_ig_id": msg_evt.sender_ig_id,
+                            "instagram_account_id": str(account.id),
+                            "lead_id": str(lead.id),
+                        },
+                    )
+                    log_action(
+                        db,
+                        "ai_continuation_skipped",
+                        instagram_account_id=account.id,
+                        lead_id=lead.id,
+                        details={
+                            "reason": "cold_dm_ai_disabled",
+                            "sender_ig_id": msg_evt.sender_ig_id,
+                        },
+                    )
+                    continue
+
+                _dispatch_ai_turn(
+                    db,
+                    account=account,
+                    lead=lead,
+                    campaign=None,
+                    inbound_text=msg_evt.text,
+                )
+                continue
+
+            logger.warning(
+                "Inbound message skipped: unrecognized lead_source",
+                extra={"lead_id": str(lead.id), "lead_source": lead.lead_source},
             )
-            process_ai_conversation_turn.delay(str(conversation.id), str(inbound_message.id))
 
         event.processing_status = "processed"
         db.commit()
@@ -1203,27 +1321,33 @@ def process_ai_conversation_turn(conversation_id: str, inbound_message_id: str):
             )
             return
 
-        campaign = db.query(Campaign).filter(Campaign.id == conversation.campaign_id).first()
-        if not campaign or not campaign.ai_enabled or campaign.status != "active":
-            conversation_service.hand_off(db, conversation, "campaign_inactive")
-            logger.info(
-                "AI turn aborted: campaign missing / AI disabled / not active",
-                extra={
-                    "conversation_id": conversation_id,
-                    "campaign_id": str(conversation.campaign_id),
-                    "campaign_ai_enabled": bool(campaign and campaign.ai_enabled),
-                    "campaign_status": campaign.status if campaign else None,
-                },
-            )
-            log_action(
-                db,
-                "ai_conversation_handed_off",
-                campaign_id=campaign.id if campaign else None,
-                lead_id=conversation.lead_id,
-                instagram_account_id=conversation.instagram_account_id,
-                details={"conversation_id": conversation_id, "reason": "campaign_inactive"},
-            )
-            return
+        # A cold-DM conversation has no originating campaign — its gates are
+        # purely account-level. A campaign conversation keeps the exact
+        # campaign checks it had before.
+        is_cold_dm = conversation.campaign_id is None
+        campaign = None
+        if not is_cold_dm:
+            campaign = db.query(Campaign).filter(Campaign.id == conversation.campaign_id).first()
+            if not campaign or not campaign.ai_enabled or campaign.status != "active":
+                conversation_service.hand_off(db, conversation, "campaign_inactive")
+                logger.info(
+                    "AI turn aborted: campaign missing / AI disabled / not active",
+                    extra={
+                        "conversation_id": conversation_id,
+                        "campaign_id": str(conversation.campaign_id),
+                        "campaign_ai_enabled": bool(campaign and campaign.ai_enabled),
+                        "campaign_status": campaign.status if campaign else None,
+                    },
+                )
+                log_action(
+                    db,
+                    "ai_conversation_handed_off",
+                    campaign_id=campaign.id if campaign else None,
+                    lead_id=conversation.lead_id,
+                    instagram_account_id=conversation.instagram_account_id,
+                    details={"conversation_id": conversation_id, "reason": "campaign_inactive"},
+                )
+                return
 
         account = (
             db.query(InstagramAccount).filter(InstagramAccount.id == conversation.instagram_account_id).first()
@@ -1240,20 +1364,42 @@ def process_ai_conversation_turn(conversation_id: str, inbound_message_id: str):
             log_action(
                 db,
                 "ai_conversation_handed_off",
-                campaign_id=campaign.id,
+                campaign_id=campaign.id if campaign else None,
                 lead_id=conversation.lead_id,
                 instagram_account_id=conversation.instagram_account_id,
                 details={"conversation_id": conversation_id, "reason": "ai_disabled"},
             )
             return
 
+        if is_cold_dm and not account.ai_cold_dm_enabled:
+            conversation_service.hand_off(db, conversation, "cold_dm_ai_disabled")
+            logger.info(
+                "AI turn aborted: cold-DM AI disabled for account",
+                extra={
+                    "conversation_id": conversation_id,
+                    "instagram_account_id": str(account.id),
+                },
+            )
+            log_action(
+                db,
+                "ai_conversation_handed_off",
+                campaign_id=None,
+                lead_id=conversation.lead_id,
+                instagram_account_id=account.id,
+                details={"conversation_id": conversation_id, "reason": "cold_dm_ai_disabled"},
+            )
+            return
+
         # --- Handoff conditions, checked before any model call ---
-        if conversation.turn_count >= campaign.ai_handoff_after_turns:
+        handoff_after_turns = (
+            campaign.ai_handoff_after_turns if campaign is not None else account.ai_handoff_after_turns
+        )
+        if conversation.turn_count >= handoff_after_turns:
             conversation_service.hand_off(db, conversation, "turn_limit")
             log_action(
                 db,
                 "ai_conversation_handed_off",
-                campaign_id=campaign.id,
+                campaign_id=campaign.id if campaign else None,
                 lead_id=conversation.lead_id,
                 instagram_account_id=account.id,
                 details={"conversation_id": conversation_id, "reason": "turn_limit"},
@@ -1265,7 +1411,7 @@ def process_ai_conversation_turn(conversation_id: str, inbound_message_id: str):
             log_action(
                 db,
                 "ai_conversation_handed_off",
-                campaign_id=campaign.id,
+                campaign_id=campaign.id if campaign else None,
                 lead_id=conversation.lead_id,
                 instagram_account_id=account.id,
                 details={"conversation_id": conversation_id, "reason": "daily_cap_reached"},
@@ -1293,7 +1439,7 @@ def process_ai_conversation_turn(conversation_id: str, inbound_message_id: str):
             log_action(
                 db,
                 "ai_reply_failed",
-                campaign_id=campaign.id,
+                campaign_id=campaign.id if campaign else None,
                 lead_id=lead.id,
                 instagram_account_id=account.id,
                 details={"conversation_id": conversation_id, "error": result.error},
@@ -1334,7 +1480,7 @@ def process_ai_conversation_turn(conversation_id: str, inbound_message_id: str):
             log_action(
                 db,
                 "ai_reply_sent",
-                campaign_id=campaign.id,
+                campaign_id=campaign.id if campaign else None,
                 lead_id=lead.id,
                 instagram_account_id=account.id,
                 details={"conversation_id": conversation_id, "turn_count": conversation.turn_count},
@@ -1350,7 +1496,7 @@ def process_ai_conversation_turn(conversation_id: str, inbound_message_id: str):
             log_action(
                 db,
                 "ai_reply_send_failed",
-                campaign_id=campaign.id,
+                campaign_id=campaign.id if campaign else None,
                 lead_id=lead.id,
                 instagram_account_id=account.id,
                 details={"conversation_id": conversation_id, "error": send_result.error_message},

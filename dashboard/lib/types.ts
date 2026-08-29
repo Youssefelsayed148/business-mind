@@ -86,10 +86,12 @@ export type InstagramAccount = {
   expires_at?: string | null;
   business_vertical?: "general" | "restaurant" | "real_estate" | "clinical" | string;
   ai_enabled?: boolean;
+  ai_cold_dm_enabled?: boolean;
   ai_business_profile?: string | null;
   ai_tone_instructions?: string | null;
   ai_daily_message_cap?: number;
   ai_messages_sent_today?: number;
+  ai_handoff_after_turns?: number;
   created_at?: string | null;
   updated_at?: string | null;
 };
@@ -97,16 +99,20 @@ export type InstagramAccount = {
 export type AISettingsPayload = {
   business_vertical?: "general" | "restaurant" | "real_estate" | "clinical";
   ai_enabled?: boolean;
+  ai_cold_dm_enabled?: boolean;
   ai_business_profile?: string | null;
   ai_tone_instructions?: string | null;
   ai_daily_message_cap?: number;
 };
 
+export type LeadSource = "campaign" | "cold_dm" | string;
+
 export type Conversation = {
   id: Id;
   lead_id: Id;
   lead_username?: string | null;
-  campaign_id: Id;
+  lead_source?: LeadSource | null;
+  campaign_id?: Id | null;
   campaign_name?: string | null;
   instagram_account_id: Id;
   status: "bot_active" | "handed_off" | "closed" | string;
@@ -157,6 +163,7 @@ export type Lead = {
   id: Id;
   username?: string | null;
   ig_user_id: string;
+  lead_source?: LeadSource | null;
   source_campaign_id?: Id | null;
   source_campaign?: string | null;
   source_media_id?: string | null;

@@ -11,9 +11,12 @@ from app.db.base import Base
 class Conversation(Base):
     """Tracks an ongoing AI-assisted DM conversation with a lead.
 
-    Created the first time a lead replies inside a DM thread after an
-    AI-enabled campaign delivered them a message. One conversation per
-    (lead, campaign) pair.
+    Two origins:
+    - campaign: created the first time a lead replies inside a DM thread after
+      an AI-enabled campaign delivered them a message. One conversation per
+      (lead, campaign) pair.
+    - cold_dm: created when an unknown user DMs an account that has
+      ai_cold_dm_enabled. campaign_id is NULL for these.
     """
 
     __tablename__ = "conversations"
@@ -30,8 +33,8 @@ class Conversation(Base):
     lead_id: Mapped[uuid.UUID] = mapped_column(
         PGUUID(as_uuid=True), ForeignKey("leads.id"), nullable=False
     )
-    campaign_id: Mapped[uuid.UUID] = mapped_column(
-        PGUUID(as_uuid=True), ForeignKey("campaigns.id"), nullable=False
+    campaign_id: Mapped[uuid.UUID | None] = mapped_column(
+        PGUUID(as_uuid=True), ForeignKey("campaigns.id"), nullable=True
     )
     instagram_account_id: Mapped[uuid.UUID] = mapped_column(
         PGUUID(as_uuid=True), ForeignKey("instagram_accounts.id"), nullable=False

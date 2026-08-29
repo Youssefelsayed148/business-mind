@@ -323,6 +323,7 @@ async def list_leads(
             "id": str(lead.id),
             "username": lead.ig_username,
             "ig_user_id": lead.ig_user_id,
+            "lead_source": lead.lead_source,
             "source_campaign_id": str(lead.source_campaign_id) if lead.source_campaign_id else None,
             "source_campaign": names.get(str(lead.source_campaign_id)) if lead.source_campaign_id else None,
             "source_media_id": lead.source_media_id,
@@ -350,12 +351,13 @@ async def export_leads_csv(
     acc_names = _account_usernames(db, {lead.instagram_account_id for lead in leads})
     output = io.StringIO()
     writer = csv.writer(output)
-    writer.writerow(["username", "ig_user_id", "source_campaign", "instagram_account", "first_seen", "last_seen"])
+    writer.writerow(["username", "ig_user_id", "lead_source", "source_campaign", "instagram_account", "first_seen", "last_seen"])
     for lead in leads:
         writer.writerow(
             [
                 lead.ig_username or "",
                 lead.ig_user_id,
+                lead.lead_source or "",
                 names.get(str(lead.source_campaign_id), "") if lead.source_campaign_id else "",
                 acc_names.get(str(lead.instagram_account_id), ""),
                 lead.created_at.isoformat() if lead.created_at else "",

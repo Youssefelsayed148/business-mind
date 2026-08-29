@@ -31,6 +31,7 @@ function AISettingsPanel({
   const [form, setForm] = useState<AISettingsPayload>({
     business_vertical: (account.business_vertical as AISettingsPayload["business_vertical"]) || "general",
     ai_enabled: account.ai_enabled || false,
+    ai_cold_dm_enabled: account.ai_cold_dm_enabled || false,
     ai_business_profile: account.ai_business_profile || "",
     ai_tone_instructions: account.ai_tone_instructions || "",
     ai_daily_message_cap: account.ai_daily_message_cap ?? 100,
@@ -71,6 +72,24 @@ function AISettingsPanel({
           Enabled
         </label>
       </div>
+
+      <label className="flex items-start gap-2 rounded-lg border border-line/70 bg-white p-3 text-sm text-ink">
+        <input
+          type="checkbox"
+          checked={form.ai_cold_dm_enabled || false}
+          disabled={!canManage || !form.ai_enabled}
+          onChange={(e) => setForm((f) => ({ ...f, ai_cold_dm_enabled: e.target.checked }))}
+          className="mt-0.5 h-4 w-4 rounded border-line accent-accent"
+        />
+        <span>
+          <span className="font-semibold">Also let AI answer unsolicited DMs</span>
+          <span className="mt-0.5 block text-xs text-muted">
+            Separate opt-in. When on, the AI also replies to people who message this account
+            directly without ever going through a campaign. Leaving it off changes nothing about
+            campaign conversations — those still require this main toggle only.
+          </span>
+        </span>
+      </label>
 
       <div className="grid gap-4 sm:grid-cols-2">
         <Select

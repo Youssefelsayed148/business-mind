@@ -14,12 +14,21 @@ def get_or_create_conversation(
     db: Session,
     workspace_id: uuid.UUID,
     lead_id: uuid.UUID,
-    campaign_id: uuid.UUID,
+    campaign_id: uuid.UUID | None,
     instagram_account_id: uuid.UUID,
 ) -> Conversation:
+    """Fetch or create the conversation for this lead.
+
+    campaign_id is None for cold-DM conversations (no originating campaign);
+    there is exactly one such conversation per lead."""
+    campaign_filter = (
+        Conversation.campaign_id.is_(None)
+        if campaign_id is None
+        else Conversation.campaign_id == campaign_id
+    )
     conversation = (
         db.query(Conversation)
-        .filter(Conversation.lead_id == lead_id, Conversation.campaign_id == campaign_id)
+        .filter(Conversation.lead_id == lead_id, campaign_filter)
         .first()
     )
     if conversation:

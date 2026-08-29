@@ -25,9 +25,19 @@ class InstagramAccount(Base):
     # general | restaurant | real_estate | clinical
     business_vertical: Mapped[str] = mapped_column(String(50), default="general")
     ai_enabled: Mapped[bool] = mapped_column(Boolean, default=False)
+    # Separate opt-in from ai_enabled: answer unsolicited DMs from users who
+    # never went through a campaign. Requires ai_enabled to also be true.
+    ai_cold_dm_enabled: Mapped[bool] = mapped_column(
+        Boolean, default=False, server_default="false"
+    )
     ai_business_profile: Mapped[str | None] = mapped_column(Text, nullable=True)
     ai_tone_instructions: Mapped[str | None] = mapped_column(Text, nullable=True)
     ai_daily_message_cap: Mapped[int] = mapped_column(Integer, default=100)
+    # Account-level turn cap for the cold-DM path (campaign path uses
+    # campaigns.ai_handoff_after_turns instead).
+    ai_handoff_after_turns: Mapped[int] = mapped_column(
+        Integer, default=8, server_default="8"
+    )
     ai_messages_sent_today: Mapped[int] = mapped_column(Integer, default=0)
     ai_budget_reset_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True

@@ -63,10 +63,12 @@ def _account_response(account: InstagramAccount) -> dict:
         "status": account.status,
         "business_vertical": account.business_vertical,
         "ai_enabled": account.ai_enabled,
+        "ai_cold_dm_enabled": account.ai_cold_dm_enabled,
         "ai_business_profile": account.ai_business_profile,
         "ai_tone_instructions": account.ai_tone_instructions,
         "ai_daily_message_cap": account.ai_daily_message_cap,
         "ai_messages_sent_today": account.ai_messages_sent_today,
+        "ai_handoff_after_turns": account.ai_handoff_after_turns,
         "created_at": account.created_at.isoformat() if account.created_at else None,
         "updated_at": account.updated_at.isoformat() if account.updated_at else None,
     }
@@ -118,9 +120,11 @@ async def get_account(
 class AISettingsUpdate(BaseModel):
     business_vertical: Literal["general", "restaurant", "real_estate", "clinical"] | None = None
     ai_enabled: bool | None = None
+    ai_cold_dm_enabled: bool | None = None
     ai_business_profile: str | None = Field(default=None, max_length=4000)
     ai_tone_instructions: str | None = Field(default=None, max_length=1000)
     ai_daily_message_cap: int | None = Field(default=None, ge=0, le=5000)
+    ai_handoff_after_turns: int | None = Field(default=None, ge=1, le=50)
 
 
 @router.patch("/accounts/{account_id}/ai-settings")

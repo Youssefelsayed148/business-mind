@@ -26,6 +26,19 @@ function KeywordChip({ keyword, search }: { keyword?: string | null; search?: st
   );
 }
 
+function SourceBadge({ source }: { source?: string | null }) {
+  const isCold = source === "cold_dm";
+  const label = isCold ? "Cold DM" : "Campaign";
+  const cls = isCold
+    ? "border-amber-200 bg-amber-50 text-amber-700"
+    : "border-slate-200 bg-slate-50 text-slate-700";
+  return (
+    <span className={`inline-flex rounded-full border px-2.5 py-1 text-xs font-semibold ${cls}`}>
+      {label}
+    </span>
+  );
+}
+
 function CapturedAt({ value }: { value?: string | null }) {
   return <span className="whitespace-nowrap text-sm font-medium text-slate-700">{value ? new Date(value).toLocaleString() : "Unknown"}</span>;
 }
@@ -102,14 +115,15 @@ export default function LeadsPage() {
           <p className="mt-1 text-sm text-muted">Filter captured leads by campaign, Instagram account, or search term.</p>
         </div>
         <DataState loading={loading} error={error} />
-        {loading ? <TableSkeleton rows={5} columns={5} /> : null}
+        {loading ? <TableSkeleton rows={5} columns={6} /> : null}
         {!loading && !error && leads.length === 0 ? <EmptyState title="No leads found" message="Leads will appear here after matching campaign activity." /> : null}
         {leads.length > 0 ? (
         <TableWrap>
-          <table className={`${tableClass} min-w-[800px] border-separate border-spacing-y-2`}>
+          <table className={`${tableClass} min-w-[900px] border-separate border-spacing-y-2`}>
             <thead>
               <tr className={theadRowClass}>
                 <th className={thClass}>Username</th>
+                <th className={thClass}>Source</th>
                 <th className={thClass}>Source Campaign</th>
                 <th className={thClass}>Captured Keyword</th>
                 <th className={thClass}>Instagram Account</th>
@@ -126,8 +140,13 @@ export default function LeadsPage() {
                     </div>
                   </td>
                   <td className={`${tdClass} border-y border-line/80`}>
+                    <SourceBadge source={lead.lead_source} />
+                  </td>
+                  <td className={`${tdClass} border-y border-line/80`}>
                     <div className="min-w-[170px]">
-                      <div className="text-sm font-semibold text-slate-800">{lead.source_campaign || "Unknown campaign"}</div>
+                      <div className="text-sm font-semibold text-slate-800">
+                        {lead.lead_source === "cold_dm" ? "—" : lead.source_campaign || "Unknown campaign"}
+                      </div>
                     </div>
                   </td>
                   <td className={`${tdClass} border-y border-line/80`}><KeywordChip keyword={lead.keyword} search={filters.search} /></td>

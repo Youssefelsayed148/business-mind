@@ -19,8 +19,9 @@ class Message(Base):
     id: Mapped[uuid.UUID] = mapped_column(
         PGUUID(as_uuid=True), primary_key=True, default=uuid.uuid4
     )
-    campaign_id: Mapped[uuid.UUID] = mapped_column(
-        PGUUID(as_uuid=True), ForeignKey("campaigns.id"), nullable=False
+    # Nullable for cold-DM AI conversation messages, which have no campaign.
+    campaign_id: Mapped[uuid.UUID | None] = mapped_column(
+        PGUUID(as_uuid=True), ForeignKey("campaigns.id"), nullable=True
     )
     lead_id: Mapped[uuid.UUID] = mapped_column(
         PGUUID(as_uuid=True), ForeignKey("leads.id"), nullable=False

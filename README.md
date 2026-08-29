@@ -1,6 +1,18 @@
 # Instagram Comment-to-DM Automation
 
-Self-hosted Instagram automation platform (ManyChat alternative). Keyword-triggered campaigns reply to Instagram comments with private DMs — using a Next.js dashboard, FastAPI backend, PostgreSQL, Redis, and Celery workers.
+Self-hosted Instagram automation platform (ManyChat alternative). Keyword-triggered campaigns reply to Instagram comments with private DMs, then optionally hand the DM thread to an AI assistant that continues the conversation — using a Next.js dashboard, FastAPI backend, PostgreSQL, Redis, and Celery workers.
+
+## Features
+
+- **Keyword-triggered comment-to-DM campaigns** — match Instagram comments by keyword and send a private reply with templated variables.
+- **Follow-gated delivery** — event-driven postback check that the commenter follows the account before the campaign message is released.
+- **AI conversation continuation** — once a campaign DM is delivered, follow-up replies from the lead are picked up by an AI assistant instead of going unanswered:
+  - Inbound DM webhook → dedup → lead lookup → conversation get-or-create → Celery chain.
+  - AI scope and a shared daily message budget live at the `instagram_account` level (one business identity, one budget, shared across its campaigns).
+  - Campaign-level opt-in toggle (`ai_enabled`) plus a per-campaign handoff-turn limit (`ai_handoff_after_turns`).
+  - Guardrails: daily budget cap, turn limit, fail-closed error handling (a model or API error stops the reply rather than retrying blindly), and an echo guard that ignores the account's own outbound messages.
+  - Vertical-specific, non-overridable safety instructions (e.g. clinical, real estate, restaurant) are injected into the system prompt per business type, regardless of what's in the configured business profile.
+  - Conversations dashboard tab with a list/thread view and **Take Over** / **Resume Bot** actions for manual human handoff.
 
 ## Quick Start
 
@@ -15,6 +27,8 @@ cp .env.example .env
 ```bash
 python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
 ```
+
+2a. To use AI conversation continuation, add `OPENAI_API_KEY` to `.env`. Without it, AI replies fail closed (`no_api_key_configured`) and conversations stay unanswered until handed off manually.
 
 3. Start all services:
 
@@ -118,10 +132,24 @@ The modal shows whether a keyword matched and the rendered message body.
 - `Leads` lists captured leads, supports campaign/status/username filters, and exports CSV.
 - `Logs` supports level, campaign ID, event type, and limit filters, with expandable metadata.
 - `Messages` lists message status, campaign, lead, retry count, sent time, and errors. Failed messages can be retried from the table.
+- `Conversations` lists AI-tracked DM threads by status, with a thread view and manual Take Over / Resume Bot controls.
 
 ### Running a dry webhook test
 
 Use the signed webhook flow in `Webhook Comment Processing` below to send a local comment event. Then inspect `Overview`, `Logs`, `Leads`, and `Messages` in the dashboard.
+
+### Enabling AI conversation continuation
+
+Before testing AI replies end-to-end, both of the following must be turned on:
+
+1. On the Instagram account (business identity level): set `business_vertical`, `ai_business_profile`, optional `ai_tone_instructions`, `ai_daily_message_cap`, and enable `ai_enabled`. This is the shared daily budget and safety scope for every AI-enabled campaign on that account.
+2. On the campaign: enable `ai_enabled` and set `ai_handoff_after_turns` (the number of AI turns before the conversation is automatically handed off to a human).
+
+With both enabled, a lead's DM reply after a campaign message triggers the webhook → dedup → lead lookup → conversation get-or-create → Celery chain, and the AI replies until it hits the turn limit, the account's daily budget cap, or a manual **Take Over** from the `Conversations` tab.
+
+### Viewing and managing AI conversations
+
+The `Conversations` tab lists every AI-tracked DM thread (filterable by status: `bot_active`, `handed_off`, `closed`), and clicking a row opens the full message thread. From an open thread, an operator can **Take Over** (pause the bot) or **Resume Bot** (hand it back to the AI).
 
 ## Authentication
 
@@ -200,7 +228,7 @@ On any error, redirects to `{FRONTEND_URL}/accounts?error=oauth_failed`.
 | Permissions | `instagram_business_basic`, `instagram_business_manage_messages`, `instagram_business_manage_comments`, `pages_show_list` |
 | Valid OAuth redirect URI | `https://yourdomain.com/meta/connect/callback` |
 | Webhook URL | `https://yourdomain.com/webhooks/meta` |
-| Webhook fields | `comments` |
+| Webhook fields | `comments`, `messaging_postbacks`, `messages` |
 
 ### Mock Account Connection (development only)
 
@@ -472,7 +500,7 @@ docker compose -f docker-compose.prod.yml exec backend \
 |-------|-------|
 | Callback URL | `https://yourdomain.com/webhooks/meta` |
 | Verify Token | value of `META_WEBHOOK_VERIFY_TOKEN` from `.env.production` |
-| Subscribed fields | `comments` |
+| Subscribed fields | `comments`, `messaging_postbacks`, `messages` (`messages` is required for AI conversation continuation) |
 
 ### 8. Register OAuth redirect URI in Meta App dashboard
 
@@ -491,6 +519,15 @@ Expected response:
 ```json
 {"status":"ok","service":"Instagram Automation","environment":"production","database":"ok"}
 ```
+
+## Database
+
+Migrations live in `backend/alembic/versions/` and run with `alembic upgrade head`. The AI conversation continuation layer is added by `0009_ai_conversation_layer.py`, which:
+
+- Creates a `conversations` table (one row per lead+campaign AI thread: `status`, `handoff_reason`, `turn_count`, `last_message_at`).
+- Extends `messages` with `direction` (`inbound`/`outbound`) and `conversation_id`.
+- Extends `campaigns` with `ai_enabled` and `ai_handoff_after_turns`.
+- Extends `instagram_accounts` with `business_vertical`, `ai_enabled`, `ai_business_profile`, `ai_tone_instructions`, `ai_daily_message_cap`, `ai_messages_sent_today`, and `ai_budget_reset_at`.
 
 ## Project Structure
 
@@ -513,6 +550,7 @@ backend/
       routes_instagram.py    # Instagram account CRUD
       routes_campaigns.py    # Campaign CRUD, keywords, simulate
       routes_messages.py     # Message list, get, retry
+      routes_conversations.py # Conversation list/detail, take-over, resume-bot
     models/
       user.py                # User model
       workspace.py           # Workspace model
@@ -524,6 +562,7 @@ backend/
       comment.py             # Comment model
       lead.py                # Lead model
       message.py             # Message model
+      conversation.py        # Conversation model (AI conversation continuation)
       automation_log.py      # Automation log model
       user_cooldown.py       # User cooldown model
       webhook_health.py      # Webhook health model
@@ -535,7 +574,7 @@ backend/
       create_admin.py        # CLI script to create admin user
     integrations/
       meta/
-        webhooks.py          # Signature verification & comment parser
+        webhooks.py          # Signature verification & comment/postback/message parsers
         client.py            # Meta Graph API HTTP client
         oauth.py             # Meta OAuth URL builder & token exchange
         accounts.py          # Instagram account metadata fetcher
@@ -552,6 +591,8 @@ backend/
       lead_service.py        # Lead upsert
       message_service.py     # Message state transitions
       log_service.py         # Automation logging
+      conversation_service.py # Conversation lifecycle & shared AI budget
+      ai_service.py           # OpenAI system prompt & reply generation
     utils/
       crypto.py              # Fernet encryption utilities
       normalization.py       # Arabic & English text normalization
@@ -605,6 +646,11 @@ backend/
 | `META_WEBHOOK_VERIFY_TOKEN` | Token for webhook subscription challenge verification | *(required)* |
 | `META_GRAPH_API_VERSION` | Meta Graph API version | `v21.0` |
 | `META_MOCK_PRIVATE_REPLIES` | Bypass real Meta API calls for message sending (dev only) | `false` |
+| `AI_ENABLED_GLOBAL` | Global kill switch for AI conversation continuation, independent of per-account/campaign toggles | `true` |
+| `OPENAI_API_KEY` | OpenAI API key used to generate AI conversation replies | *(required for AI replies)* |
+| `AI_MODEL_NAME` | OpenAI model used for AI conversation replies | `gpt-4o-mini` |
+| `AI_REQUEST_TIMEOUT_SECONDS` | Timeout for the OpenAI chat completion request | `15.0` |
+| `AI_MAX_CONTEXT_TURNS` | Max prior messages included as conversation history per AI request | `10` |
 | `DATABASE_URL` | PostgreSQL connection string | *(required)* |
 | `REDIS_URL` | Redis connection string | `redis://redis:6379/0` |
 | `POSTGRES_USER` | PostgreSQL username | `postgres` |
@@ -625,6 +671,7 @@ backend/
 - Instagram Business account connection via OAuth
 - Keyword-triggered campaign automation
 - Follow prompt flow
+- Event-driven postback follow verification gate before releasing the campaign message
 - Target media (any media or specific post/reel)
 - Lead capture and CSV export
 - Message delivery tracking with retry
@@ -632,7 +679,7 @@ backend/
 - Rate limiting and HMAC webhook verification
 - Audit logging
 - Production Docker + Nginx + SSL infrastructure
+- AI conversation continuation (account-level AI scope and shared daily budget, campaign-level opt-in and handoff-turn limit, vertical-specific safety instructions, Conversations dashboard tab)
 
-### v2 — Planned
-- AI conversation continuation (GPT-4o mini picks up non-keyword replies after campaign trigger)
-- Real follow verification gate before releasing campaign message
+### Planned
+- WhatsApp Business Platform integration (separate future phase — its own Meta app product and App Review, plus a new `platform` field on leads)

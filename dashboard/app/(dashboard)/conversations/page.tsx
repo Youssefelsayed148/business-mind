@@ -17,6 +17,18 @@ import type { Conversation, ConversationDetail } from "@/lib/types";
 
 const STATUS_FILTERS = ["all", "bot_active", "handed_off", "closed"] as const;
 
+function SourceBadge({ source }: { source?: string | null }) {
+  const isCold = source === "cold_dm";
+  const cls = isCold
+    ? "border-amber-200 bg-amber-50 text-amber-700"
+    : "border-slate-200 bg-slate-50 text-slate-700";
+  return (
+    <span className={`inline-flex rounded-full border px-2 py-0.5 text-xs font-semibold ${cls}`}>
+      {isCold ? "Cold DM" : "Campaign"}
+    </span>
+  );
+}
+
 export default function ConversationsPage() {
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [selected, setSelected] = useState<ConversationDetail | null>(null);
@@ -116,11 +128,12 @@ export default function ConversationsPage() {
           ) : null}
           {filtered.length > 0 ? (
             <TableWrap>
-              <table className={`${tableClass} min-w-[720px] border-separate border-spacing-y-2`}>
+              <table className={`${tableClass} min-w-[820px] border-separate border-spacing-y-2`}>
                 <thead>
                   <tr className={theadRowClass}>
                     <th className={thClass}>Status</th>
                     <th className={thClass}>Lead</th>
+                    <th className={thClass}>Source</th>
                     <th className={thClass}>Campaign</th>
                     <th className={thClass}>Turns</th>
                     <th className={thClass}>Last activity</th>
@@ -139,7 +152,12 @@ export default function ConversationsPage() {
                       <td className={`${tdClass} border-y border-line/80 font-semibold text-ink`}>
                         {conversation.lead_username || conversation.lead_id}
                       </td>
-                      <td className={`${tdClass} border-y border-line/80`}>{conversation.campaign_name || conversation.campaign_id}</td>
+                      <td className={`${tdClass} border-y border-line/80`}>
+                        <SourceBadge source={conversation.lead_source} />
+                      </td>
+                      <td className={`${tdClass} border-y border-line/80`}>
+                        {conversation.campaign_name || conversation.campaign_id || "Direct DM"}
+                      </td>
                       <td className={`${tdClass} border-y border-line/80`}>{conversation.turn_count}</td>
                       <td className={`${tdClass} rounded-r-xl border-y border-r border-line/80 text-sm text-muted`}>
                         {conversation.last_message_at ? new Date(conversation.last_message_at).toLocaleString() : "—"}

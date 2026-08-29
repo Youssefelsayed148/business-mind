@@ -1,0 +1,587 @@
+diff --git a/backend/app/workers/tasks.py b/backend/app/workers/tasks.py
+index a34982a..f6de1ce 100644
+--- a/backend/app/workers/tasks.py
++++ b/backend/app/workers/tasks.py
+@@ -403,7 +403,10 @@ def process_webhook_event(webhook_event_id: str):
+                 metadata={"sender_ig_id": msg_evt.sender_ig_id, "text": msg_evt.text[:200]},
+             )
+             if not is_new_msg:
+-                logger.debug("Duplicate inbound message event skipped", extra={"event_key": msg_event_key})
++                logger.info(
++                    "Inbound message skipped: duplicate webhook delivery (already processed)",
++                    extra={"event_key": msg_event_key, "sender_ig_id": msg_evt.sender_ig_id},
++                )
+                 continue
+ 
+             account = (
+@@ -413,9 +416,18 @@ def process_webhook_event(webhook_event_id: str):
+             )
+             if not account:
+                 logger.warning(
+-                    "Instagram account not found for inbound message",
++                    "Inbound message skipped: Instagram account not found",
+                     extra={"ig_user_id": msg_evt.instagram_account_ig_user_id},
+                 )
++                log_action(
++                    db,
++                    "ai_continuation_skipped",
++                    details={
++                        "reason": "account_not_found",
++                        "ig_user_id": msg_evt.instagram_account_ig_user_id,
++                        "sender_ig_id": msg_evt.sender_ig_id,
++                    },
++                )
+                 continue
+ 
+             if not account.ai_enabled:
+@@ -423,6 +435,23 @@ def process_webhook_event(webhook_event_id: str):
+                 # inbound DM reply is simply not actioned automatically —
+                 # this is intentional, not a bug: no campaign context exists
+                 # to reply from without a human or the AI layer involved.
++                # Still logged so the skip is diagnosable from logs alone.
++                logger.info(
++                    "Inbound message skipped: account-level AI is disabled",
++                    extra={
++                        "instagram_account_id": str(account.id),
++                        "sender_ig_id": msg_evt.sender_ig_id,
++                    },
++                )
++                log_action(
++                    db,
++                    "ai_continuation_skipped",
++                    instagram_account_id=account.id,
++                    details={
++                        "reason": "account_ai_disabled",
++                        "sender_ig_id": msg_evt.sender_ig_id,
++                    },
++                )
+                 continue
+ 
+             lead = (
+@@ -437,14 +466,56 @@ def process_webhook_event(webhook_event_id: str):
+             if not lead or not lead.source_campaign_id:
+                 # No known lead / originating campaign for this sender —
+                 # nothing to continue. Do not guess which campaign applies.
++                reason = "lead_not_found" if not lead else "lead_has_no_source_campaign"
+                 logger.info(
+-                    "Inbound message from unknown lead, skipping AI reply",
+-                    extra={"sender_ig_id": msg_evt.sender_ig_id, "instagram_account_id": str(account.id)},
++                    "Inbound message skipped: no known lead / originating campaign for sender",
++                    extra={
++                        "reason": reason,
++                        "sender_ig_id": msg_evt.sender_ig_id,
++                        "instagram_account_id": str(account.id),
++                        "lead_id": str(lead.id) if lead else None,
++                    },
++                )
++                log_action(
++                    db,
++                    "ai_continuation_skipped",
++                    instagram_account_id=account.id,
++                    lead_id=lead.id if lead else None,
++                    details={
++                        "reason": reason,
++                        "sender_ig_id": msg_evt.sender_ig_id,
++                    },
+                 )
+                 continue
+ 
+             campaign = db.query(Campaign).filter(Campaign.id == lead.source_campaign_id).first()
+             if not campaign or not campaign.ai_enabled:
++                # Campaign-level AI continuation is a separate opt-in from the
++                # account-level toggle (Campaign.ai_enabled, default false).
++                # Account AI being on does NOT cascade to its campaigns.
++                reason = "campaign_not_found" if not campaign else "campaign_ai_disabled"
++                logger.info(
++                    "Inbound message skipped: campaign-level AI continuation is not enabled",
++                    extra={
++                        "reason": reason,
++                        "sender_ig_id": msg_evt.sender_ig_id,
++                        "instagram_account_id": str(account.id),
++                        "lead_id": str(lead.id),
++                        "campaign_id": str(lead.source_campaign_id),
++                    },
++                )
++                log_action(
++                    db,
++                    "ai_continuation_skipped",
++                    campaign_id=campaign.id if campaign else None,
++                    instagram_account_id=account.id,
++                    lead_id=lead.id,
++                    details={
++                        "reason": reason,
++                        "campaign_id": str(lead.source_campaign_id),
++                        "sender_ig_id": msg_evt.sender_ig_id,
++                    },
++                )
+                 continue
+ 
+             conversation = conversation_service.get_or_create_conversation(
+@@ -473,12 +544,38 @@ def process_webhook_event(webhook_event_id: str):
+             db.refresh(inbound_message)
+ 
+             if conversation.status != "bot_active":
+-                logger.debug(
+-                    "Conversation not bot_active, skipping AI reply",
++                # A human has taken over (or the thread is closed). The inbound
++                # message is already stored above so the operator sees it; the
++                # bot just doesn't reply. Logged so the skip is visible.
++                logger.info(
++                    "Inbound message stored but AI reply skipped: conversation not bot_active",
+                     extra={"conversation_id": str(conversation.id), "status": conversation.status},
+                 )
++                log_action(
++                    db,
++                    "ai_continuation_skipped",
++                    campaign_id=campaign.id,
++                    instagram_account_id=account.id,
++                    lead_id=lead.id,
++                    details={
++                        "reason": "conversation_not_bot_active",
++                        "conversation_id": str(conversation.id),
++                        "conversation_status": conversation.status,
++                    },
++                )
+                 continue
+ 
++            log_action(
++                db,
++                "ai_continuation_dispatched",
++                campaign_id=campaign.id,
++                instagram_account_id=account.id,
++                lead_id=lead.id,
++                details={
++                    "conversation_id": str(conversation.id),
++                    "inbound_message_id": str(inbound_message.id),
++                },
++            )
+             process_ai_conversation_turn.delay(str(conversation.id), str(inbound_message.id))
+ 
+         event.processing_status = "processed"
+@@ -1109,6 +1206,23 @@ def process_ai_conversation_turn(conversation_id: str, inbound_message_id: str):
+         campaign = db.query(Campaign).filter(Campaign.id == conversation.campaign_id).first()
+         if not campaign or not campaign.ai_enabled or campaign.status != "active":
+             conversation_service.hand_off(db, conversation, "campaign_inactive")
++            logger.info(
++                "AI turn aborted: campaign missing / AI disabled / not active",
++                extra={
++                    "conversation_id": conversation_id,
++                    "campaign_id": str(conversation.campaign_id),
++                    "campaign_ai_enabled": bool(campaign and campaign.ai_enabled),
++                    "campaign_status": campaign.status if campaign else None,
++                },
++            )
++            log_action(
++                db,
++                "ai_conversation_handed_off",
++                campaign_id=campaign.id if campaign else None,
++                lead_id=conversation.lead_id,
++                instagram_account_id=conversation.instagram_account_id,
++                details={"conversation_id": conversation_id, "reason": "campaign_inactive"},
++            )
+             return
+ 
+         account = (
+@@ -1116,6 +1230,21 @@ def process_ai_conversation_turn(conversation_id: str, inbound_message_id: str):
+         )
+         if not account or not account.ai_enabled:
+             conversation_service.hand_off(db, conversation, "ai_disabled")
++            logger.info(
++                "AI turn aborted: account missing or account-level AI disabled",
++                extra={
++                    "conversation_id": conversation_id,
++                    "instagram_account_id": str(conversation.instagram_account_id),
++                },
++            )
++            log_action(
++                db,
++                "ai_conversation_handed_off",
++                campaign_id=campaign.id,
++                lead_id=conversation.lead_id,
++                instagram_account_id=conversation.instagram_account_id,
++                details={"conversation_id": conversation_id, "reason": "ai_disabled"},
++            )
+             return
+ 
+         # --- Handoff conditions, checked before any model call ---
+diff --git a/backend/tests/test_ai_continuation_dispatch.py b/backend/tests/test_ai_continuation_dispatch.py
+new file mode 100644
+index 0000000..4c2f8fd
+--- /dev/null
++++ b/backend/tests/test_ai_continuation_dispatch.py
+@@ -0,0 +1,252 @@
++"""Coverage for the inbound-DM -> AI-continuation dispatch path in
++process_webhook_event().
++
++Regression target: a real inbound DM reply was being marked "processed" but
++never dispatched process_ai_conversation_turn, with zero log trace, because the
++campaign-level ai_enabled gate (tasks.py, in the `for msg_evt in message_events`
++loop) returned via `continue` without emitting any logger or log_action call.
++The production scenario was account 17841454454076321 / lead 1371598884833863 on
++campaign "burger post" (account AI on, campaign AI off).
++
++These tests pin both halves of the fix:
++  * the happy path still creates a Conversation + inbound Message and dispatches
++    the AI turn, and
++  * the gated paths (campaign.ai_enabled / account.ai_enabled == False) are now
++    observable: they write an `ai_continuation_skipped` AutomationLog with a
++    machine-readable reason.
++
++process_webhook_event() is invoked directly (as a plain function) with the test
++DB session injected via `_get_db`, so the test needs only PostgreSQL — no
++Celery worker, Redis, or HTTP signature machinery.
++"""
++
++from uuid import uuid4
++from unittest.mock import patch
++
++from sqlalchemy.orm import Session
++
++from app.models.automation_log import AutomationLog
++from app.models.campaign import Campaign
++from app.models.conversation import Conversation
++from app.models.instagram_account import InstagramAccount
++from app.models.lead import Lead
++from app.models.message import Message
++from app.models.processed_webhook_event import ProcessedWebhookEvent  # noqa: F401 (register table)
++from app.models.webhook_event import WebhookEvent
++from app.models.workspace import Workspace
++from tests.conftest import skip_if_no_db
++
++
++def _fresh_ids() -> tuple[str, str]:
++    """Unique (account_ig_id, lead_ig_id) per test — the conftest session does
++    not roll back committed writes, and InstagramAccount.ig_user_id is UNIQUE."""
++    tag = uuid4().int % 10_000_000
++    return f"178414{tag:010d}", f"137159{tag:010d}"
++
++
++def _seed(
++    db: Session,
++    account_ig: str,
++    lead_ig: str,
++    *,
++    account_ai_enabled: bool,
++    campaign_ai_enabled: bool,
++):
++    ws = Workspace(id=uuid4(), name="Default", slug=f"ai-{uuid4().hex[:8]}")
++    db.add(ws)
++    db.commit()
++
++    acc = InstagramAccount(
++        id=uuid4(),
++        workspace_id=ws.id,
++        ig_user_id=account_ig,
++        ig_username="popeye_restaurant_",
++        business_vertical="general",
++        ai_enabled=account_ai_enabled,
++        ai_daily_message_cap=100,
++    )
++    db.add(acc)
++    db.commit()
++
++    campaign = Campaign(
++        id=uuid4(),
++        workspace_id=ws.id,
++        instagram_account_id=acc.id,
++        name="burger post",
++        message_template="Hi {username}",
++        match_type="contains",
++        status="active",
++        ai_enabled=campaign_ai_enabled,
++        ai_handoff_after_turns=8,
++    )
++    db.add(campaign)
++    db.commit()
++
++    lead = Lead(
++        id=uuid4(),
++        workspace_id=ws.id,
++        instagram_account_id=acc.id,
++        ig_user_id=lead_ig,
++        ig_username="hungry_lead",
++        source_campaign_id=campaign.id,
++        status="new",
++    )
++    db.add(lead)
++    db.commit()
++
++    return ws, acc, campaign, lead
++
++
++def _dm_payload(account_ig: str, lead_ig: str, text: str, mid: str) -> dict:
++    return {
++        "object": "instagram",
++        "entry": [
++            {
++                "id": account_ig,
++                "time": 1788012570939,
++                "messaging": [
++                    {
++                        "sender": {"id": lead_ig},
++                        "recipient": {"id": account_ig},
++                        "timestamp": 1788012570939,
++                        "message": {"mid": mid, "text": text},
++                    }
++                ],
++            }
++        ],
++    }
++
++
++def _run_webhook(db: Session, payload: dict):
++    """Run process_webhook_event() synchronously against the test session with
++    process_ai_conversation_turn mocked. Returns (event, mock_turn)."""
++    from app.workers import tasks
++
++    event = WebhookEvent(
++        provider="meta",
++        external_event_id=uuid4().hex,
++        event_type="instagram",
++        payload=payload,
++        processing_status="pending",
++    )
++    db.add(event)
++    db.commit()
++
++    orig_close = db.close
++    db.close = lambda: None  # task calls db.close() in its finally block
++    try:
++        with patch.object(tasks, "_get_db", return_value=db), patch.object(
++            tasks, "process_ai_conversation_turn"
++        ) as mock_turn:
++            tasks.process_webhook_event(str(event.id))
++    finally:
++        db.close = orig_close
++
++    db.refresh(event)
++    return event, mock_turn
++
++
++@skip_if_no_db
++def test_campaign_ai_enabled_creates_conversation_and_dispatches(db_session: Session):
++    account_ig, lead_ig = _fresh_ids()
++    _, acc, campaign, lead = _seed(
++        db_session, account_ig, lead_ig, account_ai_enabled=True, campaign_ai_enabled=True
++    )
++
++    event, mock_turn = _run_webhook(
++        db_session, _dm_payload(account_ig, lead_ig, "what is your delivery hours", "mid.happy1")
++    )
++    assert event.processing_status == "processed"
++
++    conversation = (
++        db_session.query(Conversation)
++        .filter(Conversation.lead_id == lead.id, Conversation.campaign_id == campaign.id)
++        .first()
++    )
++    assert conversation is not None
++    assert conversation.status == "bot_active"
++
++    inbound = (
++        db_session.query(Message)
++        .filter(Message.conversation_id == conversation.id, Message.direction == "inbound")
++        .all()
++    )
++    assert len(inbound) == 1
++    assert inbound[0].content == "what is your delivery hours"
++    assert inbound[0].message_type == "ai_conversation"
++
++    mock_turn.delay.assert_called_once_with(str(conversation.id), str(inbound[0].id))
++
++    dispatched = (
++        db_session.query(AutomationLog)
++        .filter(
++            AutomationLog.action == "ai_continuation_dispatched",
++            AutomationLog.lead_id == lead.id,
++        )
++        .all()
++    )
++    assert len(dispatched) == 1
++    assert dispatched[0].details["conversation_id"] == str(conversation.id)
++
++
++@skip_if_no_db
++def test_campaign_ai_disabled_skips_but_is_logged(db_session: Session):
++    """The exact production bug: account AI on, campaign AI off. No AI turn is
++    dispatched (fail-closed, unchanged), but the skip is now diagnosable."""
++    account_ig, lead_ig = _fresh_ids()
++    _, acc, campaign, lead = _seed(
++        db_session, account_ig, lead_ig, account_ai_enabled=True, campaign_ai_enabled=False
++    )
++
++    event, mock_turn = _run_webhook(
++        db_session, _dm_payload(account_ig, lead_ig, "how much time for the delivery", "mid.gated1")
++    )
++    assert event.processing_status == "processed"
++
++    # Fail-closed behaviour preserved: nothing dispatched, no conversation.
++    mock_turn.delay.assert_not_called()
++    assert (
++        db_session.query(Conversation).filter(Conversation.lead_id == lead.id).first()
++        is None
++    )
++
++    # ...but the skip is no longer silent.
++    skipped = (
++        db_session.query(AutomationLog)
++        .filter(
++            AutomationLog.action == "ai_continuation_skipped",
++            AutomationLog.lead_id == lead.id,
++        )
++        .all()
++    )
++    assert len(skipped) == 1
++    assert skipped[0].details["reason"] == "campaign_ai_disabled"
++    assert skipped[0].details["campaign_id"] == str(campaign.id)
++    assert skipped[0].campaign_id == campaign.id
++    assert skipped[0].lead_id == lead.id
++
++
++@skip_if_no_db
++def test_account_ai_disabled_skips_but_is_logged(db_session: Session):
++    account_ig, lead_ig = _fresh_ids()
++    _, acc, campaign, lead = _seed(
++        db_session, account_ig, lead_ig, account_ai_enabled=False, campaign_ai_enabled=True
++    )
++
++    event, mock_turn = _run_webhook(
++        db_session, _dm_payload(account_ig, lead_ig, "hello there", "mid.acct1")
++    )
++    assert event.processing_status == "processed"
++    mock_turn.delay.assert_not_called()
++
++    skipped = (
++        db_session.query(AutomationLog)
++        .filter(
++            AutomationLog.action == "ai_continuation_skipped",
++            AutomationLog.instagram_account_id == acc.id,
++        )
++        .all()
++    )
++    assert len(skipped) == 1
++    assert skipped[0].details["reason"] == "account_ai_disabled"
++    assert skipped[0].instagram_account_id == acc.id
+diff --git a/backend/tests/test_campaign_routes.py b/backend/tests/test_campaign_routes.py
+index 3ee87b4..e648319 100644
+--- a/backend/tests/test_campaign_routes.py
++++ b/backend/tests/test_campaign_routes.py
+@@ -5,6 +5,7 @@ from fastapi.testclient import TestClient
+ from sqlalchemy.orm import Session
+ 
+ from app.core.security import hash_password
++from app.models.campaign import Campaign
+ from app.models.instagram_account import InstagramAccount
+ from app.models.meta_token import MetaToken
+ from app.models.user import User
+@@ -132,3 +133,84 @@ def test_simulate_no_match(client: TestClient, db_session: Session):
+     assert data["matched"] is False
+     assert data["matched_keyword"] is None
+     assert data["rendered_message"] is None
++
++
++@skip_if_no_db
++def test_patch_campaign_persists_ai_enabled(client: TestClient, db_session: Session):
++    """Regression: the campaign edit form was PATCHing a hand-picked field
++    allowlist that omitted ai_enabled / ai_handoff_after_turns / comment_reply_*,
++    so checking "Let AI continue this campaign's conversations" never persisted.
++    The PATCH endpoint itself must honour these fields when they are sent."""
++    ws = Workspace(id=uuid4(), name="Default", slug="default")
++    db_session.add(ws)
++    user = User(
++        id=uuid4(),
++        email="aitoggle@test.com",
++        name="AI Toggle",
++        password_hash=hash_password("secret"),
++        role="owner",  # needs manage_campaigns permission
++        is_active=True,
++    )
++    db_session.add(user)
++    db_session.commit()
++
++    acc = InstagramAccount(
++        workspace_id=ws.id,
++        ig_user_id="aitoggle_ig",
++        ig_username="aitoggle",
++    )
++    db_session.add(acc)
++    db_session.commit()
++    store_encrypted_token(db_session, ws.id, acc.id, "fake_token")
++
++    token = client.post(
++        "/auth/login",
++        data={"username": "aitoggle@test.com", "password": "secret"},
++    ).json()["access_token"]
++    auth = {"Authorization": f"Bearer {token}"}
++
++    create_resp = client.post(
++        "/campaigns",
++        json={
++            "instagram_account_id": str(acc.id),
++            "name": "AI Toggle Campaign",
++            "media_id": "m1",
++            "message_template": "Hi {username}",
++            "keywords": ["menu"],
++            "match_type": "contains",
++            "status": "draft",
++        },
++        headers=auth,
++    )
++    assert create_resp.status_code == 201
++    campaign_id = create_resp.json()["id"]
++    # ai_enabled defaults to false on create.
++    assert create_resp.json()["ai_enabled"] is False
++
++    patch_resp = client.patch(
++        f"/campaigns/{campaign_id}",
++        json={
++            "ai_enabled": True,
++            "ai_handoff_after_turns": 5,
++            "comment_reply_enabled": True,
++            "comment_reply_text": "Check your DMs",
++        },
++        headers=auth,
++    )
++    assert patch_resp.status_code == 200
++    assert patch_resp.json()["ai_enabled"] is True
++    assert patch_resp.json()["ai_handoff_after_turns"] == 5
++    assert patch_resp.json()["comment_reply_enabled"] is True
++
++    # Re-fetch through the API...
++    get_resp = client.get(f"/campaigns/{campaign_id}", headers=auth)
++    assert get_resp.status_code == 200
++    assert get_resp.json()["ai_enabled"] is True
++
++    # ...and confirm it actually landed in the column, not just the response.
++    db_session.expire_all()
++    row = db_session.query(Campaign).filter(Campaign.id == campaign_id).first()
++    assert row is not None
++    assert row.ai_enabled is True
++    assert row.ai_handoff_after_turns == 5
++    assert row.comment_reply_enabled is True
+diff --git a/dashboard/components/campaigns/CampaignForm.tsx b/dashboard/components/campaigns/CampaignForm.tsx
+index 2a14aac..78e9cae 100644
+--- a/dashboard/components/campaigns/CampaignForm.tsx
++++ b/dashboard/components/campaigns/CampaignForm.tsx
+@@ -187,6 +187,10 @@ export function CampaignForm({ campaign }: { campaign?: Campaign }) {
+           follow_prompt_title: nextPayload.follow_prompt_title,
+           follow_prompt_description: nextPayload.follow_prompt_description,
+           follow_prompt_profile_url: nextPayload.follow_prompt_profile_url,
++          comment_reply_enabled: nextPayload.comment_reply_enabled,
++          comment_reply_text: nextPayload.comment_reply_text,
++          ai_enabled: nextPayload.ai_enabled,
++          ai_handoff_after_turns: nextPayload.ai_handoff_after_turns,
+         });
+         await syncKeywords(saved.id, saved.keywords);
+         saved = await api.get<Campaign>(`/campaigns/${saved.id}`);
+@@ -198,7 +202,9 @@ export function CampaignForm({ campaign }: { campaign?: Campaign }) {
+       }
+       setSavedCampaign(saved);
+       toast.success(status === "active" ? "Campaign activated." : "Campaign saved.");
+-      router.push(status === "active" ? `/campaigns/${saved.id}` : `/campaigns/${saved.id}`);
++      // Activation is a terminal action — send the user back to the campaigns
++      // list. Saving a draft keeps them in the editor on the saved campaign.
++      router.push(status === "active" ? "/campaigns" : `/campaigns/${saved.id}`);
+       return saved;
+     } catch (err) {
+       const message = err instanceof Error ? err.message : "Failed to save campaign";
