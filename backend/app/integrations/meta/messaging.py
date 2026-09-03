@@ -354,6 +354,67 @@ class MetaMessagingClient:
         reply_id = data.get("id")
         return MetaMessageResult(success=True, provider_message_id=reply_id, raw_response=data)
 
+    def get_username(
+        self,
+        access_token: str,
+        ig_scoped_id: str,
+    ) -> str | None:
+        """Look up the Instagram @username for a message sender's IGSID via the
+        Instagram User Profile API.
+
+        Endpoint: GET /{IGSID}?fields=username
+
+        Available (per Meta's Instagram Platform "User Profile API" docs) for
+        any IGSID that has sent the connected business account a message —
+        which is exactly the case here, since this is only called while
+        handling that user's inbound DM. Same resource as
+        get_is_user_follow_business, different field.
+
+        Returns the username on success, or None on any failure (missing
+        consent, network error, invalid token, field absent). Callers MUST
+        treat None as "unknown" and never crash on it — a cold-DM lead is
+        still created without a username.
+        """
+        if settings.META_MOCK_PRIVATE_REPLIES:
+            return None
+
+        url = f"{self.base_url}/{ig_scoped_id}"
+        params = {"access_token": access_token, "fields": "username"}
+
+        try:
+            response = self._client.get(url, params=params)
+        except httpx.NetworkError as exc:
+            logger.warning("Username lookup network error", extra={"error": str(exc), "ig_scoped_id": ig_scoped_id})
+            return None
+        except httpx.TimeoutException as exc:
+            logger.warning("Username lookup timeout", extra={"error": str(exc), "ig_scoped_id": ig_scoped_id})
+            return None
+
+        try:
+            data = response.json()
+        except Exception:
+            logger.warning(
+                "Username lookup invalid JSON",
+                extra={"status_code": response.status_code, "ig_scoped_id": ig_scoped_id},
+            )
+            return None
+
+        if response.status_code >= 400 or "error" in data:
+            error = data.get("error", {})
+            logger.warning(
+                "Username lookup API error",
+                extra={
+                    "ig_scoped_id": ig_scoped_id,
+                    "status_code": response.status_code,
+                    "error_code": error.get("code"),
+                    "error_message": error.get("message"),
+                },
+            )
+            return None
+
+        username = data.get("username")
+        return username if isinstance(username, str) and username else None
+
     def get_is_user_follow_business(
         self,
         access_token: str,

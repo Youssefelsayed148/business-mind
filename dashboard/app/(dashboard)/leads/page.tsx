@@ -145,7 +145,9 @@ export default function LeadsPage() {
                   <td className={`${tdClass} border-y border-line/80`}>
                     <div className="min-w-[170px]">
                       <div className="text-sm font-semibold text-slate-800">
-                        {lead.lead_source === "cold_dm" ? "—" : lead.source_campaign || "Unknown campaign"}
+                        {lead.lead_source === "cold_dm"
+                          ? "Cold DM"
+                          : lead.source_campaign || "Unknown campaign"}
                       </div>
                     </div>
                   </td>

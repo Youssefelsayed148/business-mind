@@ -180,7 +180,8 @@ export type Lead = {
 
 export type Message = {
   id: Id;
-  campaign_id: Id;
+  // null / "None" for cold-DM AI messages, which have no originating campaign
+  campaign_id?: Id | null;
   lead_id: Id;
   comment_id?: Id | null;
   source_media_id?: string | null;

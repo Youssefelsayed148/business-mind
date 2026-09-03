@@ -28,6 +28,18 @@ function TriggerChip({ value }: { value?: string | null }) {
   );
 }
 
+/** A cold-DM AI message has no originating campaign. The API serializes the
+ *  null campaign_id as the string "None", so treat both null and "None" as
+ *  "no campaign" and label it as an intentional classification. */
+function hasCampaign(campaignId?: string | null): boolean {
+  return !!campaignId && campaignId !== "None";
+}
+
+function campaignLabel(campaignId: string | null | undefined, names: Record<string, string>): string {
+  if (!hasCampaign(campaignId)) return "Cold DM";
+  return names[campaignId as string] || (campaignId as string);
+}
+
 function RetryMeta({ message }: { message: Message }) {
   return (
     <div className="flex flex-wrap items-center gap-2 text-sm">
@@ -136,9 +148,9 @@ export default function MessagesPage() {
                   </td>
                   <td className={`${tdClass} border-y border-line/80 font-semibold text-ink`}>
                     <div className="flex min-w-[180px] items-center gap-2">
-                      <Avatar label={campaigns[message.campaign_id] || message.campaign_id} size="sm" />
+                      <Avatar label={campaignLabel(message.campaign_id, campaigns)} size="sm" />
                       <div className="min-w-0">
-                        <div className="truncate text-sm font-bold text-ink">{campaigns[message.campaign_id] || message.campaign_id}</div>
+                        <div className="truncate text-sm font-bold text-ink">{campaignLabel(message.campaign_id, campaigns)}</div>
                       </div>
                     </div>
                   </td>
@@ -167,7 +179,7 @@ export default function MessagesPage() {
                         <summary className="cursor-pointer font-semibold text-slate-600">Technical details</summary>
                         <div className="mt-2 grid gap-1 rounded-lg border border-line bg-slate-50 p-2 font-mono">
                           <span>Comment: {message.comment_id || "None"}</span>
-                          <span>Campaign: {message.campaign_id}</span>
+                          <span>Campaign: {hasCampaign(message.campaign_id) ? message.campaign_id : "Cold DM (no campaign)"}</span>
                           <span>Lead: {message.lead_id}</span>
                         </div>
                       </details>

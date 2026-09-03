@@ -570,12 +570,34 @@ def process_webhook_event(webhook_event_id: str):
                     )
                     continue
 
+                # Best-effort: the DM webhook payload carries no username, so
+                # look it up via the Instagram User Profile API. Never let a
+                # failed lookup block lead creation — fall back to no username
+                # (the dashboard then shows the raw IGSID, same as before).
+                cold_dm_username: str | None = None
+                try:
+                    lookup_token = get_decrypted_token(db, account.id)
+                    if lookup_token:
+                        client = MetaMessagingClient()
+                        try:
+                            cold_dm_username = client.get_username(
+                                lookup_token, msg_evt.sender_ig_id
+                            )
+                        finally:
+                            client.close()
+                except Exception:
+                    logger.warning(
+                        "Cold-DM username lookup failed; creating lead without username",
+                        exc_info=True,
+                        extra={"sender_ig_id": msg_evt.sender_ig_id},
+                    )
+
                 lead = Lead(
                     id=uuid4(),
                     workspace_id=account.workspace_id,
                     instagram_account_id=account.id,
                     ig_user_id=msg_evt.sender_ig_id,
-                    ig_username=None,
+                    ig_username=cold_dm_username,
                     last_seen_at=datetime.now(timezone.utc),
                     source_campaign_id=None,
                     lead_source="cold_dm",
@@ -589,7 +611,10 @@ def process_webhook_event(webhook_event_id: str):
                     "cold_dm_lead_created",
                     instagram_account_id=account.id,
                     lead_id=lead.id,
-                    details={"sender_ig_id": msg_evt.sender_ig_id},
+                    details={
+                        "sender_ig_id": msg_evt.sender_ig_id,
+                        "username_resolved": cold_dm_username is not None,
+                    },
                 )
 
             # --- Dispatch, branched by how this lead entered the system ---
@@ -1458,7 +1483,7 @@ def process_ai_conversation_turn(conversation_id: str, inbound_message_id: str):
             client.close()
 
         outbound_message = Message(
-            campaign_id=campaign.id,
+            campaign_id=campaign.id if campaign else None,
             lead_id=lead.id,
             conversation_id=conversation.id,
             direction="outbound",
