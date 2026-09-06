@@ -14,12 +14,16 @@ def log_action(
     campaign_id: uuid.UUID | None = None,
     lead_id: uuid.UUID | None = None,
     instagram_account_id: uuid.UUID | None = None,
+    whatsapp_account_id: uuid.UUID | None = None,
+    facebook_page_id: uuid.UUID | None = None,
     details: dict | None = None,
 ) -> AutomationLog:
     log = AutomationLog(
         campaign_id=campaign_id,
         lead_id=lead_id,
         instagram_account_id=instagram_account_id,
+        whatsapp_account_id=whatsapp_account_id,
+        facebook_page_id=facebook_page_id,
         action=action,
         details=details or {},
     )

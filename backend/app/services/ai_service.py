@@ -50,15 +50,27 @@ class AIReplyResult:
         self.error = error
 
 
-def _base_prompt_parts(account: InstagramAccount) -> list[str]:
+_PLATFORM_DISPLAY_NAMES = {
+    "instagram": "Instagram",
+    "whatsapp": "WhatsApp",
+    "facebook": "Facebook",
+}
+
+
+def _base_prompt_parts(account: InstagramAccount, platform: str = "instagram") -> list[str]:
     """Shared prompt scaffolding for every AI DM path: identity + vertical,
     business profile, tone. Campaign-specific and origin-specific context is
     added by the callers below. The vertical safety instruction and handoff
     instruction are appended by `_finalize_prompt` so they can never be
-    dropped or reordered by a caller."""
+    dropped or reordered by a caller.
+
+    `platform` defaults to "instagram" so every pre-Phase-2 call site is
+    unaffected; it only controls the display name used in the prompt text
+    below, not any behavior."""
     vertical = account.business_vertical or "general"
+    platform_name = _PLATFORM_DISPLAY_NAMES.get(platform, platform.capitalize())
     parts = [
-        f"You are a helpful assistant messaging on behalf of an Instagram business account (vertical: {vertical}).",
+        f"You are a helpful assistant messaging on behalf of a {platform_name} business account (vertical: {vertical}).",
         f"Business profile:\n{account.ai_business_profile.strip()}"
         if account.ai_business_profile
         else "No business profile has been configured yet — keep responses brief and generic.",
@@ -68,36 +80,37 @@ def _base_prompt_parts(account: InstagramAccount) -> list[str]:
     return parts
 
 
-def _finalize_prompt(account: InstagramAccount, parts: list[str]) -> str:
+def _finalize_prompt(account: InstagramAccount, parts: list[str], platform: str = "instagram") -> str:
     """Append the non-overridable safety + handoff instructions and join.
 
     Server-side injected based on account.business_vertical — applied
     identically on the campaign and cold-DM paths."""
     vertical = account.business_vertical or "general"
+    platform_name = _PLATFORM_DISPLAY_NAMES.get(platform, platform.capitalize())
     safety = _VERTICAL_SAFETY_INSTRUCTIONS.get(vertical, "")
     if safety:
         parts.append(safety)
     parts.append(_HANDOFF_INSTRUCTION)
-    parts.append("Keep replies short and conversational, suitable for an Instagram DM.")
+    parts.append(f"Keep replies short and conversational, suitable for a {platform_name} DM.")
     return "\n\n".join(p for p in parts if p)
 
 
-def build_system_prompt(account: InstagramAccount, campaign: Campaign) -> str:
-    parts = _base_prompt_parts(account)
+def build_system_prompt(account: InstagramAccount, campaign: Campaign, platform: str = "instagram") -> str:
+    parts = _base_prompt_parts(account, platform)
     parts.append(f"This conversation started from the campaign: {campaign.name}.")
-    return _finalize_prompt(account, parts)
+    return _finalize_prompt(account, parts, platform)
 
 
-def build_cold_dm_system_prompt(account: InstagramAccount) -> str:
+def build_cold_dm_system_prompt(account: InstagramAccount, platform: str = "instagram") -> str:
     """Prompt for a lead who DM'd the business directly, with no campaign
     context. No campaign offer text, no campaign-specific hand-off override —
     only the account-level business profile, vertical safety rules and tone."""
-    parts = _base_prompt_parts(account)
+    parts = _base_prompt_parts(account, platform)
     parts.append(
         "This person messaged the business directly and there is no prior "
         "campaign or offer context — answer only from the business profile above."
     )
-    return _finalize_prompt(account, parts)
+    return _finalize_prompt(account, parts, platform)
 
 
 def build_conversation_history(db: Session, conversation_id: uuid.UUID, max_turns: int) -> list[dict]:
@@ -126,20 +139,24 @@ def generate_reply(
     account: InstagramAccount,
     campaign: Campaign | None,
     conversation_id: uuid.UUID,
+    platform: str = "instagram",
 ) -> AIReplyResult:
     """Generate one AI reply for a conversation.
 
     `campaign` is None for cold-DM conversations, in which case the system
-    prompt is built from account-level context only."""
+    prompt is built from account-level context only. `platform` defaults to
+    "instagram" so every pre-Phase-2 call site is unaffected — it only
+    changes the platform name used in the prompt text (see
+    _base_prompt_parts/_finalize_prompt), not any other behavior."""
     if not settings.AI_ENABLED_GLOBAL:
         return AIReplyResult(success=False, error="ai_disabled_globally")
     if not settings.OPENAI_API_KEY:
         return AIReplyResult(success=False, error="no_api_key_configured")
 
     system_prompt = (
-        build_system_prompt(account, campaign)
+        build_system_prompt(account, campaign, platform)
         if campaign is not None
-        else build_cold_dm_system_prompt(account)
+        else build_cold_dm_system_prompt(account, platform)
     )
     history = build_conversation_history(db, conversation_id, settings.AI_MAX_CONTEXT_TURNS)
 

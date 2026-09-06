@@ -96,6 +96,89 @@ export type InstagramAccount = {
   updated_at?: string | null;
 };
 
+export type WhatsappAccount = {
+  id: Id;
+  phone_number_id: string;
+  display_phone_number?: string | null;
+  whatsapp_business_account_id?: string | null;
+  status?: string | null;
+  business_vertical?: "general" | "restaurant" | "real_estate" | "clinical" | string;
+  ai_enabled?: boolean;
+  ai_business_profile?: string | null;
+  ai_tone_instructions?: string | null;
+  ai_daily_message_cap?: number;
+  ai_messages_sent_today?: number;
+  ai_handoff_after_turns?: number;
+  created_at?: string | null;
+  updated_at?: string | null;
+};
+
+export type WhatsappAISettingsPayload = {
+  business_vertical?: "general" | "restaurant" | "real_estate" | "clinical";
+  ai_enabled?: boolean;
+  ai_business_profile?: string | null;
+  ai_tone_instructions?: string | null;
+  ai_daily_message_cap?: number;
+};
+
+export type FacebookPage = {
+  id: Id;
+  page_id: string;
+  page_name?: string | null;
+  status?: string | null;
+  business_vertical?: "general" | "restaurant" | "real_estate" | "clinical" | string;
+  ai_enabled?: boolean;
+  ai_cold_dm_enabled?: boolean;
+  ai_business_profile?: string | null;
+  ai_tone_instructions?: string | null;
+  ai_daily_message_cap?: number;
+  ai_messages_sent_today?: number;
+  ai_handoff_after_turns?: number;
+  created_at?: string | null;
+  updated_at?: string | null;
+};
+
+export type FacebookAISettingsPayload = {
+  business_vertical?: "general" | "restaurant" | "real_estate" | "clinical";
+  ai_enabled?: boolean;
+  ai_cold_dm_enabled?: boolean;
+  ai_business_profile?: string | null;
+  ai_tone_instructions?: string | null;
+  ai_daily_message_cap?: number;
+};
+
+export type FacebookCampaignKeyword = {
+  id: Id;
+  normalized_keyword: string;
+};
+
+export type FacebookCampaign = {
+  id: Id;
+  facebook_page_id: Id;
+  name: string;
+  description?: string | null;
+  post_id?: string | null;
+  target_scope: "any_post" | "specific_post" | string;
+  target_post_id?: string | null;
+  target_post_label?: string | null;
+  match_type: "contains" | "exact" | "starts_with" | string;
+  message_template: string;
+  link_url?: string | null;
+  cooldown_hours: number;
+  status: "draft" | "active" | "paused" | "archived" | string;
+  delivery_mode: string;
+  comment_reply_enabled: boolean;
+  comment_reply_text?: string | null;
+  ai_enabled: boolean;
+  ai_handoff_after_turns: number;
+  total_triggers: number;
+  successful_sends: number;
+  failed_sends: number;
+  keywords: FacebookCampaignKeyword[];
+  created_at?: string | null;
+  updated_at?: string | null;
+};
+
 export type AISettingsPayload = {
   business_vertical?: "general" | "restaurant" | "real_estate" | "clinical";
   ai_enabled?: boolean;
@@ -107,14 +190,23 @@ export type AISettingsPayload = {
 
 export type LeadSource = "campaign" | "cold_dm" | string;
 
+export type Platform = "instagram" | "whatsapp" | "facebook" | string;
+
 export type Conversation = {
   id: Id;
   lead_id: Id;
   lead_username?: string | null;
   lead_source?: LeadSource | null;
+  platform?: Platform | null;
   campaign_id?: Id | null;
+  facebook_campaign_id?: Id | null;
+  // Resolved from campaign_id (Instagram) or facebook_campaign_id (Facebook).
   campaign_name?: string | null;
-  instagram_account_id: Id;
+  instagram_account_id?: Id | null;
+  whatsapp_account_id?: Id | null;
+  whatsapp_account_username?: string | null;
+  facebook_page_id?: Id | null;
+  facebook_page_username?: string | null;
   status: "bot_active" | "handed_off" | "closed" | string;
   handoff_reason?: string | null;
   turn_count: number;
@@ -164,6 +256,7 @@ export type Lead = {
   username?: string | null;
   ig_user_id: string;
   lead_source?: LeadSource | null;
+  platform?: Platform | null;
   source_campaign_id?: Id | null;
   source_campaign?: string | null;
   source_media_id?: string | null;
@@ -172,6 +265,10 @@ export type Lead = {
   keyword?: string | null;
   instagram_account_id?: Id | null;
   instagram_account_username?: string | null;
+  whatsapp_account_id?: Id | null;
+  whatsapp_account_username?: string | null;
+  facebook_page_id?: Id | null;
+  facebook_page_username?: string | null;
   tags: string[];
   first_seen?: string | null;
   last_seen?: string | null;

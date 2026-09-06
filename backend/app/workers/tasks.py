@@ -2,6 +2,8 @@ import logging
 from datetime import datetime, timezone
 from uuid import uuid4
 
+from sqlalchemy import or_
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.db.session import SessionLocal
@@ -11,18 +13,35 @@ from app.integrations.meta.webhooks import (
     parse_instagram_message_events,
     parse_instagram_postback_events,
 )
+from app.integrations.meta.facebook_client import FacebookClient
+from app.integrations.meta.facebook_webhooks import (
+    parse_facebook_comment_events,
+    parse_facebook_message_events,
+)
+from app.integrations.meta.whatsapp_client import WhatsappClient
+from app.integrations.meta.whatsapp_webhooks import parse_whatsapp_message_events
 from app.models.automation_log import AutomationLog
 from app.models.campaign import Campaign
 from app.models.comment import Comment
 from app.models.conversation import Conversation
+from app.models.facebook_campaign import FacebookCampaign
+from app.models.facebook_comment import FacebookComment
+from app.models.facebook_page import FacebookPage
 from app.models.instagram_account import InstagramAccount
 from app.models.lead import Lead
 from app.models.message import Message
 from app.models.webhook_event import WebhookEvent
+from app.models.whatsapp_account import WhatsappAccount
 from app.services import ai_service, conversation_service
+from app.services import facebook_token_service, whatsapp_token_service
 from app.services.campaign_matcher import find_matching_campaigns, find_matching_keyword
 from app.services.comment_service import upsert_comment
 from app.services.cooldown_service import is_in_cooldown, record_cooldown
+from app.services.facebook_campaign_matcher import find_matching_facebook_campaigns
+from app.services.facebook_comment_service import upsert_facebook_comment
+from app.services import facebook_cooldown_service
+from app.services.facebook_lead_service import upsert_lead_from_facebook_comment
+from app.services.facebook_message_service import create_queued_facebook_message
 from app.services.lead_service import upsert_lead_from_comment
 from app.services.log_service import log_action
 from app.services.processed_event_service import build_event_key, check_and_mark_processed
@@ -39,6 +58,7 @@ from app.services.message_service import (
 )
 from app.services.template_service import render_campaign_message
 from app.services.token_service import get_decrypted_token
+from app.utils.templates import render_template
 from app.workers.celery_app import celery_app
 
 logger = logging.getLogger(__name__)
@@ -90,6 +110,73 @@ def _matched_keyword_for_message(db: Session, message: Message) -> tuple[str | N
         value = match_log.details.get("matched_keyword")
         keyword = value if isinstance(value, str) else None
     return comment.comment_id, keyword
+
+
+# Postgres SQLSTATE for unique_violation. psycopg 3 exposes it as
+# `.sqlstate` on the driver exception (psycopg 2 called it `.pgcode`), so both
+# are checked rather than assuming the driver in use -- verified against the
+# installed driver, which raises psycopg.errors.UniqueViolation with
+# .sqlstate == "23505" and no .pgcode attribute at all.
+_SQLSTATE_UNIQUE_VIOLATION = "23505"
+
+
+def _is_unique_violation(exc: IntegrityError) -> bool:
+    orig = getattr(exc, "orig", None)
+    code = getattr(orig, "sqlstate", None) or getattr(orig, "pgcode", None)
+    return code == _SQLSTATE_UNIQUE_VIOLATION
+
+
+def _create_lead_or_reuse_concurrent(db: Session, lead: Lead, lookup) -> Lead | None:
+    """Insert a Lead, tolerating a concurrent insert of the same one.
+
+    uq_lead_workspace_whatsapp_user / uq_lead_workspace_facebook_user do their
+    job on a genuine race and raise IntegrityError. Left uncaught that unwinds
+    all the way to process_webhook_event's handler, which marks the event
+    failed -- and because check_and_mark_processed already consumed this
+    event's dedup key, Meta's retry of the same webhook is then silently
+    swallowed and the message is lost for good. Losing a race is not a reason
+    to drop a customer's message, so recover onto the winner's row instead.
+
+    Only a unique violation is a race. IntegrityError also covers CHECK,
+    foreign-key and NOT NULL violations, and treating those as "someone beat
+    us to it" would silently drop a customer's message on what is actually a
+    data bug -- so anything else is re-raised and surfaces as a failed event.
+
+    Returns the usable Lead, or None if the row is somehow still not visible
+    (logged, and the caller skips this event rather than proceeding on a
+    half-built object).
+    """
+    try:
+        # Savepoint, not a bare add/commit: a unique violation poisons the
+        # transaction, and a plain rollback would also throw away everything
+        # else the caller has pending. Rolling back to a savepoint undoes only
+        # the failed insert and leaves the session usable.
+        with db.begin_nested():
+            db.add(lead)
+            db.flush()
+    except IntegrityError as exc:
+        if not _is_unique_violation(exc):
+            # A CHECK/FK/NOT NULL violation is a bug in how this Lead was
+            # built, not contention. Let it reach process_webhook_event's
+            # handler so it is recorded as a failed event rather than
+            # disappearing into a skipped message.
+            raise
+        existing = lookup()
+        if existing is not None:
+            logger.info(
+                "Lead creation lost a race; reusing the concurrently-created row",
+                extra={"lead_id": str(existing.id)},
+            )
+            return existing
+        logger.exception(
+            "Lead creation conflicted but no matching row is visible",
+            extra={"ig_user_id": lead.ig_user_id},
+        )
+        return None
+
+    db.commit()
+    db.refresh(lead)
+    return lead
 
 
 def _dispatch_ai_turn(
@@ -171,6 +258,743 @@ def _dispatch_ai_turn(
     process_ai_conversation_turn.delay(str(conversation.id), str(inbound_message.id))
 
 
+def _dispatch_whatsapp_ai_turn(
+    db: Session,
+    *,
+    account: WhatsappAccount,
+    lead: Lead,
+    inbound_text: str,
+) -> None:
+    """WhatsApp equivalent of _dispatch_ai_turn.
+
+    A separate function rather than an extension of _dispatch_ai_turn: every
+    WhatsApp conversation is cold-DM-shaped (no campaign_id), account
+    attribution goes through whatsapp_account_id (not instagram_account_id,
+    which is FK'd to instagram_accounts), and the turn dispatches to
+    process_whatsapp_ai_conversation_turn, not the Instagram-only
+    process_ai_conversation_turn. Mirrors _dispatch_ai_turn's shape/logging
+    conventions so the two paths stay easy to compare.
+    """
+    conversation = conversation_service.get_or_create_conversation(
+        db,
+        workspace_id=account.workspace_id,
+        lead_id=lead.id,
+        campaign_id=None,
+        platform="whatsapp",
+        whatsapp_account_id=account.id,
+    )
+
+    inbound_message = Message(
+        campaign_id=None,
+        lead_id=lead.id,
+        conversation_id=conversation.id,
+        direction="inbound",
+        content=inbound_text,
+        rendered_body=inbound_text,
+        message_type="ai_conversation",
+        status="received",
+    )
+    db.add(inbound_message)
+    conversation_service.touch_conversation(db, conversation)
+    db.commit()
+    db.refresh(inbound_message)
+
+    if conversation.status != "bot_active":
+        logger.info(
+            "Inbound WhatsApp message stored but AI reply skipped: conversation not bot_active",
+            extra={"conversation_id": str(conversation.id), "status": conversation.status},
+        )
+        log_action(
+            db,
+            "ai_continuation_skipped",
+            whatsapp_account_id=account.id,
+            lead_id=lead.id,
+            details={
+                "reason": "conversation_not_bot_active",
+                "conversation_id": str(conversation.id),
+                "conversation_status": conversation.status,
+            },
+        )
+        return
+
+    log_action(
+        db,
+        "ai_continuation_dispatched",
+        whatsapp_account_id=account.id,
+        lead_id=lead.id,
+        details={
+            "conversation_id": str(conversation.id),
+            "inbound_message_id": str(inbound_message.id),
+            "lead_source": lead.lead_source,
+        },
+    )
+    process_whatsapp_ai_conversation_turn.delay(str(conversation.id), str(inbound_message.id))
+
+
+def _process_whatsapp_message_events(db: Session, message_events) -> None:
+    """WhatsApp equivalent of the Instagram `for msg_evt in message_events:`
+    block inside process_webhook_event — extracted into its own function
+    since this is written fresh rather than edited into the existing,
+    delicate IG loop. Simpler than the IG version: every WhatsApp
+    conversation is cold-DM-shaped, so there's no campaign-vs-cold_dm branch."""
+    for evt in message_events:
+        dedup_suffix = evt.message_id or str(evt.timestamp or "")
+        event_key = (
+            f"whatsapp_message:{evt.sender_wa_id}:{dedup_suffix}"
+            if dedup_suffix
+            else f"whatsapp_message:{evt.sender_wa_id}:{evt.text[:50]}"
+        )
+        is_new = check_and_mark_processed(
+            db,
+            event_key=event_key,
+            event_type="whatsapp_message",
+            metadata={"sender_wa_id": evt.sender_wa_id, "text": evt.text[:200]},
+        )
+        if not is_new:
+            logger.debug(
+                "Inbound WhatsApp message skipped: duplicate webhook delivery (already processed)",
+                extra={"event_key": event_key, "sender_wa_id": evt.sender_wa_id},
+            )
+            continue
+
+        account = (
+            db.query(WhatsappAccount)
+            .filter(WhatsappAccount.phone_number_id == evt.phone_number_id)
+            .first()
+        )
+        if not account:
+            logger.warning(
+                "Inbound WhatsApp message skipped: account not found",
+                extra={"phone_number_id": evt.phone_number_id},
+            )
+            continue
+
+        if account.status != "connected":
+            # Disconnecting a number is a soft status flip (the row, its
+            # leads and its conversations are all kept so a reconnect
+            # restores them). That only actually stops the bot if the
+            # dispatch path honours it -- otherwise a "disconnected" number
+            # keeps sending real AI replies using its retained token.
+            logger.info(
+                "Inbound WhatsApp message skipped: account is not connected",
+                extra={
+                    "whatsapp_account_id": str(account.id),
+                    "status": account.status,
+                    "sender_wa_id": evt.sender_wa_id,
+                },
+            )
+            log_action(
+                db,
+                "ai_continuation_skipped",
+                whatsapp_account_id=account.id,
+                details={
+                    "reason": "account_not_connected",
+                    "status": account.status,
+                    "sender_wa_id": evt.sender_wa_id,
+                },
+            )
+            continue
+
+        if not account.ai_enabled:
+            # Reactive-only bot is opt-in at the account level, same
+            # philosophy as Instagram's account.ai_enabled gate.
+            logger.info(
+                "Inbound WhatsApp message skipped: account-level AI is disabled",
+                extra={"whatsapp_account_id": str(account.id), "sender_wa_id": evt.sender_wa_id},
+            )
+            log_action(
+                db,
+                "ai_continuation_skipped",
+                whatsapp_account_id=account.id,
+                details={"reason": "account_ai_disabled", "sender_wa_id": evt.sender_wa_id},
+            )
+            continue
+
+        def _find_wa_lead():
+            return (
+                db.query(Lead)
+                .filter(
+                    Lead.workspace_id == account.workspace_id,
+                    Lead.whatsapp_account_id == account.id,
+                    Lead.ig_user_id == evt.sender_wa_id,
+                )
+                .first()
+            )
+
+        lead = _find_wa_lead()
+
+        if lead is None:
+            lead = Lead(
+                id=uuid4(),
+                workspace_id=account.workspace_id,
+                platform="whatsapp",
+                whatsapp_account_id=account.id,
+                instagram_account_id=None,
+                # Deliberate reuse of the Instagram-named columns: ig_user_id
+                # stores the WhatsApp WA ID (phone number), ig_username
+                # stores the WhatsApp profile display name.
+                ig_user_id=evt.sender_wa_id,
+                ig_username=evt.sender_profile_name,
+                last_seen_at=datetime.now(timezone.utc),
+                lead_source="cold_dm",
+                status="new",
+            )
+            created = _create_lead_or_reuse_concurrent(db, lead, _find_wa_lead)
+            if created is None:
+                continue
+            # Only log a creation we actually performed; on a lost race the
+            # winner already logged it. Either way we fall through to dispatch
+            # below with a usable lead.
+            is_new_lead = created is lead
+            lead = created
+        else:
+            is_new_lead = False
+
+        if is_new_lead:
+            log_action(
+                db,
+                "cold_dm_lead_created",
+                whatsapp_account_id=account.id,
+                lead_id=lead.id,
+                details={
+                    "sender_wa_id": evt.sender_wa_id,
+                    "username_resolved": evt.sender_profile_name is not None,
+                },
+            )
+
+        _dispatch_whatsapp_ai_turn(db, account=account, lead=lead, inbound_text=evt.text)
+
+
+def _record_facebook_psid(db: Session, lead_id, facebook_page_id, raw_response: dict) -> None:
+    """Persist the PSID Facebook returns on a successful private reply.
+
+    Facebook hands us two different ids for the same person: the Page-feed
+    comment webhook's app-scoped `from.id` (already stored in
+    lead.ig_user_id), and the page-scoped PSID used by Messenger webhooks and
+    by `recipient.id` sends. The private reply's Send API response is the only
+    place the second one is disclosed, via `recipient_id`.
+
+    Best-effort and never raises: failing to record the PSID degrades a later
+    reply to "looks like a cold DM", which is bad, but raising here would
+    instead undo an already-delivered message's success bookkeeping.
+    """
+    psid = (raw_response or {}).get("recipient_id")
+    if not psid or not isinstance(psid, str):
+        logger.warning(
+            "Facebook private reply succeeded but returned no recipient_id; "
+            "this lead cannot be matched to their own reply later",
+            extra={"lead_id": str(lead_id)},
+        )
+        return
+
+    try:
+        lead = db.query(Lead).filter(Lead.id == lead_id).first()
+        if lead is None or lead.facebook_psid == psid:
+            return
+
+        # Another lead on this Page already claims this PSID -- almost always
+        # a cold-DM lead created for the same human before they ever commented.
+        # Leave both rows alone rather than pointing two leads at one identity;
+        # log it so the duplicate is diagnosable from logs alone.
+        clash = (
+            db.query(Lead)
+            .filter(
+                Lead.facebook_page_id == facebook_page_id,
+                Lead.facebook_psid == psid,
+                Lead.id != lead_id,
+            )
+            .first()
+        )
+        if clash is not None:
+            logger.warning(
+                "Facebook PSID already held by another lead on this Page; "
+                "leaving both rows as-is (same person, two lead records)",
+                extra={"lead_id": str(lead_id), "existing_lead_id": str(clash.id)},
+            )
+            return
+
+        lead.facebook_psid = psid
+        db.commit()
+        logger.info(
+            "Recorded Facebook PSID for lead", extra={"lead_id": str(lead_id)}
+        )
+    except Exception:
+        logger.exception("Failed to record Facebook PSID", extra={"lead_id": str(lead_id)})
+        db.rollback()
+
+
+def _dispatch_facebook_ai_turn(
+    db: Session,
+    *,
+    page: FacebookPage,
+    lead: Lead,
+    campaign: FacebookCampaign | None,
+    inbound_text: str,
+) -> None:
+    """Facebook equivalent of _dispatch_ai_turn — a separate function per the
+    established Phase 2 precedent (not an extension of _dispatch_ai_turn or
+    _dispatch_whatsapp_ai_turn), mirroring _dispatch_ai_turn's campaign-aware
+    shape rather than WhatsApp's always-cold-DM one, since Facebook Pages
+    have a real campaign concept.
+    """
+    facebook_campaign_id = campaign.id if campaign is not None else None
+
+    conversation = conversation_service.get_or_create_conversation(
+        db,
+        workspace_id=page.workspace_id,
+        lead_id=lead.id,
+        campaign_id=None,
+        platform="facebook",
+        facebook_page_id=page.id,
+        facebook_campaign_id=facebook_campaign_id,
+    )
+
+    inbound_message = Message(
+        campaign_id=None,
+        comment_id=None,
+        facebook_campaign_id=facebook_campaign_id,
+        lead_id=lead.id,
+        conversation_id=conversation.id,
+        direction="inbound",
+        content=inbound_text,
+        rendered_body=inbound_text,
+        message_type="ai_conversation",
+        status="received",
+    )
+    db.add(inbound_message)
+    conversation_service.touch_conversation(db, conversation)
+    db.commit()
+    db.refresh(inbound_message)
+
+    if conversation.status != "bot_active":
+        logger.info(
+            "Inbound Facebook message stored but AI reply skipped: conversation not bot_active",
+            extra={"conversation_id": str(conversation.id), "status": conversation.status},
+        )
+        log_action(
+            db,
+            "ai_continuation_skipped",
+            facebook_page_id=page.id,
+            lead_id=lead.id,
+            details={
+                "reason": "conversation_not_bot_active",
+                "conversation_id": str(conversation.id),
+                "conversation_status": conversation.status,
+            },
+        )
+        return
+
+    log_action(
+        db,
+        "ai_continuation_dispatched",
+        facebook_page_id=page.id,
+        lead_id=lead.id,
+        details={
+            "conversation_id": str(conversation.id),
+            "inbound_message_id": str(inbound_message.id),
+            "lead_source": lead.lead_source,
+        },
+    )
+    process_facebook_ai_conversation_turn.delay(str(conversation.id), str(inbound_message.id))
+
+
+def _process_facebook_message_events(db: Session, message_events) -> None:
+    """Facebook equivalent of the Instagram `for msg_evt in message_events:`
+    block — Facebook has the same campaign-vs-cold_dm branch Instagram does
+    (unlike WhatsApp, which is always cold-DM-shaped), so this mirrors the IG
+    loop's shape rather than _process_whatsapp_message_events' simpler one.
+    """
+    for evt in message_events:
+        dedup_suffix = evt.mid or str(evt.timestamp or "")
+        event_key = (
+            f"facebook_message:{evt.sender_id}:{dedup_suffix}"
+            if dedup_suffix
+            else f"facebook_message:{evt.sender_id}:{evt.text[:50]}"
+        )
+        is_new = check_and_mark_processed(
+            db,
+            event_key=event_key,
+            event_type="facebook_message",
+            metadata={"sender_id": evt.sender_id, "text": evt.text[:200]},
+        )
+        if not is_new:
+            logger.debug(
+                "Inbound Facebook message skipped: duplicate webhook delivery (already processed)",
+                extra={"event_key": event_key, "sender_id": evt.sender_id},
+            )
+            continue
+
+        page = db.query(FacebookPage).filter(FacebookPage.page_id == evt.facebook_page_id).first()
+        if not page:
+            logger.warning(
+                "Inbound Facebook message skipped: page not found",
+                extra={"page_id": evt.facebook_page_id},
+            )
+            continue
+
+        if page.status != "connected":
+            # Same reasoning as the WhatsApp gate above: disconnect is a soft
+            # status flip, so it only stops the bot if dispatch honours it.
+            logger.info(
+                "Inbound Facebook message skipped: page is not connected",
+                extra={
+                    "facebook_page_id": str(page.id),
+                    "status": page.status,
+                    "sender_id": evt.sender_id,
+                },
+            )
+            log_action(
+                db,
+                "ai_continuation_skipped",
+                facebook_page_id=page.id,
+                details={
+                    "reason": "account_not_connected",
+                    "status": page.status,
+                    "sender_id": evt.sender_id,
+                },
+            )
+            continue
+
+        if not page.ai_enabled:
+            logger.info(
+                "Inbound Facebook message skipped: account-level AI is disabled",
+                extra={"facebook_page_id": str(page.id), "sender_id": evt.sender_id},
+            )
+            log_action(
+                db,
+                "ai_continuation_skipped",
+                facebook_page_id=page.id,
+                details={"reason": "account_ai_disabled", "sender_id": evt.sender_id},
+            )
+            continue
+
+        # evt.sender_id is a PSID (page-scoped). A campaign lead was created
+        # from a *comment*, whose from.id is an ASID (app-scoped) stored in
+        # ig_user_id -- a different namespace, so matching on ig_user_id alone
+        # would never find it. Lead.facebook_psid holds the messaging identity,
+        # populated from the private reply's Send API response. The ig_user_id
+        # arm still matches cold-DM leads (created from a Messenger event, so
+        # their ig_user_id already is the PSID), including rows created before
+        # facebook_psid existed.
+        def _find_fb_lead():
+            return (
+                db.query(Lead)
+                .filter(
+                    Lead.workspace_id == page.workspace_id,
+                    Lead.facebook_page_id == page.id,
+                    or_(Lead.facebook_psid == evt.sender_id, Lead.ig_user_id == evt.sender_id),
+                )
+                # A facebook_psid match is the authoritative one; order it
+                # first so a campaign lead wins over a legacy row that only
+                # matches on ig_user_id.
+                .order_by(Lead.facebook_psid.is_(None))
+                .first()
+            )
+
+        lead = _find_fb_lead()
+
+        if lead is not None and lead.facebook_psid is None:
+            # Matched on ig_user_id: a cold-DM (or legacy) lead whose
+            # ig_user_id already is the PSID. Backfill so later lookups and
+            # sends go through the explicit messaging-identity column.
+            lead.facebook_psid = evt.sender_id
+            db.commit()
+
+        if lead is None:
+            # No prior campaign interaction for this sender — cold-DM entry
+            # point, same philosophy as Instagram's, gated on ai_cold_dm_enabled.
+            if not page.ai_cold_dm_enabled:
+                logger.info(
+                    "Inbound Facebook message skipped: no lead and cold-DM AI is disabled",
+                    extra={"sender_id": evt.sender_id, "facebook_page_id": str(page.id)},
+                )
+                log_action(
+                    db,
+                    "ai_continuation_skipped",
+                    facebook_page_id=page.id,
+                    details={"reason": "no_lead_and_cold_dm_disabled", "sender_id": evt.sender_id},
+                )
+                continue
+
+            lead = Lead(
+                id=uuid4(),
+                workspace_id=page.workspace_id,
+                platform="facebook",
+                facebook_page_id=page.id,
+                instagram_account_id=None,
+                # Originating event is a Messenger event, so sender_id
+                # is already the PSID: both columns hold it here.
+                ig_user_id=evt.sender_id,
+                facebook_psid=evt.sender_id,
+                ig_username=None,
+                last_seen_at=datetime.now(timezone.utc),
+                lead_source="cold_dm",
+                status="new",
+            )
+            created = _create_lead_or_reuse_concurrent(db, lead, _find_fb_lead)
+            if created is None:
+                continue
+            # Only log a creation we actually performed; on a lost race the
+            # winner already logged it.
+            if created is lead:
+                log_action(
+                    db,
+                    "cold_dm_lead_created",
+                    facebook_page_id=page.id,
+                    lead_id=lead.id,
+                    details={"sender_id": evt.sender_id},
+                )
+            lead = created
+
+        if lead.lead_source == "campaign":
+            # A campaign-triggered lead has no recorded source_campaign_id
+            # (Lead.source_campaign_id is FK'd to Instagram's campaigns) —
+            # the originating facebook_campaigns row instead lives on the
+            # Message rows already created for this lead. Look up the most
+            # recent one to continue that campaign's conversation.
+            recent_message = (
+                db.query(Message)
+                .filter(Message.lead_id == lead.id, Message.facebook_campaign_id.isnot(None))
+                .order_by(Message.created_at.desc())
+                .first()
+            )
+            if not recent_message or not recent_message.facebook_campaign_id:
+                logger.info(
+                    "Inbound Facebook message skipped: no known originating campaign for sender",
+                    extra={"sender_id": evt.sender_id, "facebook_page_id": str(page.id), "lead_id": str(lead.id)},
+                )
+                log_action(
+                    db,
+                    "ai_continuation_skipped",
+                    facebook_page_id=page.id,
+                    lead_id=lead.id,
+                    details={"reason": "lead_has_no_source_campaign", "sender_id": evt.sender_id},
+                )
+                continue
+
+            campaign = (
+                db.query(FacebookCampaign)
+                .filter(FacebookCampaign.id == recent_message.facebook_campaign_id)
+                .first()
+            )
+            if not campaign or not campaign.ai_enabled:
+                reason = "campaign_not_found" if not campaign else "campaign_ai_disabled"
+                logger.info(
+                    "Inbound Facebook message skipped: campaign-level AI continuation is not enabled",
+                    extra={"reason": reason, "sender_id": evt.sender_id, "facebook_page_id": str(page.id)},
+                )
+                log_action(
+                    db,
+                    "ai_continuation_skipped",
+                    facebook_page_id=page.id,
+                    lead_id=lead.id,
+                    details={"reason": reason, "sender_id": evt.sender_id},
+                )
+                continue
+
+            _dispatch_facebook_ai_turn(db, page=page, lead=lead, campaign=campaign, inbound_text=evt.text)
+            continue
+
+        if lead.lead_source == "cold_dm":
+            if not page.ai_cold_dm_enabled:
+                logger.info(
+                    "Inbound Facebook message skipped: cold-DM AI disabled for account",
+                    extra={"sender_id": evt.sender_id, "facebook_page_id": str(page.id)},
+                )
+                log_action(
+                    db,
+                    "ai_continuation_skipped",
+                    facebook_page_id=page.id,
+                    lead_id=lead.id,
+                    details={"reason": "cold_dm_ai_disabled", "sender_id": evt.sender_id},
+                )
+                continue
+
+            _dispatch_facebook_ai_turn(db, page=page, lead=lead, campaign=None, inbound_text=evt.text)
+            continue
+
+        logger.warning(
+            "Inbound Facebook message skipped: unrecognized lead_source",
+            extra={"lead_id": str(lead.id), "lead_source": lead.lead_source},
+        )
+
+
+def _process_facebook_comment_events(db: Session, comment_events) -> None:
+    """Facebook equivalent of the Instagram comment-handling loop inside
+    process_webhook_event (dedup -> page lookup -> upsert comment -> match
+    campaigns -> cooldown -> render -> queue -> send). Written fresh rather
+    than extending the IG loop, using facebook_campaign_matcher /
+    facebook_comment_service / facebook_lead_service / facebook_message_service
+    / facebook_cooldown_service in place of the Instagram-only equivalents.
+    No follow_prompt branch — see this phase's research spike.
+    """
+    for parsed in comment_events:
+        event_key = build_event_key(
+            comment_id=parsed.comment_id,
+            entry_id=parsed.facebook_page_id,
+            media_id=parsed.post_id,
+            commenter_ig_id=parsed.commenter_id,
+            comment_text=parsed.comment_text,
+            # Without this, Facebook comments were deduped under Instagram's
+            # "ig_comment:" namespace.
+            platform="facebook",
+        )
+        is_new = check_and_mark_processed(
+            db,
+            event_key=event_key,
+            event_type="facebook_comment",
+            metadata={"comment_id": parsed.comment_id, "post_id": parsed.post_id},
+        )
+        if not is_new:
+            logger.debug(
+                "Duplicate Facebook webhook change skipped (processed_webhook_events)",
+                extra={"comment_id": parsed.comment_id, "event_key": event_key},
+            )
+            continue
+
+        page = db.query(FacebookPage).filter(FacebookPage.page_id == parsed.facebook_page_id).first()
+        if not page:
+            logger.warning(
+                "Facebook Page not found for webhook", extra={"page_id": parsed.facebook_page_id}
+            )
+            continue
+
+        if page.status != "connected":
+            # A disconnected Page must not keep triggering campaign sends
+            # either, not just AI continuation.
+            logger.info(
+                "Facebook comment skipped: page is not connected",
+                extra={"facebook_page_id": str(page.id), "status": page.status},
+            )
+            log_action(
+                db,
+                "campaign_skipped",
+                facebook_page_id=page.id,
+                details={
+                    "reason": "account_not_connected",
+                    "status": page.status,
+                    "comment_id": parsed.comment_id,
+                },
+            )
+            continue
+
+        comment, is_dup = upsert_facebook_comment(
+            db,
+            page.id,
+            parsed.comment_id,
+            parsed.post_id,
+            parsed.commenter_id,
+            parsed.commenter_name,
+            parsed.comment_text,
+        )
+        if is_dup:
+            log_action(
+                db, "webhook_duplicate_comment", facebook_page_id=page.id, details={"comment_id": parsed.comment_id}
+            )
+            continue
+
+        matches = find_matching_facebook_campaigns(db, page.id, parsed.post_id, parsed.comment_text)
+        if not matches:
+            log_action(
+                db,
+                "campaign_no_match",
+                facebook_page_id=page.id,
+                details={"comment_id": parsed.comment_id, "post_id": parsed.post_id},
+            )
+            continue
+
+        for match in matches:
+            campaign = db.query(FacebookCampaign).filter(FacebookCampaign.id == match.campaign_id).first()
+            if not campaign:
+                continue
+
+            log_action(
+                db,
+                "campaign_matched",
+                facebook_page_id=page.id,
+                details={"comment_id": parsed.comment_id, "matched_keyword": match.matched_keyword},
+            )
+
+            existing_msg = (
+                db.query(Message)
+                .filter(
+                    Message.facebook_campaign_id == campaign.id,
+                    Message.facebook_comment_id == comment.id,
+                    Message.message_type == "final_delivery",
+                )
+                .first()
+            )
+            if existing_msg:
+                logger.info(
+                    "Duplicate Facebook message blocked",
+                    extra={"campaign_id": str(campaign.id), "comment_id": str(comment.id)},
+                )
+                continue
+
+            if facebook_cooldown_service.is_in_cooldown(db, campaign.id, parsed.commenter_id):
+                log_action(
+                    db,
+                    "cooldown_skip",
+                    facebook_page_id=page.id,
+                    details={"comment_id": parsed.comment_id, "user_id": parsed.commenter_id},
+                )
+                continue
+
+            try:
+                rendered = render_template(
+                    campaign.message_template,
+                    {
+                        "username": parsed.commenter_name or "there",
+                        "campaign_name": campaign.name,
+                        "keyword": match.matched_keyword,
+                        "link": campaign.link_url or "",
+                    },
+                )
+            except Exception as exc:
+                logger.exception("Facebook template render failed", extra={"campaign_id": str(campaign.id)})
+                log_action(db, "message_render_failed", facebook_page_id=page.id, details={"error": str(exc)})
+                continue
+
+            lead = upsert_lead_from_facebook_comment(
+                db,
+                campaign.workspace_id,
+                page.id,
+                campaign.id,
+                comment.id,
+                parsed.commenter_id,
+                parsed.commenter_name,
+                source_post_id=parsed.post_id,
+            )
+
+            message = create_queued_facebook_message(
+                db,
+                facebook_campaign_id=campaign.id,
+                lead_id=lead.id,
+                facebook_comment_id=comment.id,
+                rendered_body=rendered,
+                message_type="final_delivery",
+                source_media_id=parsed.post_id,
+            )
+
+            campaign.total_triggers += 1
+            db.commit()
+
+            log_action(
+                db,
+                "message_queued",
+                facebook_page_id=page.id,
+                lead_id=lead.id,
+                details={"message_id": str(message.id), "matched_keyword": match.matched_keyword},
+            )
+
+            if campaign.cooldown_hours > 0:
+                facebook_cooldown_service.record_cooldown(
+                    db, campaign.id, parsed.commenter_id, campaign.cooldown_hours
+                )
+
+            send_facebook_private_reply.delay(str(message.id))
+
+
 @celery_app.task
 def process_webhook_event(webhook_event_id: str):
     db = _get_db()
@@ -181,6 +1005,70 @@ def process_webhook_event(webhook_event_id: str):
             return
 
         log_action(db, "webhook_received", details={"event_id": webhook_event_id})
+
+        webhook_object = (event.payload or {}).get("object")
+
+        if webhook_object == "whatsapp_business_account":
+            whatsapp_message_events = parse_whatsapp_message_events(event.payload or {})
+            if not whatsapp_message_events:
+                event.processing_status = "skipped"
+                db.commit()
+                log_action(
+                    db,
+                    "webhook_skipped",
+                    details={"reason": "no_whatsapp_message_events", "event_id": webhook_event_id},
+                )
+                return
+            _process_whatsapp_message_events(db, whatsapp_message_events)
+            event.processing_status = "processed"
+            db.commit()
+            log_action(
+                db,
+                "webhook_processed",
+                details={"event_id": webhook_event_id, "platform": "whatsapp"},
+            )
+            return
+
+        if webhook_object == "page":
+            facebook_comment_events = parse_facebook_comment_events(event.payload or {})
+            facebook_message_events = parse_facebook_message_events(event.payload or {})
+            if not facebook_comment_events and not facebook_message_events:
+                event.processing_status = "skipped"
+                db.commit()
+                log_action(
+                    db,
+                    "webhook_skipped",
+                    details={"reason": "no_facebook_comment_or_message_events", "event_id": webhook_event_id},
+                )
+                return
+            _process_facebook_comment_events(db, facebook_comment_events)
+            _process_facebook_message_events(db, facebook_message_events)
+            event.processing_status = "processed"
+            db.commit()
+            log_action(
+                db,
+                "webhook_processed",
+                details={"event_id": webhook_event_id, "platform": "facebook"},
+            )
+            return
+
+        if webhook_object != "instagram":
+            logger.info(
+                "Unhandled or missing webhook object type",
+                extra={"object": webhook_object, "event_id": webhook_event_id},
+            )
+            event.processing_status = "skipped"
+            db.commit()
+            log_action(
+                db,
+                "webhook_skipped",
+                details={
+                    "reason": "unhandled_webhook_object",
+                    "object": webhook_object,
+                    "event_id": webhook_event_id,
+                },
+            )
+            return
 
         comment_events = parse_instagram_comment_events(event.payload or {})
         postback_events = parse_instagram_postback_events(event.payload or {})
@@ -723,7 +1611,11 @@ def process_webhook_event(webhook_event_id: str):
 
         event.processing_status = "processed"
         db.commit()
-        log_action(db, "webhook_processed", details={"event_id": webhook_event_id})
+        log_action(
+            db,
+            "webhook_processed",
+            details={"event_id": webhook_event_id, "platform": "instagram"},
+        )
     except Exception:
         logger.exception("process_webhook_event failed", extra={"event_id": webhook_event_id})
         try:
@@ -1136,6 +2028,179 @@ def send_final_delivery_after_follow_prompt(self, message_id: str, direct_recipi
     )
 
 
+@celery_app.task(bind=True, max_retries=4)
+def send_facebook_private_reply(self, message_id: str):
+    """Facebook equivalent of _send_private_reply_impl/send_private_reply.
+
+    Simpler than the Instagram version: no follow_prompt/direct_recipient_id
+    branch, since this phase's research spike found no Facebook equivalent
+    of Instagram's follow-gate — every Facebook campaign message is sent via
+    recipient.comment_id. Reuses the generic Message lifecycle functions
+    (mark_message_sending/sent/failed/expired, increment_retry_count) from
+    message_service.py directly — those only ever touched Message.id, never
+    campaign_id/comment_id, so they needed no Facebook-specific copy.
+    """
+    db = _get_db()
+    try:
+        message = get_message_for_send(db, message_id)
+        if not message:
+            logger.warning("Facebook message not found for send", extra={"message_id": message_id})
+            return
+        if message.status == "sent":
+            logger.info("Sent Facebook message skipped for idempotency", extra={"message_id": message_id})
+            return
+
+        campaign = (
+            db.query(FacebookCampaign).filter(FacebookCampaign.id == message.facebook_campaign_id).first()
+        )
+        if not campaign:
+            mark_message_skipped(db, message.id, "Facebook campaign not found")
+            return
+
+        if campaign.status != "active":
+            mark_message_skipped(db, message.id, f"Campaign status is {campaign.status}")
+            log_action(db, "message_skipped", facebook_page_id=campaign.facebook_page_id, details={"reason": "campaign_not_active"})
+            return
+
+        page = db.query(FacebookPage).filter(FacebookPage.id == campaign.facebook_page_id).first()
+        if not page:
+            mark_message_skipped(db, message.id, "Facebook page not found")
+            return
+
+        if page.status != "connected":
+            # The Page was disconnected between queueing and sending.
+            mark_message_skipped(db, message.id, f"Facebook page status is {page.status}")
+            log_action(
+                db,
+                "message_skipped",
+                facebook_page_id=page.id,
+                details={"reason": "account_not_connected", "status": page.status},
+            )
+            return
+
+        access_token = facebook_token_service.get_decrypted_token(db, page.id)
+        if not access_token:
+            mark_message_failed(db, message.id, "no_token", "No valid access token", retryable=False)
+            log_action(db, "token_expired", facebook_page_id=page.id, details={"message_id": message_id})
+            return
+
+        mark_message_sending(db, message.id)
+
+        comment = (
+            db.query(FacebookComment).filter(FacebookComment.id == message.facebook_comment_id).first()
+        )
+        comment_id_str = comment.comment_id if comment else None
+        if not comment_id_str:
+            mark_message_failed(db, message.id, "no_comment", "No comment_id to reply to", retryable=False)
+            return
+
+        client = FacebookClient()
+        try:
+            result = client.send_private_reply(
+                access_token=access_token,
+                page_id=page.page_id,
+                comment_id=comment_id_str,
+                text=message.rendered_body or "",
+            )
+        finally:
+            client.close()
+
+        if result.success:
+            mark_message_sent(db, message.id, result.provider_message_id)
+            campaign.successful_sends += 1
+            db.commit()
+
+            # This is the only point at which Facebook tells us the
+            # commenter's messaging identity. The comment webhook gave us an
+            # app-scoped id (stored in lead.ig_user_id); the Send API response
+            # carries `recipient_id`, which is the page-scoped id (PSID) that
+            # inbound Messenger webhooks use and that recipient.id sends
+            # require. Without capturing it here, the lead can never be
+            # matched to their own reply.
+            _record_facebook_psid(db, message.lead_id, page.id, result.raw_response)
+
+            if campaign.comment_reply_enabled and campaign.comment_reply_text:
+                try:
+                    reply_client = FacebookClient()
+                    try:
+                        reply_result = reply_client.send_private_reply(
+                            access_token=access_token,
+                            page_id=page.page_id,
+                            comment_id=comment_id_str,
+                            text=campaign.comment_reply_text,
+                        )
+                    finally:
+                        reply_client.close()
+                    log_action(
+                        db,
+                        "comment_reply_sent" if reply_result.success else "comment_reply_failed",
+                        facebook_page_id=page.id,
+                        lead_id=message.lead_id,
+                        details={"message_id": message_id, "comment_id": comment_id_str, "error": reply_result.error_message},
+                    )
+                except Exception:
+                    logger.exception(
+                        "Facebook comment reply raised after successful DM",
+                        extra={"comment_id": comment_id_str, "message_id": message_id},
+                    )
+
+            log_action(
+                db,
+                "message_sent",
+                facebook_page_id=page.id,
+                lead_id=message.lead_id,
+                details={"message_id": message_id, "provider_message_id": result.provider_message_id},
+            )
+            return
+
+        if result.error_code == "expired_private_reply":
+            mark_message_expired(db, message.id, result.error_code, result.error_message)
+            log_action(
+                db,
+                "message_expired",
+                facebook_page_id=page.id,
+                lead_id=message.lead_id,
+                details={"message_id": message_id, "error": result.error_message},
+            )
+            return
+
+        if result.error_code == "retryable":
+            mark_message_failed(db, message.id, result.error_code, result.error_message, retryable=True)
+            increment_retry_count(db, message.id)
+            campaign.failed_sends += 1
+            db.commit()
+            log_action(
+                db,
+                "message_failed_retryable",
+                facebook_page_id=page.id,
+                lead_id=message.lead_id,
+                details={"message_id": message_id, "error": result.error_message, "retry": self.request.retries},
+            )
+            raise self.retry(countdown=60 * (2 ** self.request.retries), exc=Exception(result.error_message))
+
+        mark_message_failed(db, message.id, result.error_code or "unknown", result.error_message, retryable=False)
+        campaign.failed_sends += 1
+        db.commit()
+        log_action(
+            db,
+            "message_failed",
+            facebook_page_id=page.id,
+            lead_id=message.lead_id,
+            details={"message_id": message_id, "error": result.error_message},
+        )
+    except Exception as exc:
+        exc_name = type(exc).__name__
+        if exc_name in ("Retry", "MaxRetriesExceededError"):
+            raise
+        logger.exception("send_facebook_private_reply failed", extra={"message_id": message_id})
+        try:
+            mark_message_failed(db, message_id, "task_exception", str(exc), retryable=False)
+        except Exception:
+            pass
+    finally:
+        db.close()
+
+
 @celery_app.task
 def check_follow_and_deliver(message_id: str, sender_ig_id: str | None = None):
     """Real, event-driven replacement for the old 10s-delay fallback.
@@ -1528,5 +2593,402 @@ def process_ai_conversation_turn(conversation_id: str, inbound_message_id: str):
             )
     except Exception:
         logger.exception("process_ai_conversation_turn failed", extra={"conversation_id": conversation_id})
+    finally:
+        db.close()
+
+
+@celery_app.task
+def process_whatsapp_ai_conversation_turn(conversation_id: str, inbound_message_id: str):
+    """WhatsApp equivalent of process_ai_conversation_turn.
+
+    A new, separate task rather than a branch inside the Instagram task:
+    process_ai_conversation_turn is the single most business-critical piece
+    of the running system (it sends real AI replies to live Instagram users
+    today), and branching inside it risks that path for a DRY-ness gain that
+    isn't worth it. Reuses the genuinely platform-agnostic pieces of
+    conversation_service (budget/turn/handoff helpers) and ai_service
+    (prompt generation, with platform="whatsapp" so the prompt text doesn't
+    describe the bot as an Instagram assistant) rather than reimplementing
+    them.
+
+    Every WhatsApp conversation is cold-DM-shaped (no campaign_id), so there
+    is no campaign-vs-cold_dm branch to mirror from the Instagram version.
+    """
+    conversation_id = str(conversation_id)
+    inbound_message_id = str(inbound_message_id)
+
+    db = _get_db()
+    try:
+        conversation = db.query(Conversation).filter(Conversation.id == conversation_id).first()
+        if not conversation:
+            logger.warning(
+                "Conversation not found for WhatsApp AI turn", extra={"conversation_id": conversation_id}
+            )
+            return
+
+        if conversation.status != "bot_active":
+            logger.debug(
+                "Conversation no longer bot_active, aborting WhatsApp AI turn",
+                extra={"conversation_id": conversation_id, "status": conversation.status},
+            )
+            return
+
+        account = (
+            db.query(WhatsappAccount)
+            .filter(WhatsappAccount.id == conversation.whatsapp_account_id)
+            .first()
+        )
+        # `status != connected` is folded into the same gate as ai_enabled:
+        # a turn can be queued and then run after the number is disconnected.
+        if not account or not account.ai_enabled or account.status != "connected":
+            conversation_service.hand_off(db, conversation, "ai_disabled")
+            logger.info(
+                "WhatsApp AI turn aborted: account missing, disconnected, or account-level AI disabled",
+                extra={
+                    "conversation_id": conversation_id,
+                    "whatsapp_account_id": str(conversation.whatsapp_account_id),
+                },
+            )
+            log_action(
+                db,
+                "ai_conversation_handed_off",
+                lead_id=conversation.lead_id,
+                whatsapp_account_id=conversation.whatsapp_account_id,
+                details={"conversation_id": conversation_id, "reason": "ai_disabled"},
+            )
+            return
+
+        # --- Handoff conditions, checked before any model call ---
+        if conversation.turn_count >= account.ai_handoff_after_turns:
+            conversation_service.hand_off(db, conversation, "turn_limit")
+            log_action(
+                db,
+                "ai_conversation_handed_off",
+                lead_id=conversation.lead_id,
+                whatsapp_account_id=account.id,
+                details={"conversation_id": conversation_id, "reason": "turn_limit"},
+            )
+            return
+
+        if conversation_service.is_budget_exhausted(db, account):
+            conversation_service.hand_off(db, conversation, "daily_cap_reached")
+            log_action(
+                db,
+                "ai_conversation_handed_off",
+                lead_id=conversation.lead_id,
+                whatsapp_account_id=account.id,
+                details={"conversation_id": conversation_id, "reason": "daily_cap_reached"},
+            )
+            return
+
+        access_token = whatsapp_token_service.get_decrypted_token(db, account.id)
+        if not access_token:
+            # Don't hand off — this is an infra problem, not a conversation
+            # problem. Leave bot_active so the next inbound message retries.
+            logger.warning("No access token for WhatsApp AI reply", extra={"whatsapp_account_id": str(account.id)})
+            return
+
+        lead = db.query(Lead).filter(Lead.id == conversation.lead_id).first()
+        if not lead:
+            logger.warning("Lead not found for WhatsApp AI turn", extra={"conversation_id": conversation_id})
+            return
+
+        result = ai_service.generate_reply(db, account, None, conversation.id, platform="whatsapp")
+        if not result.success:
+            logger.warning(
+                "WhatsApp AI reply generation failed, no message sent",
+                extra={"conversation_id": conversation_id, "error": result.error},
+            )
+            log_action(
+                db,
+                "ai_reply_failed",
+                lead_id=lead.id,
+                whatsapp_account_id=account.id,
+                details={"conversation_id": conversation_id, "error": result.error},
+            )
+            return
+
+        client = WhatsappClient()
+        try:
+            send_result = client.send_text_message(
+                access_token=access_token,
+                phone_number_id=account.phone_number_id,
+                recipient_wa_id=lead.ig_user_id,
+                text=result.text,
+            )
+        finally:
+            client.close()
+
+        outbound_message = Message(
+            campaign_id=None,
+            lead_id=lead.id,
+            conversation_id=conversation.id,
+            direction="outbound",
+            content=result.text,
+            rendered_body=result.text,
+            message_type="ai_conversation",
+            status="sent" if send_result.success else "failed",
+            provider_message_id=send_result.provider_message_id,
+            error_code=send_result.error_code,
+            error_message=send_result.error_message,
+        )
+        db.add(outbound_message)
+        db.commit()
+
+        if send_result.success:
+            conversation_service.increment_turn(db, conversation)
+            conversation_service.touch_conversation(db, conversation)
+            conversation_service.record_ai_send(db, account)
+            log_action(
+                db,
+                "ai_reply_sent",
+                lead_id=lead.id,
+                whatsapp_account_id=account.id,
+                details={"conversation_id": conversation_id, "turn_count": conversation.turn_count},
+            )
+        else:
+            # Fail closed: do not retry automatically. Leave conversation
+            # bot_active so the next inbound message from the user gives
+            # the bot another chance, rather than looping on the same send.
+            logger.warning(
+                "WhatsApp AI reply send failed",
+                extra={"conversation_id": conversation_id, "error": send_result.error_message},
+            )
+            log_action(
+                db,
+                "ai_reply_send_failed",
+                lead_id=lead.id,
+                whatsapp_account_id=account.id,
+                details={"conversation_id": conversation_id, "error": send_result.error_message},
+            )
+    except Exception:
+        logger.exception(
+            "process_whatsapp_ai_conversation_turn failed", extra={"conversation_id": conversation_id}
+        )
+    finally:
+        db.close()
+
+
+@celery_app.task
+def process_facebook_ai_conversation_turn(conversation_id: str, inbound_message_id: str):
+    """Facebook equivalent of process_ai_conversation_turn.
+
+    A new, separate task per the established Phase 2 precedent — mirrors
+    process_ai_conversation_turn's campaign-aware structure (not the
+    simpler WhatsApp one), since Facebook Pages have the same
+    campaign-vs-cold_dm branch Instagram does. Uses
+    conversation.facebook_campaign_id (not campaign_id, which is FK'd
+    strictly to Instagram's campaigns) to detect the cold-DM case, and
+    reuses the platform-agnostic conversation_service budget/turn/handoff
+    helpers plus ai_service.generate_reply(..., platform="facebook")
+    unchanged.
+    """
+    conversation_id = str(conversation_id)
+    inbound_message_id = str(inbound_message_id)
+
+    db = _get_db()
+    try:
+        conversation = db.query(Conversation).filter(Conversation.id == conversation_id).first()
+        if not conversation:
+            logger.warning("Conversation not found for Facebook AI turn", extra={"conversation_id": conversation_id})
+            return
+
+        if conversation.status != "bot_active":
+            logger.debug(
+                "Conversation no longer bot_active, aborting Facebook AI turn",
+                extra={"conversation_id": conversation_id, "status": conversation.status},
+            )
+            return
+
+        is_cold_dm = conversation.facebook_campaign_id is None
+        campaign = None
+        if not is_cold_dm:
+            campaign = (
+                db.query(FacebookCampaign).filter(FacebookCampaign.id == conversation.facebook_campaign_id).first()
+            )
+            if not campaign or not campaign.ai_enabled or campaign.status != "active":
+                conversation_service.hand_off(db, conversation, "campaign_inactive")
+                logger.info(
+                    "Facebook AI turn aborted: campaign missing / AI disabled / not active",
+                    extra={
+                        "conversation_id": conversation_id,
+                        "facebook_campaign_id": str(conversation.facebook_campaign_id),
+                    },
+                )
+                log_action(
+                    db,
+                    "ai_conversation_handed_off",
+                    facebook_page_id=conversation.facebook_page_id,
+                    lead_id=conversation.lead_id,
+                    details={"conversation_id": conversation_id, "reason": "campaign_inactive"},
+                )
+                return
+
+        page = db.query(FacebookPage).filter(FacebookPage.id == conversation.facebook_page_id).first()
+        # Same reasoning as WhatsApp's gate: a turn can be queued and then run
+        # after the Page is disconnected.
+        if not page or not page.ai_enabled or page.status != "connected":
+            conversation_service.hand_off(db, conversation, "ai_disabled")
+            logger.info(
+                "Facebook AI turn aborted: page missing, disconnected, or account-level AI disabled",
+                extra={"conversation_id": conversation_id, "facebook_page_id": str(conversation.facebook_page_id)},
+            )
+            log_action(
+                db,
+                "ai_conversation_handed_off",
+                facebook_page_id=conversation.facebook_page_id,
+                lead_id=conversation.lead_id,
+                details={"conversation_id": conversation_id, "reason": "ai_disabled"},
+            )
+            return
+
+        if is_cold_dm and not page.ai_cold_dm_enabled:
+            conversation_service.hand_off(db, conversation, "cold_dm_ai_disabled")
+            logger.info(
+                "Facebook AI turn aborted: cold-DM AI disabled for account",
+                extra={"conversation_id": conversation_id, "facebook_page_id": str(page.id)},
+            )
+            log_action(
+                db,
+                "ai_conversation_handed_off",
+                facebook_page_id=page.id,
+                lead_id=conversation.lead_id,
+                details={"conversation_id": conversation_id, "reason": "cold_dm_ai_disabled"},
+            )
+            return
+
+        handoff_after_turns = campaign.ai_handoff_after_turns if campaign is not None else page.ai_handoff_after_turns
+        if conversation.turn_count >= handoff_after_turns:
+            conversation_service.hand_off(db, conversation, "turn_limit")
+            log_action(
+                db,
+                "ai_conversation_handed_off",
+                facebook_page_id=page.id,
+                lead_id=conversation.lead_id,
+                details={"conversation_id": conversation_id, "reason": "turn_limit"},
+            )
+            return
+
+        if conversation_service.is_budget_exhausted(db, page):
+            conversation_service.hand_off(db, conversation, "daily_cap_reached")
+            log_action(
+                db,
+                "ai_conversation_handed_off",
+                facebook_page_id=page.id,
+                lead_id=conversation.lead_id,
+                details={"conversation_id": conversation_id, "reason": "daily_cap_reached"},
+            )
+            return
+
+        access_token = facebook_token_service.get_decrypted_token(db, page.id)
+        if not access_token:
+            logger.warning("No access token for Facebook AI reply", extra={"facebook_page_id": str(page.id)})
+            return
+
+        lead = db.query(Lead).filter(Lead.id == conversation.lead_id).first()
+        if not lead:
+            logger.warning("Lead not found for Facebook AI turn", extra={"conversation_id": conversation_id})
+            return
+
+        if not lead.facebook_psid:
+            # No verified messaging identity. lead.ig_user_id is only a usable
+            # recipient.id for cold-DM leads; for a campaign lead it holds the
+            # comment's app-scoped id, which Meta rejects as a recipient. Sending
+            # it anyway would be a guaranteed API failure recorded as a "failed"
+            # message, which reads like a Meta outage rather than the real cause.
+            #
+            # Not a handoff: like the missing-token case above this is an
+            # identity problem, not a conversation problem. The conversation
+            # stays bot_active so the next successful private reply (which is
+            # what discloses the PSID) lets the bot pick straight back up.
+            logger.warning(
+                "Facebook AI turn aborted: no verified messaging identity for this lead "
+                "(facebook_psid is unset, so no private reply has succeeded yet)",
+                extra={"conversation_id": conversation_id, "lead_id": str(lead.id)},
+            )
+            log_action(
+                db,
+                "ai_reply_skipped",
+                facebook_page_id=page.id,
+                lead_id=lead.id,
+                details={
+                    "conversation_id": conversation_id,
+                    "reason": "no_messaging_identity",
+                },
+            )
+            return
+
+        result = ai_service.generate_reply(db, page, campaign, conversation.id, platform="facebook")
+        if not result.success:
+            logger.warning(
+                "Facebook AI reply generation failed, no message sent",
+                extra={"conversation_id": conversation_id, "error": result.error},
+            )
+            log_action(
+                db,
+                "ai_reply_failed",
+                facebook_page_id=page.id,
+                lead_id=lead.id,
+                details={"conversation_id": conversation_id, "error": result.error},
+            )
+            return
+
+        client = FacebookClient()
+        try:
+            send_result = client.send_direct_message(
+                access_token=access_token,
+                page_id=page.page_id,
+                # recipient.id must be a PSID, never ig_user_id: that holds
+                # the comment's app-scoped id for a campaign lead. Guaranteed
+                # non-null by the guard above.
+                recipient_id=lead.facebook_psid,
+                text=result.text,
+            )
+        finally:
+            client.close()
+
+        outbound_message = Message(
+            campaign_id=None,
+            comment_id=None,
+            facebook_campaign_id=campaign.id if campaign else None,
+            lead_id=lead.id,
+            conversation_id=conversation.id,
+            direction="outbound",
+            content=result.text,
+            rendered_body=result.text,
+            message_type="ai_conversation",
+            status="sent" if send_result.success else "failed",
+            provider_message_id=send_result.provider_message_id,
+            error_code=send_result.error_code,
+            error_message=send_result.error_message,
+        )
+        db.add(outbound_message)
+        db.commit()
+
+        if send_result.success:
+            conversation_service.increment_turn(db, conversation)
+            conversation_service.touch_conversation(db, conversation)
+            conversation_service.record_ai_send(db, page)
+            log_action(
+                db,
+                "ai_reply_sent",
+                facebook_page_id=page.id,
+                lead_id=lead.id,
+                details={"conversation_id": conversation_id, "turn_count": conversation.turn_count},
+            )
+        else:
+            logger.warning(
+                "Facebook AI reply send failed",
+                extra={"conversation_id": conversation_id, "error": send_result.error_message},
+            )
+            log_action(
+                db,
+                "ai_reply_send_failed",
+                facebook_page_id=page.id,
+                lead_id=lead.id,
+                details={"conversation_id": conversation_id, "error": send_result.error_message},
+            )
+    except Exception:
+        logger.exception("process_facebook_ai_conversation_turn failed", extra={"conversation_id": conversation_id})
     finally:
         db.close()

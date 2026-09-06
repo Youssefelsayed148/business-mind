@@ -38,7 +38,14 @@ def _make_signed_post(client, payload: dict):
 
 @skip_if_no_db
 def test_webhook_event_enqueues_processing(client: TestClient, db_session: Session):
-    with patch("app.api.routes_webhooks.process_webhook_event") as mock_task:
+    # routes_webhooks.py imports process_webhook_event *locally* inside the
+    # route function (avoids circular imports / Celery setup at module load),
+    # so it's never a module-level attribute of app.api.routes_webhooks for
+    # patch() to replace there. Patch it at its actual source module instead —
+    # the local `from app.workers.tasks import process_webhook_event` re-reads
+    # app.workers.tasks.process_webhook_event at call time, so it picks up
+    # this patched value.
+    with patch("app.workers.tasks.process_webhook_event") as mock_task:
         payload = {
             "object": "instagram",
             "entry": [
@@ -62,7 +69,7 @@ def test_webhook_event_enqueues_processing(client: TestClient, db_session: Sessi
         response = _make_signed_post(client, payload)
         assert response.status_code == 200
         assert response.json()["status"] == "received"
-        assert mock_task.delay.called
+        mock_task.delay.assert_called_once()
 
 
 @skip_if_no_db

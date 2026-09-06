@@ -8,11 +8,13 @@ from app.api import (
     routes_campaigns,
     routes_conversations,
     routes_dashboard,
+    routes_facebook,
     routes_health,
     routes_instagram,
     routes_meta,
     routes_messages,
     routes_webhooks,
+    routes_whatsapp,
 )
 from app.core.config import get_allowed_origins, settings
 from app.core.logging import setup_logging
@@ -59,6 +61,8 @@ app.include_router(routes_campaigns.router)
 app.include_router(routes_messages.router)
 app.include_router(routes_conversations.router)
 app.include_router(routes_dashboard.router)
+app.include_router(routes_whatsapp.router)
+app.include_router(routes_facebook.router)
 
 
 @app.get("/")

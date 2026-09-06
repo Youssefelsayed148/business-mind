@@ -19,6 +19,14 @@ logger = logging.getLogger(__name__)
 
 _PROVIDER = "meta"
 
+# Key namespace per platform. "ig" (not "instagram") for Instagram so existing
+# keys are unchanged.
+_KEY_PREFIXES = {
+    "instagram": "ig",
+    "facebook": "fb",
+    "whatsapp": "wa",
+}
+
 
 def build_event_key(
     *,
@@ -28,10 +36,20 @@ def build_event_key(
     media_id: str | None = None,
     commenter_ig_id: str | None = None,
     comment_text: str | None = None,
+    platform: str = "instagram",
 ) -> str:
-    """Return a stable, deterministic key for one Instagram comment change."""
+    """Return a stable, deterministic key for one comment change.
+
+    `platform` selects the key namespace, matching the per-platform prefixes
+    the message paths already use ("whatsapp_message:", "facebook_message:").
+    It defaults to "instagram" so every existing Instagram call site produces
+    byte-identical keys to before -- important, because changing an Instagram
+    key would make already-processed comments look new and re-deliver their
+    DMs.
+    """
+    prefix = _KEY_PREFIXES.get(platform, platform)
     if comment_id:
-        return f"ig_comment:{comment_id}"
+        return f"{prefix}_comment:{comment_id}"
 
     # Fallback: hash the available fields so the key is still deterministic.
     raw = "|".join(
@@ -39,7 +57,7 @@ def build_event_key(
         for v in [entry_id, field, media_id, commenter_ig_id, comment_text]
     )
     digest = hashlib.sha256(raw.encode("utf-8")).hexdigest()[:32]
-    return f"ig_fallback:{digest}"
+    return f"{prefix}_fallback:{digest}"
 
 
 def check_and_mark_processed(

@@ -18,6 +18,8 @@ from app.models.message import Message
 from app.models.user import User
 from app.models.workspace import Workspace
 from app.models.comment import Comment
+from app.models.facebook_page import FacebookPage
+from app.models.whatsapp_account import WhatsappAccount
 
 router = APIRouter()
 
@@ -289,6 +291,10 @@ async def campaign_stats(
 
 
 def _account_usernames(db: Session, account_ids: set[UUID]) -> dict[str, str]:
+    # Callers pass a set comprehension over every lead, which now includes
+    # None for WhatsApp/Facebook rows. Harmless (it renders IN (NULL, ...))
+    # but filtered for consistency with the two helpers below.
+    account_ids = {a for a in account_ids if a is not None}
     if not account_ids:
         return {}
     rows = (
@@ -297,6 +303,30 @@ def _account_usernames(db: Session, account_ids: set[UUID]) -> dict[str, str]:
         .all()
     )
     return {str(acc_id): (username or "") for acc_id, username in rows}
+
+
+def _whatsapp_account_names(db: Session, account_ids: set[UUID]) -> dict[str, str]:
+    account_ids = {a for a in account_ids if a is not None}
+    if not account_ids:
+        return {}
+    rows = (
+        db.query(WhatsappAccount.id, WhatsappAccount.display_phone_number)
+        .filter(WhatsappAccount.id.in_(account_ids))
+        .all()
+    )
+    return {str(acc_id): (name or "") for acc_id, name in rows}
+
+
+def _facebook_page_names(db: Session, page_ids: set[UUID]) -> dict[str, str]:
+    page_ids = {p for p in page_ids if p is not None}
+    if not page_ids:
+        return {}
+    rows = (
+        db.query(FacebookPage.id, FacebookPage.page_name)
+        .filter(FacebookPage.id.in_(page_ids))
+        .all()
+    )
+    return {str(page_id): (name or "") for page_id, name in rows}
 
 
 @router.get("/leads")
@@ -318,20 +348,27 @@ async def list_leads(
     leads = query.order_by(Lead.created_at.desc()).all()
     names = _campaign_names(db, {lead.source_campaign_id for lead in leads if lead.source_campaign_id})
     account_names = _account_usernames(db, {lead.instagram_account_id for lead in leads})
+    whatsapp_names = _whatsapp_account_names(db, {lead.whatsapp_account_id for lead in leads})
+    facebook_names = _facebook_page_names(db, {lead.facebook_page_id for lead in leads})
     return [
         {
             "id": str(lead.id),
             "username": lead.ig_username,
             "ig_user_id": lead.ig_user_id,
             "lead_source": lead.lead_source,
+            "platform": lead.platform,
             "source_campaign_id": str(lead.source_campaign_id) if lead.source_campaign_id else None,
             "source_campaign": names.get(str(lead.source_campaign_id)) if lead.source_campaign_id else None,
             "source_media_id": lead.source_media_id,
             "source_media_type": lead.source_media_type,
             "source_media_label": lead.source_media_label,
             "keyword": _trigger_keyword_for_campaign_comment(db, lead.source_campaign_id, lead.source_comment_id),
-            "instagram_account_id": str(lead.instagram_account_id),
+            "instagram_account_id": str(lead.instagram_account_id) if lead.instagram_account_id else None,
             "instagram_account_username": account_names.get(str(lead.instagram_account_id)) or None,
+            "whatsapp_account_id": str(lead.whatsapp_account_id) if lead.whatsapp_account_id else None,
+            "whatsapp_account_username": whatsapp_names.get(str(lead.whatsapp_account_id)) or None,
+            "facebook_page_id": str(lead.facebook_page_id) if lead.facebook_page_id else None,
+            "facebook_page_username": facebook_names.get(str(lead.facebook_page_id)) or None,
             "tags": [],
             "first_seen": lead.created_at.isoformat() if lead.created_at else None,
             "last_seen": lead.last_seen_at.isoformat() if lead.last_seen_at else None,
@@ -349,17 +386,45 @@ async def export_leads_csv(
     leads = db.query(Lead).order_by(Lead.created_at.desc()).all()
     names = _campaign_names(db, {lead.source_campaign_id for lead in leads if lead.source_campaign_id})
     acc_names = _account_usernames(db, {lead.instagram_account_id for lead in leads})
+    whatsapp_names = _whatsapp_account_names(db, {lead.whatsapp_account_id for lead in leads})
+    facebook_names = _facebook_page_names(db, {lead.facebook_page_id for lead in leads})
+
+    def _account_label(lead: Lead) -> str:
+        # Exactly one of the three FKs is set per lead
+        # (ck_leads_platform_account_fk), so this resolves unambiguously.
+        if lead.instagram_account_id:
+            return acc_names.get(str(lead.instagram_account_id), "")
+        if lead.whatsapp_account_id:
+            return whatsapp_names.get(str(lead.whatsapp_account_id), "")
+        if lead.facebook_page_id:
+            return facebook_names.get(str(lead.facebook_page_id), "")
+        return ""
+
     output = io.StringIO()
     writer = csv.writer(output)
-    writer.writerow(["username", "ig_user_id", "lead_source", "source_campaign", "instagram_account", "first_seen", "last_seen"])
+    # `user_id` rather than `ig_user_id`: for WhatsApp rows this column holds
+    # the WA ID and for Facebook rows the commenter/PSID, not an Instagram id.
+    writer.writerow(
+        [
+            "platform",
+            "username",
+            "user_id",
+            "lead_source",
+            "source_campaign",
+            "account",
+            "first_seen",
+            "last_seen",
+        ]
+    )
     for lead in leads:
         writer.writerow(
             [
+                lead.platform or "",
                 lead.ig_username or "",
                 lead.ig_user_id,
                 lead.lead_source or "",
                 names.get(str(lead.source_campaign_id), "") if lead.source_campaign_id else "",
-                acc_names.get(str(lead.instagram_account_id), ""),
+                _account_label(lead),
                 lead.created_at.isoformat() if lead.created_at else "",
                 lead.last_seen_at.isoformat() if lead.last_seen_at else "",
             ]

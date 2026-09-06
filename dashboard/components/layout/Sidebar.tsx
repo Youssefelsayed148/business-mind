@@ -3,7 +3,7 @@
 import Image from "next/image";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { Activity, Bot, LayoutDashboard, Link as LinkIcon, Megaphone, MessageSquare, UserPlus } from "lucide-react";
+import { Activity, Bot, LayoutDashboard, Link as LinkIcon, Megaphone, MessageSquare, ThumbsUp, UserPlus } from "lucide-react";
 import { clearAccessToken } from "@/lib/auth";
 import { Button } from "@/components/ui/Button";
 
@@ -11,6 +11,7 @@ const nav = [
   { href: "/overview", label: "Overview", icon: LayoutDashboard },
   { href: "/accounts", label: "Accounts", icon: LinkIcon },
   { href: "/campaigns", label: "Campaigns", icon: Megaphone },
+  { href: "/facebook-campaigns", label: "Facebook Campaigns", icon: ThumbsUp },
   { href: "/leads", label: "Leads", icon: UserPlus },
   { href: "/conversations", label: "Conversations", icon: Bot },
   { href: "/logs", label: "Logs", icon: Activity },

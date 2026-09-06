@@ -7,6 +7,7 @@ import { DataState } from "@/components/ui/DataState";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { Panel } from "@/components/ui/Panel";
+import { PlatformBadge } from "@/components/ui/PlatformBadge";
 import { Highlight } from "@/components/ui/Highlight";
 import { TableSkeleton } from "@/components/ui/Skeleton";
 import { TableWrap, tableClass, tdClass, thClass, theadRowClass, trClass } from "@/components/ui/Table";
@@ -55,7 +56,7 @@ export default function LeadsPage() {
   const [leads, setLeads] = useState<Lead[]>([]);
   const [campaigns, setCampaigns] = useState<Campaign[]>([]);
   const [accounts, setAccounts] = useState<InstagramAccount[]>([]);
-  const [filters, setFilters] = useState({ campaignId: "", accountId: "", search: "" });
+  const [filters, setFilters] = useState({ campaignId: "", accountId: "", platform: "", search: "" });
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
 
@@ -79,6 +80,14 @@ export default function LeadsPage() {
       .catch((err) => setError(err instanceof Error ? err.message : "Failed to load leads"))
       .finally(() => setLoading(false));
   }, [query]);
+
+  // Platform filtering is client-side (the /leads endpoint returns everything
+  // already) — with only two real platforms so far, an extra server round
+  // trip isn't worth it yet.
+  const visibleLeads = useMemo(
+    () => (filters.platform ? leads.filter((lead) => lead.platform === filters.platform) : leads),
+    [leads, filters.platform],
+  );
 
   async function exportCsv() {
     const token = getAccessToken();
@@ -105,6 +114,7 @@ export default function LeadsPage() {
           accounts={accounts}
           campaignId={filters.campaignId}
           accountId={filters.accountId}
+          platform={filters.platform}
           search={filters.search}
           onChange={setFilters}
         />
@@ -112,32 +122,36 @@ export default function LeadsPage() {
       <Panel>
         <div className="mb-4">
           <h2 className="text-lg font-bold text-ink">Lead records</h2>
-          <p className="mt-1 text-sm text-muted">Filter captured leads by campaign, Instagram account, or search term.</p>
+          <p className="mt-1 text-sm text-muted">Filter captured leads by platform, campaign, Instagram account, or search term.</p>
         </div>
         <DataState loading={loading} error={error} />
         {loading ? <TableSkeleton rows={5} columns={6} /> : null}
-        {!loading && !error && leads.length === 0 ? <EmptyState title="No leads found" message="Leads will appear here after matching campaign activity." /> : null}
-        {leads.length > 0 ? (
+        {!loading && !error && visibleLeads.length === 0 ? <EmptyState title="No leads found" message="Leads will appear here after matching campaign activity." /> : null}
+        {visibleLeads.length > 0 ? (
         <TableWrap>
           <table className={`${tableClass} min-w-[900px] border-separate border-spacing-y-2`}>
             <thead>
               <tr className={theadRowClass}>
                 <th className={thClass}>Username</th>
+                <th className={thClass}>Platform</th>
                 <th className={thClass}>Source</th>
                 <th className={thClass}>Source Campaign</th>
                 <th className={thClass}>Captured Keyword</th>
-                <th className={thClass}>Instagram Account</th>
+                <th className={thClass}>Account</th>
                 <th className={thClass}>Captured At</th>
               </tr>
             </thead>
             <tbody>
-              {leads.map((lead) => (
+              {visibleLeads.map((lead) => (
                 <tr key={lead.id} className={`${trClass} rounded-xl bg-white shadow-sm shadow-slate-200/50 hover:bg-white hover:shadow-md`}>
                   <td className={`${tdClass} rounded-l-xl border-y border-l border-line/80 font-semibold text-ink`}>
                     <div className="min-w-[180px]">
                       <div className="text-sm font-bold text-ink"><Highlight text={lead.username || lead.ig_user_id} term={filters.search} /></div>
                       <div className="mt-1 font-mono text-xs font-medium text-muted">{lead.ig_user_id}</div>
                     </div>
+                  </td>
+                  <td className={`${tdClass} border-y border-line/80`}>
+                    <PlatformBadge platform={lead.platform} />
                   </td>
                   <td className={`${tdClass} border-y border-line/80`}>
                     <SourceBadge source={lead.lead_source} />
@@ -152,7 +166,11 @@ export default function LeadsPage() {
                     </div>
                   </td>
                   <td className={`${tdClass} border-y border-line/80`}><KeywordChip keyword={lead.keyword} search={filters.search} /></td>
-                  <td className={`${tdClass} border-y border-line/80`}><AccountCell username={lead.instagram_account_username} /></td>
+                  <td className={`${tdClass} border-y border-line/80`}>
+                    <AccountCell
+                      username={lead.instagram_account_username || lead.whatsapp_account_username || lead.facebook_page_username}
+                    />
+                  </td>
                   <td className={`${tdClass} rounded-r-xl border-y border-r border-line/80`}>
                     <CapturedAt value={lead.captured_at || lead.first_seen} />
                   </td>

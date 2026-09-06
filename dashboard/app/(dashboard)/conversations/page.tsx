@@ -8,6 +8,7 @@ import { DataState } from "@/components/ui/DataState";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { Panel } from "@/components/ui/Panel";
+import { PlatformBadge } from "@/components/ui/PlatformBadge";
 import { TableSkeleton } from "@/components/ui/Skeleton";
 import { TableWrap, tableClass, tdClass, thClass, theadRowClass, trClass } from "@/components/ui/Table";
 import { api } from "@/lib/api";
@@ -16,6 +17,7 @@ import { useToast } from "@/components/ToastProvider";
 import type { Conversation, ConversationDetail } from "@/lib/types";
 
 const STATUS_FILTERS = ["all", "bot_active", "handed_off", "closed"] as const;
+const PLATFORM_FILTERS = ["all", "instagram", "whatsapp", "facebook"] as const;
 
 function SourceBadge({ source }: { source?: string | null }) {
   const isCold = source === "cold_dm";
@@ -37,6 +39,7 @@ export default function ConversationsPage() {
   const [actionPending, setActionPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [statusFilter, setStatusFilter] = useState<(typeof STATUS_FILTERS)[number]>("all");
+  const [platformFilter, setPlatformFilter] = useState<(typeof PLATFORM_FILTERS)[number]>("all");
   const canManage = useCan("manage_accounts");
   const toast = useToast();
 
@@ -94,7 +97,9 @@ export default function ConversationsPage() {
     }
   }
 
-  const filtered = statusFilter === "all" ? conversations : conversations.filter((c) => c.status === statusFilter);
+  const filtered = conversations
+    .filter((c) => statusFilter === "all" || c.status === statusFilter)
+    .filter((c) => platformFilter === "all" || c.platform === platformFilter);
 
   return (
     <div className="grid gap-6">
@@ -107,17 +112,31 @@ export default function ConversationsPage() {
               <h2 className="text-lg font-bold text-ink">Active threads</h2>
               <p className="mt-1 text-sm text-muted">Leads currently in an AI-continued DM conversation.</p>
             </div>
-            <div className="flex gap-1.5">
-              {STATUS_FILTERS.map((status) => (
-                <button
-                  key={status}
-                  type="button"
-                  onClick={() => setStatusFilter(status)}
-                  className={`rounded-full border px-3 py-1 text-xs font-semibold transition ${statusFilter === status ? "border-accent bg-accent text-white" : "border-line bg-white text-slate-600 hover:border-slate-300"}`}
-                >
-                  {status === "all" ? "All" : status.replaceAll("_", " ")}
-                </button>
-              ))}
+            <div className="flex flex-wrap items-center gap-3">
+              <div className="flex gap-1.5">
+                {PLATFORM_FILTERS.map((platform) => (
+                  <button
+                    key={platform}
+                    type="button"
+                    onClick={() => setPlatformFilter(platform)}
+                    className={`rounded-full border px-3 py-1 text-xs font-semibold capitalize transition ${platformFilter === platform ? "border-accent bg-accent text-white" : "border-line bg-white text-slate-600 hover:border-slate-300"}`}
+                  >
+                    {platform === "all" ? "All platforms" : platform}
+                  </button>
+                ))}
+              </div>
+              <div className="flex gap-1.5">
+                {STATUS_FILTERS.map((status) => (
+                  <button
+                    key={status}
+                    type="button"
+                    onClick={() => setStatusFilter(status)}
+                    className={`rounded-full border px-3 py-1 text-xs font-semibold transition ${statusFilter === status ? "border-accent bg-accent text-white" : "border-line bg-white text-slate-600 hover:border-slate-300"}`}
+                  >
+                    {status === "all" ? "All" : status.replaceAll("_", " ")}
+                  </button>
+                ))}
+              </div>
             </div>
           </div>
 
@@ -133,6 +152,7 @@ export default function ConversationsPage() {
                   <tr className={theadRowClass}>
                     <th className={thClass}>Status</th>
                     <th className={thClass}>Lead</th>
+                    <th className={thClass}>Platform</th>
                     <th className={thClass}>Source</th>
                     <th className={thClass}>Campaign</th>
                     <th className={thClass}>Turns</th>
@@ -151,6 +171,9 @@ export default function ConversationsPage() {
                       </td>
                       <td className={`${tdClass} border-y border-line/80 font-semibold text-ink`}>
                         {conversation.lead_username || conversation.lead_id}
+                      </td>
+                      <td className={`${tdClass} border-y border-line/80`}>
+                        <PlatformBadge platform={conversation.platform} />
                       </td>
                       <td className={`${tdClass} border-y border-line/80`}>
                         <SourceBadge source={conversation.lead_source} />

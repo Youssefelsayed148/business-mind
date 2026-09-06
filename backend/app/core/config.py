@@ -31,6 +31,20 @@ class Settings(BaseSettings):
     META_GRAPH_API_VERSION: str = "v21.0"
     META_MOCK_PRIVATE_REPLIES: bool = False
 
+    # WhatsApp Cloud API Embedded Signup: the frontend's FB.login() call
+    # needs a config_id identifying the Embedded Signup flow configured in
+    # the Meta App dashboard (Business Settings > WhatsApp > Embedded
+    # Signup). Uses the same META_APP_ID/META_APP_SECRET as Instagram since
+    # both are products on the same Meta App.
+    WHATSAPP_EMBEDDED_SIGNUP_CONFIG_ID: str = ""
+
+    # Facebook Page connection uses "Facebook Login for Business" — the same
+    # config_id/FB.login() mechanism as WhatsApp's Embedded Signup, but a
+    # separate config_id with its own permission scopes (pages_show_list,
+    # pages_manage_metadata, pages_read_engagement, pages_manage_engagement,
+    # pages_messaging) configured separately in the Meta App dashboard.
+    FACEBOOK_LOGIN_CONFIG_ID: str = ""
+
     LOG_LEVEL: str = "INFO"
 
     DATABASE_URL: str

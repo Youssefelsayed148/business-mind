@@ -23,6 +23,19 @@ class AutomationLog(Base):
     instagram_account_id: Mapped[uuid.UUID | None] = mapped_column(
         PGUUID(as_uuid=True), ForeignKey("instagram_accounts.id"), nullable=True
     )
+    # Explicit constraint name matching the 0012 migration's — see
+    # Lead.whatsapp_account_id for why.
+    whatsapp_account_id: Mapped[uuid.UUID | None] = mapped_column(
+        PGUUID(as_uuid=True),
+        ForeignKey("whatsapp_accounts.id", name="fk_automation_logs_whatsapp_account_id"),
+        nullable=True,
+    )
+    # Explicit constraint name matching the 0013 migration's.
+    facebook_page_id: Mapped[uuid.UUID | None] = mapped_column(
+        PGUUID(as_uuid=True),
+        ForeignKey("facebook_pages.id", name="fk_automation_logs_facebook_page_id"),
+        nullable=True,
+    )
     action: Mapped[str] = mapped_column(String(100))
     details: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
     created_at: Mapped[datetime] = mapped_column(

@@ -14,6 +14,17 @@ class Message(Base):
         UniqueConstraint(
             "campaign_id", "comment_id", "message_type", name="uq_message_campaign_comment_type"
         ),
+        # campaign_id/comment_id are FK'd strictly to Instagram's
+        # campaigns/comments tables, so Facebook needs its own pair of
+        # columns below — this is what actually enforces "one private reply
+        # per comment" for Facebook rows (NULL-distinctness means the
+        # constraint above never sees non-NULL values for Facebook messages).
+        UniqueConstraint(
+            "facebook_campaign_id",
+            "facebook_comment_id",
+            "message_type",
+            name="uq_message_facebook_campaign_comment_type",
+        ),
     )
 
     id: Mapped[uuid.UUID] = mapped_column(
@@ -28,6 +39,19 @@ class Message(Base):
     )
     comment_id: Mapped[uuid.UUID | None] = mapped_column(
         PGUUID(as_uuid=True), ForeignKey("comments.id"), nullable=True
+    )
+    # Facebook equivalents of campaign_id/comment_id — see class-level
+    # UniqueConstraint comment above for why these exist as separate columns
+    # rather than reusing the Instagram-locked ones.
+    facebook_campaign_id: Mapped[uuid.UUID | None] = mapped_column(
+        PGUUID(as_uuid=True),
+        ForeignKey("facebook_campaigns.id", name="fk_messages_facebook_campaign_id"),
+        nullable=True,
+    )
+    facebook_comment_id: Mapped[uuid.UUID | None] = mapped_column(
+        PGUUID(as_uuid=True),
+        ForeignKey("facebook_comments.id", name="fk_messages_facebook_comment_id"),
+        nullable=True,
     )
     conversation_id: Mapped[uuid.UUID | None] = mapped_column(
         PGUUID(as_uuid=True), ForeignKey("conversations.id"), nullable=True
