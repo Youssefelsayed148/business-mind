@@ -16,12 +16,14 @@ class MetaMessageResult:
         raw_response: dict | None = None,
         error_code: str | None = None,
         error_message: str | None = None,
+        retryable: bool = False,
     ):
         self.success = success
         self.provider_message_id = provider_message_id
         self.raw_response = raw_response or {}
         self.error_code = error_code
         self.error_message = error_message
+        self.retryable = retryable
 
 
 class MetaMessagingClient:
@@ -99,6 +101,7 @@ class MetaMessagingClient:
                 error_code=classification.category,
                 error_message=error_msg,
                 raw_response=data,
+                retryable=classification.retryable,
             )
 
         message_id = data.get("id") or data.get("message_id")
@@ -170,6 +173,7 @@ class MetaMessagingClient:
                 error_code=classification.category,
                 error_message=error_msg,
                 raw_response=data,
+                retryable=classification.retryable,
             )
 
         message_id = data.get("id") or data.get("message_id")
@@ -282,6 +286,7 @@ class MetaMessagingClient:
                 error_code=classification.category,
                 error_message=error_msg,
                 raw_response=data,
+                retryable=classification.retryable,
             )
 
         message_id = data.get("id") or data.get("message_id")
@@ -349,6 +354,7 @@ class MetaMessagingClient:
                 error_code=classification.category,
                 error_message=error_msg,
                 raw_response=data,
+                retryable=classification.retryable,
             )
 
         reply_id = data.get("id")

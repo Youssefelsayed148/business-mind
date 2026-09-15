@@ -51,7 +51,16 @@ def test_classify_invalid_reference():
     assert result.retryable is False
 
 
-def test_classify_unknown_non_retryable():
+def test_classify_unrecognized_error_is_retried_not_dropped():
     result = classify_meta_error(400, {"error": {"message": "Something weird", "code": 99999}})
-    assert result.category == "unknown_non_retryable"
-    assert result.retryable is False
+    assert result.category == "unclassified"
+    assert result.retryable is True
+
+
+def test_classify_non_english_error_message_is_retried_not_dropped():
+    # Regression: keyword classification is English-only, so a localized
+    # Meta error message (e.g. French) must not be silently treated as a
+    # permanent failure just because none of the English keyword lists match.
+    result = classify_meta_error(400, {"error": {"message": "L'utilisateur demandé est introuvable.", "code": 100}})
+    assert result.category == "unclassified"
+    assert result.retryable is True

@@ -69,4 +69,15 @@ def classify_meta_error(status_code: int, response_json: dict) -> ErrorClassific
     if any(kw in error_msg for kw in invalid_ref_keywords) and status_code in [400, 404]:
         return ErrorClassification("invalid_reference", False, "Invalid comment or media reference")
 
-    return ErrorClassification("unknown_non_retryable", False, f"Unclassified error (HTTP {status_code}, code {error_code})")
+    # Everything else is unclassified because none of the keyword lists above
+    # matched — which happens whenever Meta returns the error message in a
+    # non-English locale (they all key off English substrings). Treating that
+    # as a hard failure meant any non-English response silently killed the
+    # send with no retry. Retrying (bounded by the task's max_retries) is the
+    # safer default: most unrecognized 400s from Meta right after a comment
+    # webhook are transient (e.g. the commenter not yet indexed as
+    # messageable), and a few short-backoff attempts either clear it or fail
+    # the same way every task's normal retry-exhaustion path already handles.
+    return ErrorClassification(
+        "unclassified", True, f"Unclassified error (HTTP {status_code}, code {error_code}, subcode {error_subcode})"
+    )

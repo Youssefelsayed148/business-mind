@@ -1795,7 +1795,7 @@ def _send_private_reply_impl(
             )
             return
 
-        if result.error_code == "retryable":
+        if result.retryable:
             mark_message_failed(db, message.id, result.error_code, result.error_message, retryable=True)
             increment_retry_count(db, message.id)
             campaign.failed_sends += 1
@@ -1925,19 +1925,19 @@ def send_follow_prompt_card(self, message_id: str):
         )
 
         if not result.success:
-            mark_message_failed(db, message.id, result.error_code or "unknown", result.error_message, retryable=result.error_code == "retryable")
-            if result.error_code == "retryable":
+            mark_message_failed(db, message.id, result.error_code or "unknown", result.error_message, retryable=result.retryable)
+            if result.retryable:
                 increment_retry_count(db, message.id)
             campaign.failed_sends += 1
             db.commit()
             log_action(
                 db,
-                "message_failed_retryable" if result.error_code == "retryable" else "message_failed",
+                "message_failed_retryable" if result.retryable else "message_failed",
                 campaign_id=campaign.id,
                 lead_id=message.lead_id,
                 details={"message_id": message_id, "error": result.error_message, **details},
             )
-            if result.error_code == "retryable":
+            if result.retryable:
                 raise self.retry(countdown=60 * (2 ** self.request.retries), exc=Exception(result.error_message))
             return
 
@@ -2164,7 +2164,7 @@ def send_facebook_private_reply(self, message_id: str):
             )
             return
 
-        if result.error_code == "retryable":
+        if result.retryable:
             mark_message_failed(db, message.id, result.error_code, result.error_message, retryable=True)
             increment_retry_count(db, message.id)
             campaign.failed_sends += 1

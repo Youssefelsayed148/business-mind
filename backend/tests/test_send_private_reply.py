@@ -79,6 +79,7 @@ def test_send_private_reply_success(db_session: Session):
     mock_result.provider_message_id = "pm_123"
     mock_result.error_code = None
     mock_result.error_message = None
+    mock_result.retryable = False
 
     with patch(
         "app.workers.tasks.MetaMessagingClient.send_private_reply",
@@ -154,6 +155,7 @@ def test_send_private_reply_expired_private_reply(db_session: Session):
     mock_result.success = False
     mock_result.error_code = "expired_private_reply"
     mock_result.error_message = "Private reply window expired"
+    mock_result.retryable = False
 
     with patch(
         "app.workers.tasks.MetaMessagingClient.send_private_reply",
@@ -229,6 +231,7 @@ def test_send_private_reply_token_error_no_retry(db_session: Session):
     mock_result.success = False
     mock_result.error_code = "token_error"
     mock_result.error_message = "Invalid access token"
+    mock_result.retryable = False
 
     with patch(
         "app.workers.tasks.MetaMessagingClient.send_private_reply",
@@ -305,6 +308,7 @@ def test_send_private_reply_retryable_500(db_session: Session):
     mock_result.success = False
     mock_result.error_code = "retryable"
     mock_result.error_message = "Internal server error"
+    mock_result.retryable = True
 
     with patch(
         "app.workers.tasks.MetaMessagingClient.send_private_reply",

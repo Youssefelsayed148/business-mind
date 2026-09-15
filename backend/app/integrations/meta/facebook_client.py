@@ -139,6 +139,7 @@ class FacebookClient:
                 error_code=classification.category,
                 error_message=error_msg,
                 raw_response=data,
+                retryable=classification.retryable,
             )
 
         message_id = data.get("id") or data.get("message_id")
