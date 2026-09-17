@@ -18,6 +18,7 @@ from app.models.message import Message
 from app.models.user import User
 from app.models.workspace import Workspace
 from app.models.comment import Comment
+from app.models.facebook_campaign import FacebookCampaign
 from app.models.facebook_page import FacebookPage
 from app.models.whatsapp_account import WhatsappAccount
 
@@ -121,19 +122,32 @@ async def overview_stats(
     current_user: User = Depends(get_current_user),
 ):
     today = _today_start()
+    active_instagram_campaigns = (
+        db.query(Campaign)
+        .join(
+            InstagramAccount,
+            InstagramAccount.id == Campaign.instagram_account_id,
+        )
+        .filter(
+            Campaign.status == "active",
+            InstagramAccount.status == "connected",
+        )
+        .count()
+    )
+    active_facebook_campaigns = (
+        db.query(FacebookCampaign)
+        .join(
+            FacebookPage,
+            FacebookPage.id == FacebookCampaign.facebook_page_id,
+        )
+        .filter(
+            FacebookCampaign.status == "active",
+            FacebookPage.status == "connected",
+        )
+        .count()
+    )
     return {
-        "active_campaigns": (
-            db.query(Campaign)
-            .join(
-                InstagramAccount,
-                InstagramAccount.id == Campaign.instagram_account_id,
-            )
-            .filter(
-                Campaign.status == "active",
-                InstagramAccount.status == "connected",
-            )
-            .count()
-        ),
+        "active_campaigns": active_instagram_campaigns + active_facebook_campaigns,
         "triggers_today": db.query(AutomationLog).filter(
             AutomationLog.created_at >= today,
             AutomationLog.action.in_(["matched", "triggered", "message_created"]),
@@ -329,6 +343,52 @@ def _facebook_page_names(db: Session, page_ids: set[UUID]) -> dict[str, str]:
     return {str(page_id): (name or "") for page_id, name in rows}
 
 
+def _facebook_campaign_names(db: Session, campaign_ids: set[UUID]) -> dict[str, str]:
+    campaign_ids = {c for c in campaign_ids if c is not None}
+    if not campaign_ids:
+        return {}
+    campaigns = (
+        db.query(FacebookCampaign.id, FacebookCampaign.name)
+        .filter(FacebookCampaign.id.in_(campaign_ids))
+        .all()
+    )
+    return {str(campaign_id): name for campaign_id, name in campaigns}
+
+
+def _facebook_campaign_and_keyword_for_lead(
+    db: Session, lead_id: UUID
+) -> tuple[UUID | None, str | None]:
+    """Facebook leads carry no source_campaign_id -- that FK is strictly
+    Instagram's (see facebook_lead_service.upsert_lead_from_facebook_comment).
+    The originating facebook_campaigns row instead lives on the Message row,
+    and AutomationLog has no facebook_campaign_id column either, so the
+    matched keyword logged alongside it is keyed by lead_id rather than by
+    campaign_id the way _trigger_keyword_for_campaign_comment looks it up.
+    """
+    message = (
+        db.query(Message)
+        .filter(Message.lead_id == lead_id, Message.facebook_campaign_id.isnot(None))
+        .order_by(Message.created_at.desc())
+        .first()
+    )
+    if not message:
+        return None, None
+
+    keyword = None
+    log = (
+        db.query(AutomationLog)
+        .filter(AutomationLog.lead_id == lead_id, AutomationLog.action == "message_queued")
+        .order_by(AutomationLog.created_at.desc())
+        .first()
+    )
+    if log and log.details:
+        value = log.details.get("matched_keyword")
+        if isinstance(value, str) and value:
+            keyword = value
+
+    return message.facebook_campaign_id, keyword
+
+
 @router.get("/leads")
 async def list_leads(
     campaign_id: UUID | None = None,
@@ -350,32 +410,54 @@ async def list_leads(
     account_names = _account_usernames(db, {lead.instagram_account_id for lead in leads})
     whatsapp_names = _whatsapp_account_names(db, {lead.whatsapp_account_id for lead in leads})
     facebook_names = _facebook_page_names(db, {lead.facebook_page_id for lead in leads})
-    return [
-        {
-            "id": str(lead.id),
-            "username": lead.ig_username,
-            "ig_user_id": lead.ig_user_id,
-            "lead_source": lead.lead_source,
-            "platform": lead.platform,
-            "source_campaign_id": str(lead.source_campaign_id) if lead.source_campaign_id else None,
-            "source_campaign": names.get(str(lead.source_campaign_id)) if lead.source_campaign_id else None,
-            "source_media_id": lead.source_media_id,
-            "source_media_type": lead.source_media_type,
-            "source_media_label": lead.source_media_label,
-            "keyword": _trigger_keyword_for_campaign_comment(db, lead.source_campaign_id, lead.source_comment_id),
-            "instagram_account_id": str(lead.instagram_account_id) if lead.instagram_account_id else None,
-            "instagram_account_username": account_names.get(str(lead.instagram_account_id)) or None,
-            "whatsapp_account_id": str(lead.whatsapp_account_id) if lead.whatsapp_account_id else None,
-            "whatsapp_account_username": whatsapp_names.get(str(lead.whatsapp_account_id)) or None,
-            "facebook_page_id": str(lead.facebook_page_id) if lead.facebook_page_id else None,
-            "facebook_page_username": facebook_names.get(str(lead.facebook_page_id)) or None,
-            "tags": [],
-            "first_seen": lead.created_at.isoformat() if lead.created_at else None,
-            "last_seen": lead.last_seen_at.isoformat() if lead.last_seen_at else None,
-            "captured_at": lead.created_at.isoformat() if lead.created_at else None,
-        }
+    fb_campaign_lookup = {
+        lead.id: _facebook_campaign_and_keyword_for_lead(db, lead.id)
         for lead in leads
-    ]
+        if lead.platform == "facebook" and lead.lead_source == "campaign"
+    }
+    fb_campaign_names = _facebook_campaign_names(
+        db, {fb_cid for fb_cid, _ in fb_campaign_lookup.values()}
+    )
+
+    results = []
+    for lead in leads:
+        fb_campaign_id, fb_keyword = fb_campaign_lookup.get(lead.id, (None, None))
+        source_campaign_id = lead.source_campaign_id or fb_campaign_id
+        source_campaign = (
+            names.get(str(lead.source_campaign_id))
+            if lead.source_campaign_id
+            else (fb_campaign_names.get(str(fb_campaign_id)) if fb_campaign_id else None)
+        )
+        keyword = (
+            _trigger_keyword_for_campaign_comment(db, lead.source_campaign_id, lead.source_comment_id)
+            or fb_keyword
+        )
+        results.append(
+            {
+                "id": str(lead.id),
+                "username": lead.ig_username,
+                "ig_user_id": lead.ig_user_id,
+                "lead_source": lead.lead_source,
+                "platform": lead.platform,
+                "source_campaign_id": str(source_campaign_id) if source_campaign_id else None,
+                "source_campaign": source_campaign,
+                "source_media_id": lead.source_media_id,
+                "source_media_type": lead.source_media_type,
+                "source_media_label": lead.source_media_label,
+                "keyword": keyword,
+                "instagram_account_id": str(lead.instagram_account_id) if lead.instagram_account_id else None,
+                "instagram_account_username": account_names.get(str(lead.instagram_account_id)) or None,
+                "whatsapp_account_id": str(lead.whatsapp_account_id) if lead.whatsapp_account_id else None,
+                "whatsapp_account_username": whatsapp_names.get(str(lead.whatsapp_account_id)) or None,
+                "facebook_page_id": str(lead.facebook_page_id) if lead.facebook_page_id else None,
+                "facebook_page_username": facebook_names.get(str(lead.facebook_page_id)) or None,
+                "tags": [],
+                "first_seen": lead.created_at.isoformat() if lead.created_at else None,
+                "last_seen": lead.last_seen_at.isoformat() if lead.last_seen_at else None,
+                "captured_at": lead.created_at.isoformat() if lead.created_at else None,
+            }
+        )
+    return results
 
 
 @router.get("/leads/export.csv")
@@ -388,6 +470,20 @@ async def export_leads_csv(
     acc_names = _account_usernames(db, {lead.instagram_account_id for lead in leads})
     whatsapp_names = _whatsapp_account_names(db, {lead.whatsapp_account_id for lead in leads})
     facebook_names = _facebook_page_names(db, {lead.facebook_page_id for lead in leads})
+    fb_campaign_lookup = {
+        lead.id: _facebook_campaign_and_keyword_for_lead(db, lead.id)
+        for lead in leads
+        if lead.platform == "facebook" and lead.lead_source == "campaign"
+    }
+    fb_campaign_names = _facebook_campaign_names(
+        db, {fb_cid for fb_cid, _ in fb_campaign_lookup.values()}
+    )
+
+    def _source_campaign_label(lead: Lead) -> str:
+        if lead.source_campaign_id:
+            return names.get(str(lead.source_campaign_id), "")
+        fb_campaign_id, _ = fb_campaign_lookup.get(lead.id, (None, None))
+        return fb_campaign_names.get(str(fb_campaign_id), "") if fb_campaign_id else ""
 
     def _account_label(lead: Lead) -> str:
         # Exactly one of the three FKs is set per lead
@@ -423,7 +519,7 @@ async def export_leads_csv(
                 lead.ig_username or "",
                 lead.ig_user_id,
                 lead.lead_source or "",
-                names.get(str(lead.source_campaign_id), "") if lead.source_campaign_id else "",
+                _source_campaign_label(lead),
                 _account_label(lead),
                 lead.created_at.isoformat() if lead.created_at else "",
                 lead.last_seen_at.isoformat() if lead.last_seen_at else "",

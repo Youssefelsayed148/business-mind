@@ -92,6 +92,7 @@ class WhatsappClient:
                 error_code=classification.category,
                 error_message=error_msg,
                 raw_response=data,
+                retryable=classification.retryable,
             )
 
         messages = data.get("messages", [])

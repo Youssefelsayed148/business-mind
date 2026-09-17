@@ -4,41 +4,8 @@ import { useState } from "react";
 import { Link2 } from "lucide-react";
 import { Button } from "@/components/ui/Button";
 import { api } from "@/lib/api";
+import { loadFacebookSdk } from "@/lib/facebookSdk";
 import { useToast } from "@/components/ToastProvider";
-
-declare global {
-  interface Window {
-    FB?: {
-      init: (config: { appId: string; version: string; xfbml?: boolean }) => void;
-      login: (
-        callback: (response: { authResponse?: { code?: string } | null; status?: string }) => void,
-        options: { config_id: string; response_type: string; override_default_response_type: boolean },
-      ) => void;
-    };
-    fbAsyncInit?: () => void;
-  }
-}
-
-let fbSdkLoadPromise: Promise<void> | null = null;
-
-function loadFacebookSdk(appId: string, graphApiVersion: string): Promise<void> {
-  if (window.FB) return Promise.resolve();
-  if (fbSdkLoadPromise) return fbSdkLoadPromise;
-
-  fbSdkLoadPromise = new Promise((resolve, reject) => {
-    window.fbAsyncInit = () => {
-      window.FB?.init({ appId, version: graphApiVersion, xfbml: false });
-      resolve();
-    };
-    const script = document.createElement("script");
-    script.src = "https://connect.facebook.net/en_US/sdk.js";
-    script.async = true;
-    script.defer = true;
-    script.onerror = () => reject(new Error("Failed to load the Facebook SDK"));
-    document.body.appendChild(script);
-  });
-  return fbSdkLoadPromise;
-}
 
 /** Data Embedded Signup posts back via window.postMessage once the popup
  * flow completes — separate from FB.login()'s own callback, which only

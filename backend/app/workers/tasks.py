@@ -17,6 +17,7 @@ from app.integrations.meta.facebook_client import FacebookClient
 from app.integrations.meta.facebook_webhooks import (
     parse_facebook_comment_events,
     parse_facebook_message_events,
+    parse_facebook_postback_events,
 )
 from app.integrations.meta.whatsapp_client import WhatsappClient
 from app.integrations.meta.whatsapp_webhooks import parse_whatsapp_message_events
@@ -58,6 +59,7 @@ from app.services.message_service import (
 )
 from app.services.template_service import render_campaign_message
 from app.services.token_service import get_decrypted_token
+from app.utils.db import is_unique_violation
 from app.utils.templates import render_template
 from app.workers.celery_app import celery_app
 
@@ -112,20 +114,6 @@ def _matched_keyword_for_message(db: Session, message: Message) -> tuple[str | N
     return comment.comment_id, keyword
 
 
-# Postgres SQLSTATE for unique_violation. psycopg 3 exposes it as
-# `.sqlstate` on the driver exception (psycopg 2 called it `.pgcode`), so both
-# are checked rather than assuming the driver in use -- verified against the
-# installed driver, which raises psycopg.errors.UniqueViolation with
-# .sqlstate == "23505" and no .pgcode attribute at all.
-_SQLSTATE_UNIQUE_VIOLATION = "23505"
-
-
-def _is_unique_violation(exc: IntegrityError) -> bool:
-    orig = getattr(exc, "orig", None)
-    code = getattr(orig, "sqlstate", None) or getattr(orig, "pgcode", None)
-    return code == _SQLSTATE_UNIQUE_VIOLATION
-
-
 def _create_lead_or_reuse_concurrent(db: Session, lead: Lead, lookup) -> Lead | None:
     """Insert a Lead, tolerating a concurrent insert of the same one.
 
@@ -155,7 +143,7 @@ def _create_lead_or_reuse_concurrent(db: Session, lead: Lead, lookup) -> Lead | 
             db.add(lead)
             db.flush()
     except IntegrityError as exc:
-        if not _is_unique_violation(exc):
+        if not is_unique_violation(exc):
             # A CHECK/FK/NOT NULL violation is a bug in how this Lead was
             # built, not contention. Let it reach process_webhook_event's
             # handler so it is recorded as a failed event rather than
@@ -1032,17 +1020,38 @@ def process_webhook_event(webhook_event_id: str):
         if webhook_object == "page":
             facebook_comment_events = parse_facebook_comment_events(event.payload or {})
             facebook_message_events = parse_facebook_message_events(event.payload or {})
-            if not facebook_comment_events and not facebook_message_events:
+            facebook_postback_events = parse_facebook_postback_events(event.payload or {})
+            if not facebook_comment_events and not facebook_message_events and not facebook_postback_events:
                 event.processing_status = "skipped"
                 db.commit()
                 log_action(
                     db,
                     "webhook_skipped",
-                    details={"reason": "no_facebook_comment_or_message_events", "event_id": webhook_event_id},
+                    details={"reason": "no_facebook_comment_message_or_postback_events", "event_id": webhook_event_id},
                 )
                 return
             _process_facebook_comment_events(db, facebook_comment_events)
             _process_facebook_message_events(db, facebook_message_events)
+            if facebook_postback_events:
+                # No Facebook feature sends buttons/quick-replies yet (unlike
+                # Instagram's FOLLOW_CHECK follow-gate), so there is nothing
+                # to action on a tap today -- but record it distinctly rather
+                # than letting it vanish under the generic "no events" skip
+                # reason above, so a future feature (or an unexpected
+                # Get Started tap) stays visible in the logs.
+                logger.info(
+                    "Received Facebook postback event(s) with no handler configured",
+                    extra={"event_id": webhook_event_id, "count": len(facebook_postback_events)},
+                )
+                log_action(
+                    db,
+                    "facebook_postback_received_no_handler",
+                    details={
+                        "event_id": webhook_event_id,
+                        "count": len(facebook_postback_events),
+                        "payloads": [pb.payload for pb in facebook_postback_events],
+                    },
+                )
             event.processing_status = "processed"
             db.commit()
             log_action(
@@ -1423,15 +1432,18 @@ def process_webhook_event(webhook_event_id: str):
                 )
                 continue
 
-            lead = (
-                db.query(Lead)
-                .filter(
-                    Lead.workspace_id == account.workspace_id,
-                    Lead.instagram_account_id == account.id,
-                    Lead.ig_user_id == msg_evt.sender_ig_id,
+            def _find_ig_lead():
+                return (
+                    db.query(Lead)
+                    .filter(
+                        Lead.workspace_id == account.workspace_id,
+                        Lead.instagram_account_id == account.id,
+                        Lead.ig_user_id == msg_evt.sender_ig_id,
+                    )
+                    .first()
                 )
-                .first()
-            )
+
+            lead = _find_ig_lead()
 
             if lead is None:
                 # No prior campaign interaction for this sender. This is the
@@ -1480,7 +1492,7 @@ def process_webhook_event(webhook_event_id: str):
                         extra={"sender_ig_id": msg_evt.sender_ig_id},
                     )
 
-                lead = Lead(
+                new_lead = Lead(
                     id=uuid4(),
                     workspace_id=account.workspace_id,
                     instagram_account_id=account.id,
@@ -1491,19 +1503,25 @@ def process_webhook_event(webhook_event_id: str):
                     lead_source="cold_dm",
                     status="new",
                 )
-                db.add(lead)
-                db.commit()
-                db.refresh(lead)
-                log_action(
-                    db,
-                    "cold_dm_lead_created",
-                    instagram_account_id=account.id,
-                    lead_id=lead.id,
-                    details={
-                        "sender_ig_id": msg_evt.sender_ig_id,
-                        "username_resolved": cold_dm_username is not None,
-                    },
-                )
+                created = _create_lead_or_reuse_concurrent(db, new_lead, _find_ig_lead)
+                if created is None:
+                    continue
+                # Only log a creation we actually performed; on a lost race the
+                # winner already logged it.
+                is_new_lead = created is new_lead
+                lead = created
+
+                if is_new_lead:
+                    log_action(
+                        db,
+                        "cold_dm_lead_created",
+                        instagram_account_id=account.id,
+                        lead_id=lead.id,
+                        details={
+                            "sender_ig_id": msg_evt.sender_ig_id,
+                            "username_resolved": cold_dm_username is not None,
+                        },
+                    )
 
             # --- Dispatch, branched by how this lead entered the system ---
             if lead.lead_source == "campaign":
@@ -1622,7 +1640,25 @@ def process_webhook_event(webhook_event_id: str):
             event.processing_status = "failed"
             db.commit()
         except Exception:
-            pass
+            # An uncaught IntegrityError earlier in this task leaves the
+            # session in an aborted-transaction state, so the commit above
+            # raises again -- silently swallowing that would leave this
+            # event stuck in an ambiguous, non-"failed" status with nothing
+            # queryable to alert on. Roll back and retry once so the
+            # failure is always recorded.
+            logger.exception(
+                "Failed to persist webhook_event failure status; retrying after rollback",
+                extra={"event_id": webhook_event_id},
+            )
+            try:
+                db.rollback()
+                event.processing_status = "failed"
+                db.commit()
+            except Exception:
+                logger.exception(
+                    "Could not persist webhook_event failure status even after rollback",
+                    extra={"event_id": webhook_event_id},
+                )
     finally:
         db.close()
 

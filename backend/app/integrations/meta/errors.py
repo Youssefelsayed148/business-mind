@@ -39,15 +39,17 @@ def classify_meta_error(status_code: int, response_json: dict) -> ErrorClassific
     if status_code == 429:
         return ErrorClassification("retryable", True, "Rate limit hit (HTTP 429)")
 
+    # Permission errors. Checked before token errors below: "not authorized"
+    # (a permission-denied phrasing) would otherwise match token_keywords'
+    # bare "auth" substring and get misclassified as a token error.
+    permission_keywords = ["permission", "not authorized", "denied", "insufficient permission"]
+    if any(kw in error_msg for kw in permission_keywords) or error_code in [200, 10]:
+        return ErrorClassification("permission_error", False, "Missing permission for this action")
+
     # Token errors
     token_keywords = ["invalid token", "expired token", "session has expired", "access token", "auth"]
     if any(kw in error_msg for kw in token_keywords) or error_code in [190, 102]:
         return ErrorClassification("token_error", False, "Invalid or expired access token")
-
-    # Permission errors
-    permission_keywords = ["permission", "not authorized", "denied", "insufficient permission"]
-    if any(kw in error_msg for kw in permission_keywords) or error_code in [200, 10]:
-        return ErrorClassification("permission_error", False, "Missing permission for this action")
 
     # Policy errors
     policy_keywords = ["policy", "violation", "spam", "abuse"]

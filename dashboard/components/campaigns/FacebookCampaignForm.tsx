@@ -190,7 +190,7 @@ export function FacebookCampaignForm({
             <span className="font-semibold">Let AI continue the conversation</span>
             <span className="mt-0.5 block text-xs text-muted">
               If the lead replies in Messenger after the private reply, the AI assistant continues the thread
-              (uses the Page's AI settings — business profile, tone, budget).
+              (uses the Page&apos;s AI settings — business profile, tone, budget).
             </span>
           </span>
         </label>

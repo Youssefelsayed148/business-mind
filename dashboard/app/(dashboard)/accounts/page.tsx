@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { Fragment, useEffect, useState } from "react";
 import { Bot, Link2, Trash2 } from "lucide-react";
 import { FacebookConnect } from "@/components/accounts/FacebookConnect";
 import { MockConnect } from "@/components/accounts/MockConnect";
@@ -645,8 +645,8 @@ export default function AccountsPage() {
                   const isDeleting = deletingId === account.id;
 
                   return (
-                    <>
-                    <tr key={account.id} className={trClass}>
+                    <Fragment key={account.id}>
+                    <tr className={trClass}>
                       <td className={`${tdClass} font-semibold text-ink`}>
                         <span className="inline-flex items-center gap-2">
                           <Avatar label={account.username || account.ig_user_id} size="sm" />
@@ -732,7 +732,7 @@ export default function AccountsPage() {
                         </td>
                       </tr>
                     ) : null}
-                    </>
+                    </Fragment>
                   );
                 })}
               </tbody>
@@ -746,7 +746,7 @@ export default function AccountsPage() {
           <div>
             <h2 className="text-lg font-bold text-ink">WhatsApp numbers</h2>
             <p className="mt-1 text-sm text-muted">
-              Reactive AI replies to inbound WhatsApp messages, within Meta's 24-hour customer service window.
+              Reactive AI replies to inbound WhatsApp messages, within Meta&apos;s 24-hour customer service window.
             </p>
           </div>
           {canManageAccounts ? <WhatsappConnect onConnected={loadWhatsapp} /> : null}
@@ -774,8 +774,8 @@ export default function AccountsPage() {
                 {whatsappAccounts.map((account) => {
                   const isConnected = account.status === "connected" || !account.status;
                   return (
-                    <>
-                      <tr key={account.id} className={trClass}>
+                    <Fragment key={account.id}>
+                      <tr className={trClass}>
                         <td className={`${tdClass} font-semibold text-ink`}>
                           <span className="inline-flex items-center gap-2">
                             <Avatar label={account.display_phone_number || account.phone_number_id} size="sm" />
@@ -828,7 +828,7 @@ export default function AccountsPage() {
                           </td>
                         </tr>
                       ) : null}
-                    </>
+                    </Fragment>
                   );
                 })}
               </tbody>
@@ -870,8 +870,8 @@ export default function AccountsPage() {
                 {facebookPages.map((page) => {
                   const isConnected = page.status === "connected" || !page.status;
                   return (
-                    <>
-                      <tr key={page.id} className={trClass}>
+                    <Fragment key={page.id}>
+                      <tr className={trClass}>
                         <td className={`${tdClass} font-semibold text-ink`}>
                           <span className="inline-flex items-center gap-2">
                             <Avatar label={page.page_name || page.page_id} size="sm" />
@@ -924,7 +924,7 @@ export default function AccountsPage() {
                           </td>
                         </tr>
                       ) : null}
-                    </>
+                    </Fragment>
                   );
                 })}
               </tbody>
