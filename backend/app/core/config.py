@@ -48,6 +48,11 @@ class Settings(BaseSettings):
     LOG_LEVEL: str = "INFO"
 
     DATABASE_URL: str
+    # Dedicated test database for tests/conftest.py — MUST be a different
+    # database from DATABASE_URL (setup_db() runs Base.metadata.drop_all()
+    # at the end of every pytest session; see the 2026-09-17 incident in
+    # conftest.py). Read from .env / env vars like every other setting.
+    TEST_DATABASE_URL: str | None = None
     REDIS_URL: str = "redis://redis:6379/0"
     RATE_LIMIT_ENABLED: bool = True
     TRUST_PROXY_HEADERS: bool = False

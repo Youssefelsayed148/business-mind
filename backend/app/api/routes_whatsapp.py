@@ -11,8 +11,7 @@ from redis import Redis
 from redis.exceptions import RedisError
 from sqlalchemy.orm import Session
 
-from app.api.routes_auth import get_current_user
-from app.authz import require_permission
+from app.authz import WorkspaceContext, require_workspace_permission, require_workspace_role
 from app.core.config import settings
 from app.db.session import get_db
 from app.integrations.meta.errors import MetaAPIError
@@ -75,7 +74,7 @@ def _account_response(account: WhatsappAccount) -> dict:
 
 @router.get("/connect/start")
 async def whatsapp_connect_start(
-    current_user: User = Depends(require_permission("manage_accounts")),
+    _ctx: WorkspaceContext = Depends(require_workspace_permission("manage_accounts")),
 ):
     """Return what the frontend needs to kick off Embedded Signup's
     FB.login() call. Unlike Instagram Login, there is no server-driven
@@ -114,7 +113,7 @@ class WhatsappConnectCallback(BaseModel):
 async def whatsapp_connect_callback(
     payload: WhatsappConnectCallback,
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_permission("manage_accounts")),
+    ctx: WorkspaceContext = Depends(require_workspace_permission("manage_accounts")),
 ):
     """Finish Embedded Signup: exchange the code for a token, subscribe our
     app to the WABA's webhooks, fetch the number's display info, and
@@ -125,7 +124,7 @@ async def whatsapp_connect_callback(
     "WA_EMBEDDED_SIGNUP" postMessage event, plus the `state` nonce from
     /connect/start.
     """
-    _limit_account_mutation(current_user)
+    _limit_account_mutation(ctx.user)
 
     try:
         state_value = _redis().get(f"whatsapp_oauth_state:{payload.state}")
@@ -147,15 +146,24 @@ async def whatsapp_connect_callback(
 
     expires_at = datetime.now(timezone.utc) + timedelta(seconds=long_lived.get("expires_in", 5184000))
 
-    workspace = db.query(Workspace).filter(Workspace.slug == "default").first()
+    workspace = db.query(Workspace).filter(Workspace.id == ctx.workspace_id).first()
     if not workspace:
-        raise HTTPException(status_code=404, detail="Default workspace not found")
+        raise HTTPException(status_code=404, detail="Workspace not found")
 
     account = (
         db.query(WhatsappAccount)
         .filter(WhatsappAccount.phone_number_id == payload.phone_number_id)
         .first()
     )
+    # phone_number_id is globally unique in Meta — if the number is already
+    # connected to a different workspace, refuse instead of silently
+    # re-pointing the row (workspace B's signup must not take over
+    # workspace A's connected number). Before ANY mutation.
+    if account is not None and account.workspace_id != ctx.workspace_id:
+        raise HTTPException(
+            status_code=409,
+            detail="This WhatsApp number is already connected to a different workspace.",
+        )
     is_new = account is None
     if account is None:
         account = WhatsappAccount(
@@ -177,7 +185,7 @@ async def whatsapp_connect_callback(
         db,
         "whatsapp_account_connected" if is_new else "whatsapp_account_reconnected",
         f"WhatsApp number connected: {account.display_phone_number or account.phone_number_id}",
-        actor=current_user,
+        actor=ctx.user,
         entity_type="whatsapp_account",
         entity_id=account.id,
         entity_name=account.display_phone_number or account.phone_number_id,
@@ -190,9 +198,13 @@ async def whatsapp_connect_callback(
 @router.get("/accounts")
 async def list_whatsapp_accounts(
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    ctx: WorkspaceContext = Depends(require_workspace_role()),
 ):
-    accounts = db.query(WhatsappAccount).all()
+    accounts = (
+        db.query(WhatsappAccount)
+        .filter(WhatsappAccount.workspace_id == ctx.workspace_id)
+        .all()
+    )
     return [_account_response(account) for account in accounts]
 
 
@@ -200,9 +212,19 @@ async def list_whatsapp_accounts(
 async def get_whatsapp_account(
     account_id: UUID,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    ctx: WorkspaceContext = Depends(require_workspace_role()),
 ):
-    account = db.query(WhatsappAccount).filter(WhatsappAccount.id == account_id).first()
+    # Filtering by workspace_id (rather than fetching then comparing) means a
+    # cross-workspace id is indistinguishable from a nonexistent one: 404
+    # either way, no existence leak across workspaces.
+    account = (
+        db.query(WhatsappAccount)
+        .filter(
+            WhatsappAccount.id == account_id,
+            WhatsappAccount.workspace_id == ctx.workspace_id,
+        )
+        .first()
+    )
     if not account:
         raise HTTPException(status_code=404, detail="Account not found")
     return _account_response(account)
@@ -222,10 +244,17 @@ async def update_whatsapp_ai_settings(
     account_id: UUID,
     payload: WhatsappAISettingsUpdate,
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_permission("manage_accounts")),
+    ctx: WorkspaceContext = Depends(require_workspace_permission("manage_accounts")),
 ):
-    _limit_account_mutation(current_user)
-    account = db.query(WhatsappAccount).filter(WhatsappAccount.id == account_id).first()
+    _limit_account_mutation(ctx.user)
+    account = (
+        db.query(WhatsappAccount)
+        .filter(
+            WhatsappAccount.id == account_id,
+            WhatsappAccount.workspace_id == ctx.workspace_id,
+        )
+        .first()
+    )
     if not account:
         raise HTTPException(status_code=404, detail="Account not found")
 
@@ -251,10 +280,17 @@ async def update_whatsapp_ai_settings(
 async def disconnect_whatsapp_account(
     account_id: UUID,
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_permission("manage_accounts")),
+    ctx: WorkspaceContext = Depends(require_workspace_permission("manage_accounts")),
 ):
-    _limit_account_mutation(current_user)
-    account = db.query(WhatsappAccount).filter(WhatsappAccount.id == account_id).first()
+    _limit_account_mutation(ctx.user)
+    account = (
+        db.query(WhatsappAccount)
+        .filter(
+            WhatsappAccount.id == account_id,
+            WhatsappAccount.workspace_id == ctx.workspace_id,
+        )
+        .first()
+    )
     if not account:
         raise HTTPException(status_code=404, detail="Account not found")
 
@@ -265,7 +301,7 @@ async def disconnect_whatsapp_account(
         db,
         "whatsapp_account_disconnected",
         f"WhatsApp number disconnected: {account.display_phone_number or account.phone_number_id}",
-        actor=current_user,
+        actor=ctx.user,
         entity_type="whatsapp_account",
         entity_id=account.id,
         entity_name=account.display_phone_number or account.phone_number_id,

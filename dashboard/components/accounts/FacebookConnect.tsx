@@ -48,13 +48,27 @@ export function FacebookConnect({ onConnected }: { onConnected: () => void }) {
       await loadFacebookSdk(startInfo.app_id, startInfo.graph_api_version);
       const code = await runFacebookLogin(startInfo.config_id);
 
-      const result = await api.post<{ connected: { page_name: string | null; page_id: string }[] }>(
+      const result = await api.post<{
+        connected: { page_name: string | null; page_id: string }[];
+        conflicts?: { page_id: string; page_name: string | null; reason: string }[];
+      }>(
         "/facebook/connect/callback",
         { code, state: startInfo.state },
       );
 
       const count = result.connected.length;
-      toast.success(count === 1 ? "Facebook Page connected successfully" : `${count} Facebook Pages connected successfully`);
+      if (count === 1) {
+        toast.success("Facebook Page connected successfully");
+      } else {
+        toast.success(`${count} Facebook Pages connected successfully`);
+      }
+      if (result.conflicts?.length) {
+        toast.warning(
+          result.conflicts.length === 1
+            ? "1 Facebook Page is already connected to a different workspace and was not connected here."
+            : `${result.conflicts.length} Facebook Pages are already connected to a different workspace and were not connected here.`,
+        );
+      }
       onConnected();
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Failed to connect Facebook Page");

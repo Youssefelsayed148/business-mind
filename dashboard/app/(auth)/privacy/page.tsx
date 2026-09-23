@@ -8,8 +8,10 @@ const sections = [
     content: [
       "Account credentials (email address, hashed password) required to access the platform.",
       "Instagram Business account data obtained through Meta OAuth, including your Instagram user ID, username, and access tokens.",
+      "Facebook Page data obtained through Facebook Login for Business, including your Page ID, Page name, commenter identifiers, and access tokens.",
+      "WhatsApp Business data obtained through Meta's Embedded Signup, including your WhatsApp Business Account ID, phone number ID, and access tokens.",
       "Campaign configurations, keyword triggers, message templates, and automation rules you create within the platform.",
-      "Lead records generated when Instagram users interact with your campaigns.",
+      "Lead records generated when Instagram, Facebook, or WhatsApp users interact with your campaigns.",
       "Audit logs of platform activity including logins, campaign changes, and message delivery outcomes.",
     ],
   },
@@ -17,8 +19,8 @@ const sections = [
     title: "How We Use Your Information",
     content: [
       "To authenticate your access and maintain your session securely.",
-      "To connect your Instagram Business account via Meta's official API and execute automation campaigns on your behalf.",
-      "To deliver automated direct messages and private replies to Instagram users who trigger your configured keywords.",
+      "To connect your Instagram Business, Facebook Page, and WhatsApp Business accounts via Meta's official APIs and execute automation campaigns on your behalf.",
+      "To deliver automated direct messages and private replies to Instagram and Facebook users, and automated replies to WhatsApp users, who trigger your configured keywords or message your connected accounts.",
       "To generate leads, track campaign performance, and provide delivery reports within your dashboard.",
       "To maintain audit logs for security, compliance, and troubleshooting purposes.",
     ],
@@ -31,6 +33,27 @@ const sections = [
       "Access tokens are encrypted at rest and are never shared with third parties.",
       "We only read and send messages as instructed by your campaign configurations. We do not access personal Instagram accounts.",
       "You may revoke our access at any time through your Instagram account settings or by disconnecting from the Accounts page.",
+    ],
+  },
+  {
+    title: "Facebook Page Data",
+    content: [
+      "We access your Facebook Page solely through Meta's official Graph API using permissions you explicitly grant during Facebook Login for Business.",
+      "We request the following permissions: pages_show_list, pages_manage_metadata, pages_read_engagement, pages_messaging.",
+      "We collect Page comments, commenter identifiers (ASID/PSID), and Messenger message content solely to deliver the private replies and automated DMs configured in your campaigns.",
+      "Page access tokens are encrypted at rest and are never shared with third parties.",
+      "We do not access personal Facebook profiles, friends lists, or any data outside your connected Page's own activity.",
+      "You may revoke our access at any time through your Facebook Business settings or by disconnecting from the Accounts page.",
+    ],
+  },
+  {
+    title: "WhatsApp Business Data",
+    content: [
+      "We access your WhatsApp Business phone number solely through Meta's official WhatsApp Cloud API using permissions granted during Embedded Signup.",
+      "We request the following permissions: whatsapp_business_messaging, whatsapp_business_management.",
+      "We collect the WhatsApp Business Account ID, phone number ID, and message content solely to deliver the automated replies configured for your number.",
+      "Access tokens are encrypted at rest and are never shared with third parties.",
+      "You may revoke our access at any time through Meta Business Manager or by disconnecting from the Accounts page.",
     ],
   },
   {
@@ -52,11 +75,19 @@ const sections = [
     ],
   },
   {
+    title: "Data Deletion",
+    content: [
+      "You may disconnect any connected Instagram, Facebook, or WhatsApp account at any time from the Accounts page — this immediately revokes our access and stops all automation for that account.",
+      "To delete your ManyOsirisChat account entirely, contact us at the email below. All associated data — including leads, conversations, campaign configurations, and access tokens across every connected platform — is permanently deleted within 30 days, except where retention is required by law.",
+      "You may also request deletion of specific data (e.g. lead records for one platform) without closing your account by contacting us with the details of your request.",
+    ],
+  },
+  {
     title: "Your Rights",
     content: [
       "You have the right to access, correct, or delete your personal data at any time.",
       "You may export your lead records in CSV format from the Leads page.",
-      "You may disconnect your Instagram account at any time from the Accounts page, which revokes our access immediately.",
+      "You may disconnect your Instagram, Facebook, or WhatsApp account at any time from the Accounts page, which revokes our access immediately.",
       "For data requests or concerns, contact us at the email address listed below.",
     ],
   },
@@ -97,12 +128,13 @@ export default function PrivacyPage() {
         <div className="mx-auto max-w-4xl px-6 py-12">
           <div className="inline-flex items-center gap-2 rounded-full border border-emerald-200 bg-[#ECFDF5] px-3 py-1 text-xs font-medium text-emerald-700 mb-4">
             <span className="h-1.5 w-1.5 rounded-full bg-[#10B981]" />
-            Last updated: June 2026
+            Last updated: September 2026
           </div>
           <h1 className="text-3xl font-bold text-[#0F172A] mb-3">Privacy Policy</h1>
           <p className="text-[#64748B] max-w-2xl leading-relaxed">
-            ManyOsirisChat is an Instagram automation platform. This policy explains what data we collect,
-            how we use it, and your rights as a user. We are committed to handling your data with care and transparency.
+            ManyOsirisChat is an Instagram, Facebook, and WhatsApp automation platform. This policy explains
+            what data we collect, how we use it, and your rights as a user. We are committed to handling
+            your data with care and transparency.
           </p>
         </div>
       </div>

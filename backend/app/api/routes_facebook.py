@@ -11,8 +11,7 @@ from redis import Redis
 from redis.exceptions import RedisError
 from sqlalchemy.orm import Session
 
-from app.api.routes_auth import get_current_user
-from app.authz import require_permission
+from app.authz import WorkspaceContext, require_workspace_permission, require_workspace_role
 from app.core.config import settings
 from app.db.session import get_db
 from app.integrations.meta.errors import MetaAPIError
@@ -56,13 +55,6 @@ def _limit_mutation(current_user: User) -> None:
     )
 
 
-def _get_default_workspace(db: Session) -> Workspace:
-    ws = db.query(Workspace).filter(Workspace.slug == "default").first()
-    if not ws:
-        raise HTTPException(status_code=404, detail="Default workspace not found")
-    return ws
-
-
 def _page_response(page: FacebookPage) -> dict:
     return {
         "id": str(page.id),
@@ -87,7 +79,7 @@ def _page_response(page: FacebookPage) -> dict:
 
 @router.get("/connect/start")
 async def facebook_connect_start(
-    current_user: User = Depends(require_permission("manage_accounts")),
+    _ctx: WorkspaceContext = Depends(require_workspace_permission("manage_accounts")),
 ):
     if not settings.FACEBOOK_LOGIN_CONFIG_ID:
         raise HTTPException(
@@ -118,14 +110,14 @@ class FacebookConnectCallback(BaseModel):
 async def facebook_connect_callback(
     payload: FacebookConnectCallback,
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_permission("manage_accounts")),
+    ctx: WorkspaceContext = Depends(require_workspace_permission("manage_accounts")),
 ):
     """Exchange the code, list every Page the user granted access to via
     GET /me/accounts, and connect all of them (each already carries its own
     Page Access Token — no per-Page exchange step needed). Unlike WhatsApp's
     single-number flow, this can connect more than one Page in one pass.
     """
-    _limit_mutation(current_user)
+    _limit_mutation(ctx.user)
 
     try:
         state_value = _redis().get(f"facebook_oauth_state:{payload.state}")
@@ -147,13 +139,31 @@ async def facebook_connect_callback(
     if not granted_pages:
         raise HTTPException(status_code=400, detail="No Facebook Pages were granted in this connection")
 
-    workspace = _get_default_workspace(db)
+    workspace = db.query(Workspace).filter(Workspace.id == ctx.workspace_id).first()
+    if not workspace:
+        raise HTTPException(status_code=404, detail="Workspace not found")
     connected: list[dict] = []
+    conflicts: list[dict] = []
 
     for page_data in granted_pages:
         page_id = page_data.get("id")
         page_access_token = page_data.get("access_token")
         if not page_id or not page_access_token:
+            continue
+
+        # page_id is globally unique in Meta — if the Page is already
+        # connected to a different workspace, don't silently re-point the
+        # row (and don't even subscribe our app to it). Collect it as a
+        # conflict and keep connecting the rest of the batch.
+        page = db.query(FacebookPage).filter(FacebookPage.page_id == page_id).first()
+        if page is not None and page.workspace_id != ctx.workspace_id:
+            conflicts.append(
+                {
+                    "page_id": page_id,
+                    "page_name": page_data.get("name"),
+                    "reason": "Already connected to a different workspace",
+                }
+            )
             continue
 
         try:
@@ -162,7 +172,6 @@ async def facebook_connect_callback(
             logger.error("Failed to subscribe app to Facebook Page", extra={"page_id": page_id, "error": str(exc)})
             continue
 
-        page = db.query(FacebookPage).filter(FacebookPage.page_id == page_id).first()
         is_new = page is None
         if page is None:
             page = FacebookPage(id=uuid.uuid4(), workspace_id=workspace.id, page_id=page_id)
@@ -183,7 +192,7 @@ async def facebook_connect_callback(
             db,
             "facebook_page_connected" if is_new else "facebook_page_reconnected",
             f"Facebook Page connected: {page.page_name or page.page_id}",
-            actor=current_user,
+            actor=ctx.user,
             entity_type="facebook_page",
             entity_id=page.id,
             entity_name=page.page_name or page.page_id,
@@ -191,7 +200,7 @@ async def facebook_connect_callback(
         )
         connected.append(_page_response(page))
 
-    return {"connected": connected}
+    return {"connected": connected, "conflicts": conflicts}
 
 
 # --- Accounts ---------------------------------------------------------------
@@ -200,9 +209,11 @@ async def facebook_connect_callback(
 @router.get("/accounts")
 async def list_facebook_pages(
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    ctx: WorkspaceContext = Depends(require_workspace_role()),
 ):
-    pages = db.query(FacebookPage).all()
+    pages = (
+        db.query(FacebookPage).filter(FacebookPage.workspace_id == ctx.workspace_id).all()
+    )
     return [_page_response(page) for page in pages]
 
 
@@ -210,9 +221,19 @@ async def list_facebook_pages(
 async def get_facebook_page(
     page_id: UUID,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    ctx: WorkspaceContext = Depends(require_workspace_role()),
 ):
-    page = db.query(FacebookPage).filter(FacebookPage.id == page_id).first()
+    # Filtering by workspace_id (rather than fetching then comparing) means a
+    # cross-workspace id is indistinguishable from a nonexistent one: 404
+    # either way, no existence leak across workspaces.
+    page = (
+        db.query(FacebookPage)
+        .filter(
+            FacebookPage.id == page_id,
+            FacebookPage.workspace_id == ctx.workspace_id,
+        )
+        .first()
+    )
     if not page:
         raise HTTPException(status_code=404, detail="Page not found")
     return _page_response(page)
@@ -233,10 +254,17 @@ async def update_facebook_ai_settings(
     page_id: UUID,
     payload: FacebookAISettingsUpdate,
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_permission("manage_accounts")),
+    ctx: WorkspaceContext = Depends(require_workspace_permission("manage_accounts")),
 ):
-    _limit_mutation(current_user)
-    page = db.query(FacebookPage).filter(FacebookPage.id == page_id).first()
+    _limit_mutation(ctx.user)
+    page = (
+        db.query(FacebookPage)
+        .filter(
+            FacebookPage.id == page_id,
+            FacebookPage.workspace_id == ctx.workspace_id,
+        )
+        .first()
+    )
     if not page:
         raise HTTPException(status_code=404, detail="Page not found")
 
@@ -256,10 +284,17 @@ async def update_facebook_ai_settings(
 async def disconnect_facebook_page(
     page_id: UUID,
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_permission("manage_accounts")),
+    ctx: WorkspaceContext = Depends(require_workspace_permission("manage_accounts")),
 ):
-    _limit_mutation(current_user)
-    page = db.query(FacebookPage).filter(FacebookPage.id == page_id).first()
+    _limit_mutation(ctx.user)
+    page = (
+        db.query(FacebookPage)
+        .filter(
+            FacebookPage.id == page_id,
+            FacebookPage.workspace_id == ctx.workspace_id,
+        )
+        .first()
+    )
     if not page:
         raise HTTPException(status_code=404, detail="Page not found")
 
@@ -270,7 +305,7 @@ async def disconnect_facebook_page(
         db,
         "facebook_page_disconnected",
         f"Facebook Page disconnected: {page.page_name or page.page_id}",
-        actor=current_user,
+        actor=ctx.user,
         entity_type="facebook_page",
         entity_id=page.id,
         entity_name=page.page_name or page.page_id,
@@ -351,9 +386,13 @@ class FacebookCampaignUpdate(BaseModel):
 @router.get("/campaigns")
 async def list_facebook_campaigns(
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    ctx: WorkspaceContext = Depends(require_workspace_role()),
 ):
-    campaigns = db.query(FacebookCampaign).all()
+    campaigns = (
+        db.query(FacebookCampaign)
+        .filter(FacebookCampaign.workspace_id == ctx.workspace_id)
+        .all()
+    )
     return [_campaign_response(c) for c in campaigns]
 
 
@@ -361,9 +400,16 @@ async def list_facebook_campaigns(
 async def create_facebook_campaign(
     payload: FacebookCampaignCreate,
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_permission("manage_campaigns")),
+    ctx: WorkspaceContext = Depends(require_workspace_permission("manage_campaigns")),
 ):
-    page = db.query(FacebookPage).filter(FacebookPage.id == payload.facebook_page_id).first()
+    page = (
+        db.query(FacebookPage)
+        .filter(
+            FacebookPage.id == payload.facebook_page_id,
+            FacebookPage.workspace_id == ctx.workspace_id,
+        )
+        .first()
+    )
     if not page:
         raise HTTPException(status_code=404, detail="Facebook Page not found")
 
@@ -388,9 +434,16 @@ async def create_facebook_campaign(
 async def get_facebook_campaign(
     campaign_id: UUID,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    ctx: WorkspaceContext = Depends(require_workspace_role()),
 ):
-    campaign = db.query(FacebookCampaign).filter(FacebookCampaign.id == campaign_id).first()
+    campaign = (
+        db.query(FacebookCampaign)
+        .filter(
+            FacebookCampaign.id == campaign_id,
+            FacebookCampaign.workspace_id == ctx.workspace_id,
+        )
+        .first()
+    )
     if not campaign:
         raise HTTPException(status_code=404, detail="Campaign not found")
     return _campaign_response(campaign)
@@ -401,9 +454,16 @@ async def update_facebook_campaign(
     campaign_id: UUID,
     payload: FacebookCampaignUpdate,
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_permission("manage_campaigns")),
+    ctx: WorkspaceContext = Depends(require_workspace_permission("manage_campaigns")),
 ):
-    campaign = db.query(FacebookCampaign).filter(FacebookCampaign.id == campaign_id).first()
+    campaign = (
+        db.query(FacebookCampaign)
+        .filter(
+            FacebookCampaign.id == campaign_id,
+            FacebookCampaign.workspace_id == ctx.workspace_id,
+        )
+        .first()
+    )
     if not campaign:
         raise HTTPException(status_code=404, detail="Campaign not found")
 
@@ -419,9 +479,16 @@ async def update_facebook_campaign(
 async def delete_facebook_campaign(
     campaign_id: UUID,
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_permission("delete_campaigns")),
+    ctx: WorkspaceContext = Depends(require_workspace_permission("delete_campaigns")),
 ):
-    campaign = db.query(FacebookCampaign).filter(FacebookCampaign.id == campaign_id).first()
+    campaign = (
+        db.query(FacebookCampaign)
+        .filter(
+            FacebookCampaign.id == campaign_id,
+            FacebookCampaign.workspace_id == ctx.workspace_id,
+        )
+        .first()
+    )
     if not campaign:
         raise HTTPException(status_code=404, detail="Campaign not found")
     db.delete(campaign)
@@ -438,9 +505,16 @@ async def add_facebook_campaign_keyword(
     campaign_id: UUID,
     payload: FacebookCampaignKeywordCreate,
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_permission("manage_campaigns")),
+    ctx: WorkspaceContext = Depends(require_workspace_permission("manage_campaigns")),
 ):
-    campaign = db.query(FacebookCampaign).filter(FacebookCampaign.id == campaign_id).first()
+    campaign = (
+        db.query(FacebookCampaign)
+        .filter(
+            FacebookCampaign.id == campaign_id,
+            FacebookCampaign.workspace_id == ctx.workspace_id,
+        )
+        .first()
+    )
     if not campaign:
         raise HTTPException(status_code=404, detail="Campaign not found")
 
@@ -460,11 +534,21 @@ async def delete_facebook_campaign_keyword(
     campaign_id: UUID,
     keyword_id: UUID,
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_permission("manage_campaigns")),
+    ctx: WorkspaceContext = Depends(require_workspace_permission("manage_campaigns")),
 ):
+    # FacebookCampaignKeyword carries no workspace_id of its own — scope it
+    # through its parent campaign's workspace_id.
     keyword = (
         db.query(FacebookCampaignKeyword)
-        .filter(FacebookCampaignKeyword.id == keyword_id, FacebookCampaignKeyword.campaign_id == campaign_id)
+        .join(
+            FacebookCampaign,
+            FacebookCampaign.id == FacebookCampaignKeyword.campaign_id,
+        )
+        .filter(
+            FacebookCampaignKeyword.id == keyword_id,
+            FacebookCampaignKeyword.campaign_id == campaign_id,
+            FacebookCampaign.workspace_id == ctx.workspace_id,
+        )
         .first()
     )
     if not keyword:

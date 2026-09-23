@@ -19,7 +19,9 @@ from app.db.session import get_db
 if settings.APP_ENV.lower() == "production":
     TEST_DATABASE_URL = None
 else:
-    TEST_DATABASE_URL = os.environ.get("TEST_DATABASE_URL") or settings.DATABASE_URL
+    TEST_DATABASE_URL = (
+        os.environ.get("TEST_DATABASE_URL") or settings.TEST_DATABASE_URL or settings.DATABASE_URL
+    )
 
 
 def _db_available():

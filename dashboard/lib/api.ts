@@ -115,6 +115,48 @@ function logApiError(error: ApiError, path: string) {
   }
 }
 
+// --- Workspace-scoped routes -----------------------------------------------
+// Only WhatsApp and Facebook routes are workspace-scoped this phase; the
+// X-Workspace-Id header is attached to exactly those paths and deliberately
+// never to /instagram/* (Instagram routes ignore the header and still gate
+// off the global user role). No workspace-switcher UI yet — the workspace is
+// resolved once per page load from /workspaces/me, preferring the workspace
+// with slug "default" and falling back to the first membership.
+
+type WorkspaceMembership = {
+  id: string;
+  name: string;
+  slug: string;
+  role: string;
+};
+
+const WORKSPACE_SCOPED_PREFIXES = ["/whatsapp/", "/facebook/"];
+
+function isWorkspaceScopedPath(path: string): boolean {
+  return WORKSPACE_SCOPED_PREFIXES.some(
+    (prefix) => path === prefix.slice(0, -1) || path.startsWith(prefix),
+  );
+}
+
+let workspaceIdPromise: Promise<string | null> | null = null;
+
+function resolveWorkspaceId(): Promise<string | null> {
+  if (!workspaceIdPromise) {
+    workspaceIdPromise = request<WorkspaceMembership[]>("GET", "/workspaces/me")
+      .then((memberships) => {
+        if (!Array.isArray(memberships) || memberships.length === 0) return null;
+        const defaultWorkspace = memberships.find((m) => m.slug === "default");
+        return (defaultWorkspace ?? memberships[0]).id;
+      })
+      .catch(() => {
+        // Allow a retry on the next request instead of caching the failure.
+        workspaceIdPromise = null;
+        return null;
+      });
+  }
+  return workspaceIdPromise;
+}
+
 async function request<T>(
   method: string,
   path: string,
@@ -139,6 +181,11 @@ async function request<T>(
   }
 
   if (token) headers.set("Authorization", `Bearer ${token}`);
+
+  if (isWorkspaceScopedPath(path)) {
+    const workspaceId = await resolveWorkspaceId();
+    if (workspaceId) headers.set("X-Workspace-Id", workspaceId);
+  }
 
   let response: Response;
   try {

@@ -14,19 +14,19 @@ const sections = [
   {
     title: "Platform Description",
     content: [
-      "ManyOsirisChat is an Instagram automation platform that allows businesses to automate direct messages, private replies, and lead capture via Instagram's official API.",
-      "The platform connects to your Instagram Business account through Meta's OAuth flow and operates within Meta's permitted use policies.",
-      "All automation features are built on Meta's official Graph API. We do not use unofficial or unsupported Instagram access methods.",
+      "ManyOsirisChat is an Instagram, Facebook, and WhatsApp automation platform that allows businesses to automate direct messages, private replies, and lead capture via Meta's official APIs.",
+      "The platform connects to your Instagram Business, Facebook Page, and WhatsApp Business accounts through Meta's official OAuth and Embedded Signup flows and operates within Meta's permitted use policies.",
+      "All automation features are built on Meta's official Graph API and WhatsApp Cloud API. We do not use unofficial or unsupported access methods for any connected platform.",
     ],
   },
   {
     title: "Permitted Use",
     content: [
-      "You may use ManyOsirisChat solely for lawful business purposes in compliance with Meta's Platform Terms and Instagram's Community Guidelines.",
+      "You may use ManyOsirisChat solely for lawful business purposes in compliance with Meta's Platform Terms, Instagram's Community Guidelines, Facebook's Community Standards, and WhatsApp's Business Messaging Policy.",
       "You are responsible for all content sent through automated campaigns, including messages, keywords, and templates.",
       "You must not use the platform to send spam, unsolicited messages, or content that violates applicable laws or Meta's policies.",
-      "You must not attempt to circumvent Instagram's rate limits, terms of service, or any platform restrictions.",
-      "You are responsible for obtaining any necessary consent from recipients of automated messages where required by applicable law.",
+      "You must not attempt to circumvent Instagram's, Facebook's, or WhatsApp's rate limits, terms of service, or any platform restrictions.",
+      "You are responsible for obtaining any necessary consent from recipients of automated messages where required by applicable law, including WhatsApp's messaging opt-in requirements.",
     ],
   },
   {
@@ -35,16 +35,16 @@ const sections = [
       "You are responsible for maintaining the confidentiality of your login credentials.",
       "You must notify us immediately of any unauthorized access to your account.",
       "You are responsible for all activity that occurs under your account.",
-      "Each account may connect multiple Instagram Business accounts subject to your plan's limits.",
+      "Each account may connect multiple Instagram, Facebook, and WhatsApp accounts subject to your plan's limits.",
     ],
   },
   {
-    title: "Instagram and Meta Compliance",
+    title: "Meta Platform Compliance",
     content: [
-      "Your use of ManyOsirisChat must comply with Meta's Platform Terms, Instagram's API Terms, and Community Guidelines at all times.",
+      "Your use of ManyOsirisChat must comply with Meta's Platform Terms, API Terms, and Community Guidelines for every connected platform (Instagram, Facebook, and WhatsApp) at all times.",
       "We reserve the right to suspend or terminate your account if your use violates Meta's policies or puts our platform access at risk.",
       "Meta may revoke our API access at any time, which may affect platform functionality. We are not liable for service disruptions caused by Meta's decisions.",
-      "You acknowledge that Instagram automation is subject to Meta's policies and that certain features may be restricted or discontinued based on Meta's terms.",
+      "You acknowledge that platform automation is subject to Meta's policies and that certain features may be restricted or discontinued based on Meta's terms.",
     ],
   },
   {
@@ -52,7 +52,7 @@ const sections = [
     content: [
       "Our collection and use of your data is governed by our Privacy Policy, which is incorporated into these Terms by reference.",
       "You retain ownership of all data you input into the platform, including campaign content and lead records.",
-      "By connecting your Instagram account, you grant us permission to access and use your Instagram data as described in our Privacy Policy.",
+      "By connecting your Instagram, Facebook, or WhatsApp account, you grant us permission to access and use your data as described in our Privacy Policy.",
       "You may export or delete your data at any time as described in the Privacy Policy.",
     ],
   },
@@ -118,12 +118,13 @@ export default function TermsPage() {
         <div className="mx-auto max-w-4xl px-6 py-12">
           <div className="inline-flex items-center gap-2 rounded-full border border-emerald-200 bg-[#ECFDF5] px-3 py-1 text-xs font-medium text-emerald-700 mb-4">
             <span className="h-1.5 w-1.5 rounded-full bg-[#10B981]" />
-            Last updated: June 2026
+            Last updated: September 2026
           </div>
           <h1 className="text-3xl font-bold text-[#0F172A] mb-3">Terms of Service</h1>
           <p className="text-[#64748B] max-w-2xl leading-relaxed">
             These terms govern your use of ManyOsirisChat. By using the platform you agree to these terms.
-            Please read them carefully before connecting your Instagram account or running campaigns.
+            Please read them carefully before connecting your Instagram, Facebook, or WhatsApp account or
+            running campaigns.
           </p>
         </div>
       </div>

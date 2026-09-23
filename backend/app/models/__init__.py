@@ -16,6 +16,7 @@ from app.models.message import Message
 from app.models.meta_token import MetaToken
 from app.models.user import User
 from app.models.user_cooldown import UserCooldown
+from app.models.user_workspace_membership import UserWorkspaceMembership
 from app.models.webhook_event import WebhookEvent
 from app.models.webhook_health import WebhookHealth
 from app.models.whatsapp_account import WhatsappAccount
@@ -41,6 +42,7 @@ __all__ = [
     "MetaToken",
     "User",
     "UserCooldown",
+    "UserWorkspaceMembership",
     "WebhookEvent",
     "WebhookHealth",
     "WhatsappAccount",
