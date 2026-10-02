@@ -20,6 +20,11 @@ from app.models.user_workspace_membership import UserWorkspaceMembership
 from app.models.webhook_event import WebhookEvent
 from app.models.webhook_health import WebhookHealth
 from app.models.whatsapp_account import WhatsappAccount
+from app.models.whatsapp_campaign import WhatsappCampaign
+from app.models.whatsapp_campaign_recipient import WhatsappCampaignRecipient
+from app.models.whatsapp_consent_event import WhatsappConsentEvent
+from app.models.whatsapp_contact import WhatsappContact
+from app.models.whatsapp_template import WhatsappTemplate
 from app.models.whatsapp_token import WhatsappToken
 from app.models.workspace import Workspace
 
@@ -46,6 +51,11 @@ __all__ = [
     "WebhookEvent",
     "WebhookHealth",
     "WhatsappAccount",
+    "WhatsappCampaign",
+    "WhatsappCampaignRecipient",
+    "WhatsappConsentEvent",
+    "WhatsappContact",
+    "WhatsappTemplate",
     "WhatsappToken",
     "Workspace",
 ]

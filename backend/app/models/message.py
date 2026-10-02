@@ -56,6 +56,16 @@ class Message(Base):
     conversation_id: Mapped[uuid.UUID | None] = mapped_column(
         PGUUID(as_uuid=True), ForeignKey("conversations.id"), nullable=True
     )
+    whatsapp_campaign_id: Mapped[uuid.UUID | None] = mapped_column(
+        PGUUID(as_uuid=True),
+        ForeignKey("whatsapp_campaigns.id", name="fk_messages_whatsapp_campaign_id"),
+        nullable=True,
+    )
+    whatsapp_template_id: Mapped[uuid.UUID | None] = mapped_column(
+        PGUUID(as_uuid=True),
+        ForeignKey("whatsapp_templates.id", name="fk_messages_whatsapp_template_id"),
+        nullable=True,
+    )
     # inbound (from lead) | outbound (from us, includes AI replies)
     direction: Mapped[str] = mapped_column(String(20), default="outbound")
     source_media_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
@@ -70,6 +80,8 @@ class Message(Base):
     error_message: Mapped[str | None] = mapped_column(Text, nullable=True)
     retryable: Mapped[bool] = mapped_column(Boolean, default=False)
     retry_count: Mapped[int] = mapped_column(Integer, default=0)
+    delivered_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    read_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
     )

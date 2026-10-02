@@ -1,7 +1,7 @@
 import uuid
 from datetime import datetime
 
-from sqlalchemy import Boolean, DateTime, ForeignKey, Integer, String, Text, func
+from sqlalchemy import Boolean, CheckConstraint, DateTime, ForeignKey, Integer, String, Text, func
 from sqlalchemy.dialects.postgresql import UUID as PGUUID
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -18,6 +18,12 @@ class WhatsappAccount(Base):
     """
 
     __tablename__ = "whatsapp_accounts"
+    __table_args__ = (
+        CheckConstraint(
+            "quality_rating IS NULL OR quality_rating IN ('GREEN', 'YELLOW', 'RED')",
+            name="ck_whatsapp_accounts_quality_rating",
+        ),
+    )
 
     id: Mapped[uuid.UUID] = mapped_column(
         PGUUID(as_uuid=True), primary_key=True, default=uuid.uuid4
@@ -39,6 +45,15 @@ class WhatsappAccount(Base):
     ai_handoff_after_turns: Mapped[int] = mapped_column(Integer, default=8, server_default="8")
     ai_messages_sent_today: Mapped[int] = mapped_column(Integer, default=0)
     ai_budget_reset_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    quality_rating: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    messaging_limit_tier: Mapped[str | None] = mapped_column(String(30), nullable=True)
+    outreach_paused: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False, server_default="false"
+    )
+    outreach_paused_reason: Mapped[str | None] = mapped_column(Text, nullable=True)
+    health_checked_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True
     )
     created_at: Mapped[datetime] = mapped_column(
