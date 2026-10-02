@@ -16,6 +16,31 @@ only way numbers are connected.
    paused, sends stop.
 5. Workspace-scoped everywhere using the existing workspace dependencies in authz.py.
 
+## Approved implementation decisions
+- The enforceable outbound limit is `whatsapp_accounts.outreach_daily_cap`, scoped
+  per WhatsApp account. `messaging_limit_tier` is informational only.
+- Refused campaign recipients use `status='skipped_not_eligible'` and a fixed
+  machine-readable reason code in `error_code`.
+- The single send-policy entry point is
+  `check_can_send(db, *, contact, template, account, campaign=None)` and it returns
+  a decision object.
+- WhatsApp-specific send results carry Meta's numeric error code without changing
+  the shared `MetaMessageResult` type.
+- WA IDs are masked in WhatsApp-path logs. The webhook receiver redacts its payload
+  preview only when `object == 'whatsapp_business_account'`.
+- Existing `beat_schedule.py` behavior is left untouched. WhatsApp schedules are
+  registered from a separate module. Phase 0 found that the existing schedules
+  appear unregistered because `beat_schedule.py` is not imported by the Celery app.
+- State-changing webhook support is limited to confirmed payloads: message statuses,
+  template status, phone-number quality, and click-to-WhatsApp referrals.
+  `message_template_quality_update` and `account_update` remain stored as raw webhook
+  events but cause no state change until their current payloads are verified.
+- Contact upsert and `last_inbound_at` happen for every inbound message before any
+  disconnected-account or AI-disabled early exit. Opt-out keywords are honored even
+  when AI is disabled.
+- New write permissions are `manage_contacts`, `manage_templates`, and
+  `run_campaigns`; owner/admin receive them. All workspace members retain read access.
+
 ## Phase 0 — Read-only investigation (report before coding)
 Read: tasks.py WhatsApp path (_process_whatsapp_message_events,
 _dispatch_whatsapp_ai_turn, process_whatsapp_ai_conversation_turn), the webhook
@@ -25,6 +50,19 @@ clash: new code uses whatsapp_template_service.py), tests for WhatsApp.
 Report: where each hook point is, and what the current Graph API version setting
 means (META_GRAPH_API_VERSION is v21.0 — check Meta's current supported versions
 and flag it, do not bump silently).
+
+## Phase 0.5 — Outreach settings migration
+Add migration `0019_whatsapp_outreach_settings`, revising
+`0018_whatsapp_outreach`, and mirror its columns in `WhatsappAccount`:
+- `ctwa_counts_as_consent boolean NOT NULL DEFAULT false`
+- `transactional_utility_attested boolean NOT NULL DEFAULT false`
+- `opt_out_keywords jsonb NULL`
+- `opt_in_keywords jsonb NULL`
+- `outreach_daily_cap integer NOT NULL DEFAULT 250`
+
+`NULL` keyword arrays mean code defaults. Use explicit server defaults and model
+defaults, and explicitly named checks for a positive daily cap and JSON-array keyword
+overrides. Prove upgrade -> downgrade to exactly 0018 -> upgrade.
 
 ## Phase 1 — Webhooks
 Extend whatsapp_webhooks.py with parsers (pure functions + tests):
@@ -37,21 +75,27 @@ Extend whatsapp_webhooks.py with parsers (pure functions + tests):
   payloads "STOP"/"UNSUBSCRIBE" as opt-out.
 - messages[].referral (click-to-WhatsApp): set free_entry_point_expires_at = now+72h,
   and consent_source='click_to_whatsapp' only if the ad flow collected opt-in
-  (make this a per-account setting, default off).
-- Template/health events: message_template_status_update,
-  message_template_quality_update, phone_number_quality_update, account_update ->
-  update whatsapp_templates and whatsapp_accounts.
+  (`ctwa_counts_as_consent`, default off).
+- Confirmed template/health events: `message_template_status_update` updates
+  `whatsapp_templates`; `phone_number_quality_update` updates `whatsapp_accounts`.
+  Store `message_template_quality_update` and `account_update` as raw webhook events
+  but do not change application state from them yet.
 - Opt-out keywords: configurable list (English + Arabic: stop, unsubscribe, cancel,
   and Arabic equivalents of stop/unsubscribe). Exact-match on normalized short
   messages only, to avoid false opt-outs from long sentences.
 - Opt-in keywords (e.g. "START") set opted_in with source 'inbound_keyword'.
 - On every inbound message update contacts.last_inbound_at; create the contact
-  row if missing (consent stays 'unknown').
+  row if missing (consent stays 'unknown'). This runs before disconnected-account or
+  AI-disabled early exits, and opt-out processing also runs before those exits.
 - Deduplicate through the existing processed-webhook-event mechanism.
+- Mask WA IDs in WhatsApp-path logs. For WhatsApp webhook objects only, redact the
+  HTTP receiver's payload preview rather than logging message/recipient content.
 
 ## Phase 2 — Cloud API client (WhatsappClient + new WhatsappManagementClient)
 - send_template_message(access_token, phone_number_id, to, template_name, language,
   components) -> MetaMessageResult.
+- Use a WhatsApp-specific result wrapper that retains the numeric Meta error code;
+  do not modify the shared `MetaMessageResult`.
 - Templates: create, list, delete via /{waba_id}/message_templates.
 - Phone health: GET /{phone_number_id}?fields=quality_rating,messaging_limit_tier,
   verified_name,status (field names: verify against current Meta docs).
@@ -65,15 +109,18 @@ Extend whatsapp_webhooks.py with parsers (pure functions + tests):
   validate name format, category, variable count/examples.
 - window helper: in_service_window(contact) -> last_inbound_at within 24h;
   in_free_entry_window(contact).
-- outreach_service.check_can_send returns (allowed, reason) and checks, in order:
+- `outreach_service.check_can_send(db, *, contact, template, account, campaign=None)`
+  returns a decision object and checks, in order:
   account connected -> not outreach_paused -> quality not RED -> contact not
   opted_out -> marketing_consent=='opted_in' (for marketing templates; utility
   templates for an existing transaction may be allowed with consent 'unknown' only if
   the workspace attests a transactional relationship — default off) ->
-  template approved and not paused -> daily tier limit not exhausted
-  (count distinct recipients in rolling 24h vs messaging_limit_tier) -> not already
+  template approved and not paused -> per-account daily cap not exhausted
+  (count distinct recipients in rolling 24h vs `outreach_daily_cap`;
+  `messaging_limit_tier` is informational only) -> not already
   sent in this campaign.
-  Every refusal is recorded as a skipped_* recipient status with the reason.
+  Every refusal is recorded as `skipped_not_eligible`, with a fixed reason code in
+  `error_code`.
 - AI layer: must not send outside the window and must stop for opted_out contacts.
   Add a guard in the WhatsApp AI turn only (do NOT touch process_ai_conversation_turn).
 
@@ -83,12 +130,16 @@ Extend whatsapp_webhooks.py with parsers (pure functions + tests):
 - send_whatsapp_campaign_message(recipient_id): re-run check_can_send immediately
   before the API call, use a Redis token bucket at throttle_per_minute, retry
   retryable errors with exponential backoff, never retry 131049.
-- Beat: every 60 min sync template statuses; every 30 min refresh phone health
+- Register WhatsApp schedules in a separate module without importing or modifying
+  the existing `beat_schedule.py`: every 60 min sync template statuses; every 30 min
+  refresh phone health
   and auto-pause outreach (outreach_paused=true, reason recorded, campaigns ->
   paused) when quality is RED or the tier dropped.
 - Campaign completion rollup when no queued recipients remain.
 
 ## Phase 5 — API routes (routes_whatsapp_outreach.py, workspace-scoped, role-checked)
+- Authorization: owner/admin receive `manage_contacts`, `manage_templates`, and
+  `run_campaigns`; every workspace member can use read-only endpoints.
 - Contacts: list/filter, detail with consent history, CSV import (attestation required),
   manual consent grant/revoke.
 - Public opt-in: POST /public/whatsapp/opt-in/{signed_token}; token signs

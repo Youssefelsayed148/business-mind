@@ -2,7 +2,7 @@ import uuid
 from datetime import datetime
 
 from sqlalchemy import Boolean, CheckConstraint, DateTime, ForeignKey, Integer, String, Text, func
-from sqlalchemy.dialects.postgresql import UUID as PGUUID
+from sqlalchemy.dialects.postgresql import JSONB, UUID as PGUUID
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.db.base import Base
@@ -22,6 +22,18 @@ class WhatsappAccount(Base):
         CheckConstraint(
             "quality_rating IS NULL OR quality_rating IN ('GREEN', 'YELLOW', 'RED')",
             name="ck_whatsapp_accounts_quality_rating",
+        ),
+        CheckConstraint(
+            "opt_out_keywords IS NULL OR jsonb_typeof(opt_out_keywords) = 'array'",
+            name="ck_whatsapp_accounts_opt_out_keywords_array",
+        ),
+        CheckConstraint(
+            "opt_in_keywords IS NULL OR jsonb_typeof(opt_in_keywords) = 'array'",
+            name="ck_whatsapp_accounts_opt_in_keywords_array",
+        ),
+        CheckConstraint(
+            "outreach_daily_cap > 0",
+            name="ck_whatsapp_accounts_outreach_daily_cap",
         ),
     )
 
@@ -55,6 +67,21 @@ class WhatsappAccount(Base):
     outreach_paused_reason: Mapped[str | None] = mapped_column(Text, nullable=True)
     health_checked_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True
+    )
+    ctwa_counts_as_consent: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False, server_default="false"
+    )
+    transactional_utility_attested: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False, server_default="false"
+    )
+    opt_out_keywords: Mapped[list | None] = mapped_column(
+        JSONB, nullable=True, default=None
+    )
+    opt_in_keywords: Mapped[list | None] = mapped_column(
+        JSONB, nullable=True, default=None
+    )
+    outreach_daily_cap: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=250, server_default="250"
     )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()

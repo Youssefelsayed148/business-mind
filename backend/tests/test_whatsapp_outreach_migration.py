@@ -31,6 +31,18 @@ ACCOUNT_COLUMNS = {
     "outreach_paused_reason",
     "health_checked_at",
 }
+SETTINGS_COLUMNS = {
+    "ctwa_counts_as_consent",
+    "transactional_utility_attested",
+    "opt_out_keywords",
+    "opt_in_keywords",
+    "outreach_daily_cap",
+}
+SETTINGS_CONSTRAINTS = {
+    "ck_whatsapp_accounts_opt_out_keywords_array",
+    "ck_whatsapp_accounts_opt_in_keywords_array",
+    "ck_whatsapp_accounts_outreach_daily_cap",
+}
 MESSAGE_COLUMNS = {
     "whatsapp_campaign_id",
     "whatsapp_template_id",
@@ -83,7 +95,11 @@ def _strip_0018_shape(conn: psycopg.Connection) -> None:
         "ALTER TABLE whatsapp_accounts "
         "DROP CONSTRAINT IF EXISTS ck_whatsapp_accounts_quality_rating"
     )
-    for column in ACCOUNT_COLUMNS:
+    for constraint in SETTINGS_CONSTRAINTS:
+        conn.execute(
+            f'ALTER TABLE whatsapp_accounts DROP CONSTRAINT IF EXISTS "{constraint}"'
+        )
+    for column in ACCOUNT_COLUMNS | SETTINGS_COLUMNS:
         conn.execute(f'ALTER TABLE whatsapp_accounts DROP COLUMN IF EXISTS "{column}"')
 
     for table in (
@@ -188,7 +204,7 @@ def test_0018_constraints_backfill_idempotency_and_round_trip(migration_database
     workspace_id = migration_database["workspace_id"]
     first_valid_lead_id = migration_database["first_valid_lead_id"]
 
-    upgrade = _run_alembic(database_url, "upgrade", "head")
+    upgrade = _run_alembic(database_url, "upgrade", "0018_whatsapp_outreach")
     migration_output = upgrade.stdout + upgrade.stderr
     assert "leads=6 eligible=3 inserted=1" in migration_output
     assert "invalid_skipped=3 duplicate_candidates=2 already_present=0" in migration_output
@@ -355,7 +371,9 @@ def test_0018_constraints_backfill_idempotency_and_round_trip(migration_database
         }
         assert not leftover_names
 
-    second_upgrade = _run_alembic(database_url, "upgrade", "head")
+    second_upgrade = _run_alembic(
+        database_url, "upgrade", "0018_whatsapp_outreach"
+    )
     assert second_upgrade.returncode == 0
     current = _run_alembic(database_url, "current")
     assert "0018_whatsapp_outreach" in current.stdout
