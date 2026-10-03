@@ -10,6 +10,7 @@ from app.db.session import get_db
 from app.models.automation_log import AutomationLog
 from app.models.campaign import Campaign
 from app.models.comment import Comment
+from app.models.lead import Lead
 from app.models.message import Message
 from app.models.user import User
 from app.services.message_service import get_message_for_send, mark_message_skipped
@@ -96,6 +97,17 @@ async def retry_message(
     message = get_message_for_send(db, message_id)
     if not message:
         raise HTTPException(status_code=404, detail="Message not found")
+
+    lead_platform = (
+        db.query(Lead.platform).filter(Lead.id == message.lead_id).scalar()
+        if message.whatsapp_campaign_id is None
+        else None
+    )
+    if message.whatsapp_campaign_id is not None or lead_platform != "instagram":
+        raise HTTPException(
+            status_code=400,
+            detail="WhatsApp messages are retried by their campaign",
+        )
 
     if message.status in ("sent", "expired"):
         raise HTTPException(
