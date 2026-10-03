@@ -34,6 +34,8 @@ class OutreachSendResult:
     message_id: UUID | None = None
     provider_message_id: str | None = None
     deferrable: bool = False
+    retryable: bool = False
+    meta_error_code: int | None = None
 
 
 _DELIVERED_MESSAGE_STATUSES = {"sending", "sent", "delivered", "read"}
@@ -51,6 +53,7 @@ TERMINAL_REFUSAL_REASONS = frozenset(
         "template_paused",
         "template_category_unsupported",
         "already_sent_in_campaign",
+        "variable_unresolved",
     }
 )
 DEFERRABLE_REFUSAL_REASONS = frozenset(
@@ -110,6 +113,17 @@ def _refuse(
                 campaign.skipped_count += 1
         db.flush()
     return SendDecision(False, reason, deferrable=deferrable)
+
+
+def refuse_campaign_recipient(
+    db: Session,
+    *,
+    campaign: WhatsappCampaign,
+    contact: WhatsappContact,
+    reason: str,
+) -> SendDecision:
+    """Record a policy-equivalent refusal without making an API call."""
+    return _refuse(db, campaign=campaign, contact=contact, reason=reason)
 
 
 def _daily_recipient_count(db: Session, account: WhatsappAccount, now: datetime) -> int:
@@ -334,7 +348,12 @@ def send_outreach_message(
         campaign.failed_count += 1
     db.commit()
     return OutreachSendResult(
-        result.success, reason, message.id, result.provider_message_id
+        result.success,
+        reason,
+        message.id,
+        result.provider_message_id,
+        retryable=bool(result.retryable and reason != "outcome_unknown"),
+        meta_error_code=result.meta_error_code,
     )
 
 
@@ -378,10 +397,12 @@ def retryable_failed_recipients(
 ) -> list[WhatsappCampaignRecipient]:
     return (
         db.query(WhatsappCampaignRecipient)
+        .join(Message, Message.id == WhatsappCampaignRecipient.message_id)
         .filter(
             WhatsappCampaignRecipient.campaign_id == campaign_id,
             WhatsappCampaignRecipient.status == "failed",
             WhatsappCampaignRecipient.error_code != "outcome_unknown",
+            Message.retryable.is_(True),
         )
         .all()
     )

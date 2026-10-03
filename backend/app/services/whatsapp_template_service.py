@@ -47,6 +47,11 @@ def _template_placeholders(template: WhatsappTemplate) -> set[int]:
     return placeholders
 
 
+def template_placeholder_indexes(template: WhatsappTemplate) -> set[int]:
+    """Return the numbered placeholders used by renderable components."""
+    return _template_placeholders(template)
+
+
 def _variable_map(variables: list[object] | tuple[object, ...] | dict) -> dict[int, object]:
     if isinstance(variables, (list, tuple)):
         return {index: value for index, value in enumerate(variables, start=1)}

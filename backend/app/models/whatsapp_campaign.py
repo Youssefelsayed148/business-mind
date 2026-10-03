@@ -50,6 +50,9 @@ class WhatsappCampaign(Base):
     scheduled_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True
     )
+    completed_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
     throttle_per_minute: Mapped[int] = mapped_column(
         Integer, nullable=False, default=30, server_default="30"
     )
