@@ -33,7 +33,7 @@ class WhatsappTemplate(Base):
             name="ck_whatsapp_templates_category",
         ),
         CheckConstraint(
-            "status IN ('draft', 'pending', 'approved', 'rejected', 'paused', 'disabled')",
+            "status IN ('draft', 'pending', 'approved', 'rejected', 'paused', 'disabled', 'deleted')",
             name="ck_whatsapp_templates_status",
         ),
     )

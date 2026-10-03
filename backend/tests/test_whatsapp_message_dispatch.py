@@ -198,7 +198,7 @@ def test_configured_opt_in_keyword_grants_consent_from_unknown(db_session):
 
 
 @skip_if_no_db
-def test_ctwa_sets_72_hour_window_but_not_consent_by_default(db_session):
+def test_ctwa_sets_72_hour_window_and_records_evidence_but_not_consent_by_default(db_session):
     account = _seed_account(db_session, ctwa_counts_as_consent=False)
     _run_webhook(db_session, _dm_payload(
         account, "16315551234", "hello", "wamid.ctwa",
@@ -208,11 +208,13 @@ def test_ctwa_sets_72_hour_window_but_not_consent_by_default(db_session):
     expected = datetime.fromtimestamp(1700000000, tz=timezone.utc)
     assert contact.free_entry_point_expires_at == expected + timedelta(hours=72)
     assert contact.marketing_consent == "unknown"
-    assert db_session.query(WhatsappConsentEvent).filter_by(contact_id=contact.id).count() == 0
+    event = db_session.query(WhatsappConsentEvent).filter_by(contact_id=contact.id).one()
+    assert event.source == "click_to_whatsapp"
+    assert event.evidence["temporary_window_only"] is True
 
 
 @skip_if_no_db
-def test_ctwa_can_count_as_consent_only_when_account_setting_enabled(db_session):
+def test_ctwa_flag_does_not_persist_marketing_consent(db_session):
     account = _seed_account(db_session, ctwa_counts_as_consent=True)
     _run_webhook(db_session, _dm_payload(
         account, "16315551234", "hello", "wamid.ctwa-consent",
@@ -220,8 +222,8 @@ def test_ctwa_can_count_as_consent_only_when_account_setting_enabled(db_session)
     ))
     contact = db_session.query(WhatsappContact).filter_by(whatsapp_account_id=account.id).one()
     event = db_session.query(WhatsappConsentEvent).filter_by(contact_id=contact.id).one()
-    assert contact.marketing_consent == "opted_in"
-    assert contact.consent_source == "click_to_whatsapp"
+    assert contact.marketing_consent == "unknown"
+    assert contact.consent_source is None
     assert event.source == "click_to_whatsapp"
 
 

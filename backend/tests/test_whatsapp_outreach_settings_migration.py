@@ -137,7 +137,7 @@ def test_0019_defaults_constraints_and_round_trip(migration_database):
 
     _run_alembic(database_url, "upgrade", "head")
     current = _run_alembic(database_url, "current")
-    assert "0019_whatsapp_outreach_settings" in current.stdout
+    assert "0020_whatsapp_outreach_services" in current.stdout
 
     with psycopg.connect(dsn, autocommit=True) as conn:
         columns, constraints = _account_shape(conn)
@@ -186,7 +186,7 @@ def test_0019_defaults_constraints_and_round_trip(migration_database):
                 (account_id,),
             )
 
-    _run_alembic(database_url, "downgrade", "-1")
+    _run_alembic(database_url, "downgrade", "0018_whatsapp_outreach")
     current = _run_alembic(database_url, "current")
     assert "0018_whatsapp_outreach" in current.stdout
     with psycopg.connect(dsn) as conn:
@@ -196,7 +196,7 @@ def test_0019_defaults_constraints_and_round_trip(migration_database):
 
     _run_alembic(database_url, "upgrade", "head")
     current = _run_alembic(database_url, "current")
-    assert "0019_whatsapp_outreach_settings" in current.stdout
+    assert "0020_whatsapp_outreach_services" in current.stdout
     with psycopg.connect(dsn) as conn:
         columns, constraints = _account_shape(conn)
         assert NEW_COLUMNS <= columns

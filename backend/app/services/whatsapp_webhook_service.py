@@ -227,6 +227,18 @@ def _apply_consent(
             or expires_at > contact.free_entry_point_expires_at
         ):
             contact.free_entry_point_expires_at = expires_at
+        _record_consent_change(
+            db,
+            contact=contact,
+            event_type="import",
+            source="click_to_whatsapp",
+            evidence={
+                "message_id": event.message_id,
+                "source_id": event.referral.data.get("source_id"),
+                "source_url": event.referral.data.get("source_url"),
+                "temporary_window_only": True,
+            },
+        )
 
     if keyword is not None and keyword in opt_out:
         if contact.marketing_consent != "opted_out":
@@ -262,22 +274,7 @@ def _apply_consent(
         return "opt_in"
 
     if event.referral is not None:
-        if account.ctwa_counts_as_consent and contact.marketing_consent == "unknown":
-            contact.marketing_consent = "opted_in"
-            contact.consent_source = "click_to_whatsapp"
-            contact.consent_at = event_time
-            _record_consent_change(
-                db,
-                contact=contact,
-                event_type="opt_in",
-                source="click_to_whatsapp",
-                evidence={
-                    "message_id": event.message_id,
-                    "source_id": event.referral.data.get("source_id"),
-                    "source_url": event.referral.data.get("source_url"),
-                },
-            )
-            return "opt_in"
+        return "ctwa_referral"
     return None
 
 
@@ -448,14 +445,14 @@ def process_whatsapp_status_events(
         message.status = event.status
 
         if event.status == "sent":
-            if recipient is not None and old_recipient_status == "queued":
+            if recipient is not None and old_recipient_status in {"queued", "pending", "sending"}:
                 recipient.status = "sent"
                 recipient.sent_at = event_time
                 _increment(campaign, "sent_count")
         elif event.status == "delivered":
             message.delivered_at = event_time
             if recipient is not None and old_recipient_status != "read":
-                if old_recipient_status == "queued":
+                if old_recipient_status in {"queued", "pending", "sending"}:
                     _increment(campaign, "sent_count")
                 if old_recipient_status not in {"delivered", "read"}:
                     _increment(campaign, "delivered_count")
@@ -465,7 +462,7 @@ def process_whatsapp_status_events(
             message.delivered_at = message.delivered_at or event_time
             message.read_at = event_time
             if recipient is not None and old_recipient_status != "read":
-                if old_recipient_status == "queued":
+                if old_recipient_status in {"queued", "pending", "sending"}:
                     _increment(campaign, "sent_count")
                 if old_recipient_status not in {"delivered", "read"}:
                     _increment(campaign, "delivered_count")

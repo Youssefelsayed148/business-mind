@@ -34,8 +34,8 @@ class Message(Base):
     campaign_id: Mapped[uuid.UUID | None] = mapped_column(
         PGUUID(as_uuid=True), ForeignKey("campaigns.id"), nullable=True
     )
-    lead_id: Mapped[uuid.UUID] = mapped_column(
-        PGUUID(as_uuid=True), ForeignKey("leads.id"), nullable=False
+    lead_id: Mapped[uuid.UUID | None] = mapped_column(
+        PGUUID(as_uuid=True), ForeignKey("leads.id"), nullable=True
     )
     comment_id: Mapped[uuid.UUID | None] = mapped_column(
         PGUUID(as_uuid=True), ForeignKey("comments.id"), nullable=True

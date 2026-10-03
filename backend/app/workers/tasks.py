@@ -40,6 +40,7 @@ from app.models.lead import Lead
 from app.models.message import Message
 from app.models.webhook_event import WebhookEvent
 from app.models.whatsapp_account import WhatsappAccount
+from app.models.whatsapp_contact import WhatsappContact
 from app.services import ai_service, conversation_service
 from app.services import facebook_token_service, whatsapp_token_service
 from app.services.campaign_matcher import find_matching_campaigns, find_matching_keyword
@@ -59,6 +60,7 @@ from app.services.whatsapp_webhook_service import (
     process_whatsapp_status_events,
     process_whatsapp_template_status_events,
 )
+from app.services.whatsapp_window_service import in_service_window
 from app.services.message_service import (
     create_queued_message,
     get_message_by_context,
@@ -2707,6 +2709,29 @@ def process_whatsapp_ai_conversation_turn(conversation_id: str, inbound_message_
         lead = db.query(Lead).filter(Lead.id == conversation.lead_id).first()
         if not lead:
             logger.warning("Lead not found for WhatsApp AI turn", extra={"conversation_id": conversation_id})
+            return
+
+        contact = (
+            db.query(WhatsappContact)
+            .filter(
+                WhatsappContact.whatsapp_account_id == account.id,
+                WhatsappContact.wa_id == lead.ig_user_id,
+            )
+            .first()
+        )
+        if (
+            contact is None
+            or contact.marketing_consent == "opted_out"
+            or not in_service_window(contact)
+        ):
+            conversation_service.hand_off(db, conversation, "whatsapp_window_closed")
+            log_action(
+                db,
+                "ai_conversation_handed_off",
+                lead_id=lead.id,
+                whatsapp_account_id=account.id,
+                details={"conversation_id": conversation_id, "reason": "whatsapp_window_closed"},
+            )
             return
 
         result = ai_service.generate_reply(db, account, None, conversation.id, platform="whatsapp")

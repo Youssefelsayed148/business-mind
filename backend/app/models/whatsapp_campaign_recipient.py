@@ -28,7 +28,7 @@ class WhatsappCampaignRecipient(Base):
             name="uq_whatsapp_campaign_recipients_campaign_contact",
         ),
         CheckConstraint(
-            "status IN ('queued', 'sent', 'delivered', 'read', 'failed', "
+            "status IN ('queued', 'pending', 'sending', 'sent', 'delivered', 'read', 'failed', "
             "'skipped_no_consent', 'skipped_opted_out', 'skipped_not_eligible')",
             name="ck_whatsapp_campaign_recipients_status",
         ),
@@ -63,7 +63,7 @@ class WhatsappCampaignRecipient(Base):
         nullable=False,
     )
     status: Mapped[str] = mapped_column(
-        String(30), nullable=False, default="queued", server_default="queued"
+        String(30), nullable=False, default="pending", server_default="pending"
     )
     message_id: Mapped[uuid.UUID | None] = mapped_column(
         PGUUID(as_uuid=True),

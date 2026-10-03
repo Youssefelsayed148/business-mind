@@ -37,6 +37,10 @@ class Settings(BaseSettings):
     # Signup). Uses the same META_APP_ID/META_APP_SECRET as Instagram since
     # both are products on the same Meta App.
     WHATSAPP_EMBEDDED_SIGNUP_CONFIG_ID: str = ""
+    WHATSAPP_OUTREACH_ENABLED: bool = False
+    WHATSAPP_HEALTH_STALE_MINUTES: int = 60
+    WHATSAPP_CAMPAIGN_BREAKER_WINDOW: int = 20
+    WHATSAPP_CAMPAIGN_BREAKER_FAILURE_THRESHOLD: float = 0.25
 
     # Facebook Page connection uses "Facebook Login for Business" — the same
     # config_id/FB.login() mechanism as WhatsApp's Embedded Signup, but a
