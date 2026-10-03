@@ -21,6 +21,7 @@ from app.models.message import Message
 from app.models.processed_webhook_event import ProcessedWebhookEvent  # noqa: F401 (register table)
 from app.models.webhook_event import WebhookEvent
 from app.models.whatsapp_account import WhatsappAccount
+from app.models.whatsapp_contact import WhatsappContact
 from app.models.workspace import Workspace
 from tests.conftest import skip_if_no_db
 
@@ -112,7 +113,15 @@ def test_disconnected_whatsapp_account_does_not_dispatch(db_session: Session):
 
     assert event.processing_status == "processed"
     assert not mock_turn.delay.called
-    assert db_session.query(Lead).filter(Lead.whatsapp_account_id == account.id).count() == 0
+    lead = db_session.query(Lead).filter(Lead.whatsapp_account_id == account.id).one()
+    contact = (
+        db_session.query(WhatsappContact)
+        .filter(WhatsappContact.whatsapp_account_id == account.id)
+        .one()
+    )
+    assert contact.lead_id == lead.id
+    assert contact.last_inbound_at is not None
+    assert contact.marketing_consent == "unknown"
 
 
 @skip_if_no_db

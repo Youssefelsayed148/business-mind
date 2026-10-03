@@ -1,14 +1,6 @@
-"""Coverage for the WhatsApp inbound-message dispatch path: an unknown WA ID
-messages a connected WhatsApp number, and (if that account has AI enabled) a
-Lead + Conversation get created and process_whatsapp_ai_conversation_turn is
-dispatched — the WhatsApp equivalent of test_cold_dm_ai_dispatch.py.
+"""Database coverage for Phase 1's inbound WhatsApp pipeline."""
 
-process_webhook_event() is invoked directly (as a plain function) with the
-test DB session injected via `_get_db`, and
-process_whatsapp_ai_conversation_turn is mocked — so these need only
-PostgreSQL, no Celery/Redis.
-"""
-
+from datetime import datetime, timedelta, timezone
 from unittest.mock import patch
 from uuid import uuid4
 
@@ -16,79 +8,64 @@ from sqlalchemy.orm import Session
 
 from app.models.conversation import Conversation
 from app.models.lead import Lead
-from app.models.processed_webhook_event import ProcessedWebhookEvent  # noqa: F401 (register table)
+from app.models.processed_webhook_event import ProcessedWebhookEvent  # noqa: F401
 from app.models.webhook_event import WebhookEvent
 from app.models.whatsapp_account import WhatsappAccount
+from app.models.whatsapp_consent_event import WhatsappConsentEvent
+from app.models.whatsapp_contact import WhatsappContact
 from app.models.workspace import Workspace
 from tests.conftest import skip_if_no_db
 
 
 def _fresh_phone_number_id() -> str:
-    return f"phone_{uuid4().int % 10_000_000}"
+    return f"phone_{uuid4().hex}"
 
 
-def _seed_account(db: Session, phone_number_id: str, *, ai_enabled: bool) -> WhatsappAccount:
-    ws = Workspace(id=uuid4(), name="Default", slug=f"wa-{uuid4().hex[:8]}")
-    db.add(ws)
-    db.commit()
-
+def _seed_account(db: Session, *, ai_enabled=False, **settings) -> WhatsappAccount:
+    workspace = Workspace(name="Default", slug=f"wa-{uuid4().hex[:12]}")
+    db.add(workspace)
+    db.flush()
     account = WhatsappAccount(
-        id=uuid4(),
-        workspace_id=ws.id,
-        phone_number_id=phone_number_id,
+        workspace_id=workspace.id,
+        phone_number_id=_fresh_phone_number_id(),
         display_phone_number="+1 650 555 1111",
         ai_enabled=ai_enabled,
         ai_daily_message_cap=100,
         ai_handoff_after_turns=8,
+        **settings,
     )
     db.add(account)
     db.commit()
     return account
 
 
-def _dm_payload(phone_number_id: str, sender_wa_id: str, text: str, message_id: str) -> dict:
-    return {
-        "object": "whatsapp_business_account",
-        "entry": [
-            {
-                "id": "waba_1",
-                "changes": [
-                    {
-                        "value": {
-                            "metadata": {"phone_number_id": phone_number_id},
-                            "contacts": [{"profile": {"name": "Test User"}, "wa_id": sender_wa_id}],
-                            "messages": [
-                                {
-                                    "from": sender_wa_id,
-                                    "id": message_id,
-                                    "timestamp": "1700000000",
-                                    "text": {"body": text},
-                                    "type": "text",
-                                }
-                            ],
-                        },
-                        "field": "messages",
-                    }
-                ],
-            }
-        ],
+def _dm_payload(account, sender, text, message_id, *, timestamp="1700000000", referral=None):
+    message = {
+        "from": sender, "id": message_id, "timestamp": timestamp,
+        "text": {"body": text}, "type": "text",
     }
+    if referral is not None:
+        message["referral"] = referral
+    return {"object": "whatsapp_business_account", "entry": [{"id": "waba-1", "changes": [{
+        "field": "messages", "value": {
+            "metadata": {"phone_number_id": account.phone_number_id},
+            "contacts": [{"profile": {"name": "Test User"}, "wa_id": sender}],
+            "messages": [message],
+        },
+    }]}]}
 
 
 def _run_webhook(db: Session, payload: dict):
     from app.workers import tasks
 
     event = WebhookEvent(
-        provider="meta",
-        external_event_id=uuid4().hex,
-        event_type="whatsapp_business_account",
-        payload=payload,
+        provider="meta", external_event_id=uuid4().hex,
+        event_type="whatsapp_business_account", payload=payload,
         processing_status="pending",
     )
     db.add(event)
     db.commit()
-
-    orig_close = db.close
+    original_close = db.close
     db.close = lambda: None
     try:
         with patch.object(tasks, "_get_db", return_value=db), patch.object(
@@ -96,99 +73,185 @@ def _run_webhook(db: Session, payload: dict):
         ) as mock_turn:
             tasks.process_webhook_event(str(event.id))
     finally:
-        db.close = orig_close
-
+        db.close = original_close
     db.refresh(event)
     return event, mock_turn
 
 
 @skip_if_no_db
-def test_account_not_found_is_skipped(db_session: Session):
+def test_identity_is_upserted_before_ai_disabled_exit_and_plain_text_never_infers_consent(db_session):
+    account = _seed_account(db_session, ai_enabled=False)
     event, mock_turn = _run_webhook(
-        db_session, _dm_payload("nonexistent_phone", "16315551234", "hi", "wamid.1")
+        db_session, _dm_payload(account, "+1 (631) 555-1234", "hello", "wamid.plain")
     )
     assert event.processing_status == "processed"
-    assert not mock_turn.called
-    assert db_session.query(Lead).filter(Lead.ig_user_id == "16315551234").first() is None
+    assert not mock_turn.delay.called
+    lead = db_session.query(Lead).filter(Lead.whatsapp_account_id == account.id).one()
+    contact = db_session.query(WhatsappContact).filter_by(whatsapp_account_id=account.id).one()
+    assert lead.ig_user_id == "16315551234"
+    assert contact.wa_id == "16315551234"
+    assert contact.last_inbound_at == datetime.fromtimestamp(1700000000, tz=timezone.utc)
+    assert contact.marketing_consent == "unknown"
+    assert db_session.query(WhatsappConsentEvent).filter_by(contact_id=contact.id).count() == 0
 
 
 @skip_if_no_db
-def test_account_ai_disabled_skips_without_creating_lead(db_session: Session):
-    phone_number_id = _fresh_phone_number_id()
-    _seed_account(db_session, phone_number_id, ai_enabled=False)
-
-    event, mock_turn = _run_webhook(
-        db_session, _dm_payload(phone_number_id, "16315551234", "hi", "wamid.1")
-    )
-    assert event.processing_status == "processed"
-    assert not mock_turn.called
-    assert db_session.query(Lead).filter(Lead.ig_user_id == "16315551234").first() is None
+def test_non_text_inbound_still_upserts_contact_without_ai_dispatch(db_session):
+    account = _seed_account(db_session, ai_enabled=True)
+    payload = _dm_payload(account, "16315551234", "placeholder", "wamid.image")
+    message = payload["entry"][0]["changes"][0]["value"]["messages"][0]
+    message.pop("text")
+    message["type"] = "image"
+    message["image"] = {"id": "media-1"}
+    _, mock_turn = _run_webhook(db_session, payload)
+    contact = db_session.query(WhatsappContact).filter_by(whatsapp_account_id=account.id).one()
+    assert contact.last_inbound_at is not None
+    assert contact.marketing_consent == "unknown"
+    assert not mock_turn.delay.called
 
 
 @skip_if_no_db
-def test_ai_enabled_creates_lead_and_conversation_and_dispatches(db_session: Session):
-    phone_number_id = _fresh_phone_number_id()
-    account = _seed_account(db_session, phone_number_id, ai_enabled=True)
-
-    event, mock_turn = _run_webhook(
-        db_session, _dm_payload(phone_number_id, "16315551234", "do you deliver?", "wamid.1")
+def test_formatted_existing_lead_is_found_without_rewriting(db_session):
+    account = _seed_account(db_session)
+    existing = Lead(
+        workspace_id=account.workspace_id, platform="whatsapp",
+        whatsapp_account_id=account.id, instagram_account_id=None,
+        ig_user_id="+1 (631) 555-1234", lead_source="cold_dm", status="new",
     )
-    assert event.processing_status == "processed"
+    db_session.add(existing)
+    db_session.commit()
+    original_id = existing.id
+    _run_webhook(db_session, _dm_payload(account, "16315551234", "hello", "wamid.existing"))
+    leads = db_session.query(Lead).filter_by(whatsapp_account_id=account.id).all()
+    assert [(lead.id, lead.ig_user_id) for lead in leads] == [(original_id, "+1 (631) 555-1234")]
+    assert db_session.query(WhatsappContact).filter_by(lead_id=original_id, wa_id="16315551234").one()
+
+
+@skip_if_no_db
+def test_opt_out_is_honoured_with_ai_disabled_and_writes_consent_event(db_session):
+    account = _seed_account(db_session, ai_enabled=False)
+    _, mock_turn = _run_webhook(
+        db_session, _dm_payload(account, "16315551234", "  STOP  ", "wamid.stop")
+    )
+    contact = db_session.query(WhatsappContact).filter_by(whatsapp_account_id=account.id).one()
+    consent = db_session.query(WhatsappConsentEvent).filter_by(contact_id=contact.id).one()
+    assert contact.marketing_consent == "opted_out"
+    assert contact.consent_source == "inbound_keyword"
+    assert consent.event_type == "opt_out"
+    assert consent.evidence["keyword"] == "stop"
+    assert not mock_turn.delay.called
+
+
+@skip_if_no_db
+def test_cancel_is_not_default_opt_out_and_is_passed_to_ai(db_session):
+    account = _seed_account(db_session, ai_enabled=True)
+    _, mock_turn = _run_webhook(
+        db_session, _dm_payload(account, "16315551234", "cancel", "wamid.cancel")
+    )
+    contact = db_session.query(WhatsappContact).filter_by(whatsapp_account_id=account.id).one()
+    assert contact.marketing_consent == "unknown"
+    assert db_session.query(WhatsappConsentEvent).filter_by(contact_id=contact.id).count() == 0
     assert mock_turn.delay.called
 
-    lead = db_session.query(Lead).filter(Lead.ig_user_id == "16315551234").first()
-    assert lead is not None
-    assert lead.platform == "whatsapp"
-    assert lead.whatsapp_account_id == account.id
-    assert lead.instagram_account_id is None
-    assert lead.lead_source == "cold_dm"
-    assert lead.ig_username == "Test User"
 
-    conversation = db_session.query(Conversation).filter(Conversation.lead_id == lead.id).first()
-    assert conversation is not None
-    assert conversation.platform == "whatsapp"
-    assert conversation.whatsapp_account_id == account.id
-    assert conversation.instagram_account_id is None
-    assert conversation.campaign_id is None
+@skip_if_no_db
+def test_account_keyword_override_is_exact(db_session):
+    account = _seed_account(db_session, opt_out_keywords=["HALT"])
+    _run_webhook(db_session, _dm_payload(account, "16315551234", "STOP", "wamid.default-disabled"))
+    contact = db_session.query(WhatsappContact).filter_by(whatsapp_account_id=account.id).one()
+    assert contact.marketing_consent == "unknown"
+    _run_webhook(db_session, _dm_payload(account, "16315551234", "halt now", "wamid.not-exact"))
+    assert contact.marketing_consent == "unknown"
+    _run_webhook(db_session, _dm_payload(account, "16315551234", " HALT ", "wamid.override"))
+    db_session.refresh(contact)
+    assert contact.marketing_consent == "opted_out"
 
 
 @skip_if_no_db
-def test_existing_lead_is_reused_not_duplicated(db_session: Session):
-    phone_number_id = _fresh_phone_number_id()
-    _seed_account(db_session, phone_number_id, ai_enabled=True)
-
-    _run_webhook(db_session, _dm_payload(phone_number_id, "16315551234", "first message", "wamid.1"))
-    _run_webhook(db_session, _dm_payload(phone_number_id, "16315551234", "second message", "wamid.2"))
-
-    leads = db_session.query(Lead).filter(Lead.ig_user_id == "16315551234").all()
-    assert len(leads) == 1
+def test_default_opt_in_keyword_does_not_grant_consent_from_unknown(db_session):
+    account = _seed_account(db_session, ai_enabled=False)
+    _run_webhook(db_session, _dm_payload(account, "16315551234", "start", "wamid.start"))
+    contact = db_session.query(WhatsappContact).filter_by(whatsapp_account_id=account.id).one()
+    assert contact.marketing_consent == "unknown"
+    assert db_session.query(WhatsappConsentEvent).filter_by(contact_id=contact.id).count() == 0
 
 
-def test_dispatch_loop_checks_and_marks_processed_before_lead_lookup():
-    """Not a DB test: confirms _process_whatsapp_message_events calls the
-    shared check_and_mark_processed() guard (same dedup mechanism the
-    Instagram message loop uses, unmodified by this phase) before doing any
-    account/lead work, and skips the rest of the loop body when it returns
-    False.
+@skip_if_no_db
+def test_default_opt_in_keyword_resubscribes_opted_out_contact(db_session):
+    account = _seed_account(db_session, ai_enabled=False)
+    _run_webhook(db_session, _dm_payload(account, "16315551234", "stop", "wamid.stop-first"))
+    _run_webhook(db_session, _dm_payload(account, "16315551234", "start", "wamid.start-after-stop"))
+    contact = db_session.query(WhatsappContact).filter_by(whatsapp_account_id=account.id).one()
+    events = db_session.query(WhatsappConsentEvent).filter_by(contact_id=contact.id).all()
+    assert contact.marketing_consent == "opted_in"
+    assert sorted(event.event_type for event in events) == ["opt_in", "opt_out"]
 
-    A live end-to-end duplicate-delivery test would need to trigger
-    check_and_mark_processed()'s IntegrityError -> db.rollback() path
-    in-session, which this test harness's db_session fixture doesn't support
-    (rollback() expires the whole identity map — including objects committed
-    moments earlier in the same test — since the session is bound directly
-    to an externally-managed connection with no savepoint listener; the
-    pre-existing Instagram equivalents, test_duplicate_webhook_does_not_duplicate_message
-    and test_duplicate_comment_does_not_duplicate_message, are in the
-    project's known pre-existing failure baseline for related reasons).
-    Verified by source inspection instead, which is what actually matters
-    here: the dedup call and its is_new guard are unchanged from the pattern
-    every other message loop in this codebase already uses.
-    """
-    import inspect
 
-    from app.workers import tasks
+@skip_if_no_db
+def test_configured_opt_in_keyword_grants_consent_from_unknown(db_session):
+    account = _seed_account(db_session, ai_enabled=False, opt_in_keywords=["JOIN"])
+    _run_webhook(db_session, _dm_payload(account, "16315551234", " join ", "wamid.join"))
+    contact = db_session.query(WhatsappContact).filter_by(whatsapp_account_id=account.id).one()
+    consent = db_session.query(WhatsappConsentEvent).filter_by(contact_id=contact.id).one()
+    assert contact.marketing_consent == "opted_in"
+    assert consent.event_type == "opt_in"
 
-    source = inspect.getsource(tasks._process_whatsapp_message_events)
-    assert "check_and_mark_processed(" in source
-    assert "if not is_new:" in source
-    assert "continue" in source
+
+@skip_if_no_db
+def test_ctwa_sets_72_hour_window_but_not_consent_by_default(db_session):
+    account = _seed_account(db_session, ctwa_counts_as_consent=False)
+    _run_webhook(db_session, _dm_payload(
+        account, "16315551234", "hello", "wamid.ctwa",
+        referral={"source_url": "https://example.test/ad", "source_id": "ad-1", "source_type": "ad"},
+    ))
+    contact = db_session.query(WhatsappContact).filter_by(whatsapp_account_id=account.id).one()
+    expected = datetime.fromtimestamp(1700000000, tz=timezone.utc)
+    assert contact.free_entry_point_expires_at == expected + timedelta(hours=72)
+    assert contact.marketing_consent == "unknown"
+    assert db_session.query(WhatsappConsentEvent).filter_by(contact_id=contact.id).count() == 0
+
+
+@skip_if_no_db
+def test_ctwa_can_count_as_consent_only_when_account_setting_enabled(db_session):
+    account = _seed_account(db_session, ctwa_counts_as_consent=True)
+    _run_webhook(db_session, _dm_payload(
+        account, "16315551234", "hello", "wamid.ctwa-consent",
+        referral={"source_url": "https://example.test/ad", "source_id": "ad-1", "source_type": "ad"},
+    ))
+    contact = db_session.query(WhatsappContact).filter_by(whatsapp_account_id=account.id).one()
+    event = db_session.query(WhatsappConsentEvent).filter_by(contact_id=contact.id).one()
+    assert contact.marketing_consent == "opted_in"
+    assert contact.consent_source == "click_to_whatsapp"
+    assert event.source == "click_to_whatsapp"
+
+
+@skip_if_no_db
+def test_ai_enabled_dispatches_whatsapp_turn(db_session):
+    account = _seed_account(db_session, ai_enabled=True)
+    _, mock_turn = _run_webhook(
+        db_session, _dm_payload(account, "16315551234", "do you deliver?", "wamid.ai")
+    )
+    lead = db_session.query(Lead).filter_by(whatsapp_account_id=account.id).one()
+    conversation = db_session.query(Conversation).filter_by(lead_id=lead.id).one()
+    assert conversation.platform == "whatsapp"
+    assert mock_turn.delay.called
+
+
+@skip_if_no_db
+def test_raw_only_event_is_recognized_and_stored_without_state_change(db_session):
+    payload = {"object": "whatsapp_business_account", "entry": [{
+        "id": "waba-raw", "time": 1700000000,
+        "changes": [{"field": "account_update", "value": {"event": "DISABLED"}}],
+    }]}
+    event, mock_turn = _run_webhook(db_session, payload)
+    assert event.processing_status == "processed"
+    assert not mock_turn.delay.called
+
+
+@skip_if_no_db
+def test_unsupported_whatsapp_payload_is_skipped_only_after_family_parsing(db_session):
+    payload = {"object": "whatsapp_business_account", "entry": [{
+        "id": "waba-other", "changes": [{"field": "unknown_field", "value": {"x": 1}}],
+    }]}
+    event, _ = _run_webhook(db_session, payload)
+    assert event.processing_status == "skipped"

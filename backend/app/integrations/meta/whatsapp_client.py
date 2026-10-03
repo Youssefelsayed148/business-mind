@@ -5,6 +5,7 @@ import httpx
 from app.core.config import settings
 from app.integrations.meta.errors import classify_meta_error
 from app.integrations.meta.messaging import MetaMessageResult
+from app.integrations.meta.whatsapp_ids import mask_wa_id
 
 logger = logging.getLogger(__name__)
 
@@ -80,7 +81,7 @@ class WhatsappClient:
             logger.error(
                 "WhatsApp send_text_message API error",
                 extra={
-                    "recipient_wa_id": recipient_wa_id,
+                    "recipient_wa_id": mask_wa_id(recipient_wa_id),
                     "status_code": response.status_code,
                     "error_code": error.get("code"),
                     "error_message": error_msg,

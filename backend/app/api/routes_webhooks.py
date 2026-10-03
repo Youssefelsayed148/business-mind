@@ -15,6 +15,12 @@ logger = logging.getLogger(__name__)
 router = APIRouter()
 
 
+def _payload_preview(payload: object) -> str:
+    if isinstance(payload, dict) and payload.get("object") == "whatsapp_business_account":
+        return "[redacted whatsapp_business_account payload]"
+    return str(payload)[:500]
+
+
 @router.get("/webhooks/meta")
 async def meta_webhook_get(
     hub_mode: str = Query(alias="hub.mode"),
@@ -45,7 +51,7 @@ async def meta_webhook_post(request: Request, db: Session = Depends(get_db)):
         return Response(status_code=403)
 
     payload = await request.json()
-    logger.info("Webhook payload received", extra={"payload_summary": str(payload)[:500]})
+    logger.info("Webhook payload received", extra={"payload_summary": _payload_preview(payload)})
 
     event = store_webhook_event(db, payload, raw_body, signature_valid=True)
     if event is None:
