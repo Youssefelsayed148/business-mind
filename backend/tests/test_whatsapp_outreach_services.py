@@ -23,7 +23,11 @@ from app.services.outreach_service import (
     send_outreach_message,
     should_pause_campaign,
 )
-from app.services.whatsapp_consent_service import import_contacts, is_marketing_allowed
+from app.services.whatsapp_consent_service import (
+    ConsentValidationError,
+    import_contacts,
+    is_marketing_allowed,
+)
 from app.services.whatsapp_template_service import (
     TemplateInUseError,
     TemplateValidationError,
@@ -153,7 +157,7 @@ def test_import_attestation_evidence_and_opt_out_precedence(db_session):
     _, user, account, _, _, recipients = _seed(db_session)
     opted_out = db_session.get(WhatsappContact, recipients[0].contact_id)
     opted_out.marketing_consent = "opted_out"
-    data = f"wa_id,name\n{opted_out.wa_id},Existing\n16315559999,New\n"
+    data = f"wa_id,name\n+{opted_out.wa_id},Existing\n+16315559999,New\n"
     result = import_contacts(
         db_session,
         account=account,
@@ -171,14 +175,14 @@ def test_import_attestation_evidence_and_opt_out_precedence(db_session):
     assert len(events[new_contact.id].evidence["file_hash"]) == 64
     assert events[new_contact.id].evidence["attestation_text"].startswith("I attest")
 
-    import_contacts(
-        db_session,
-        account=account,
-        csv_data="wa_id\n16315558888\n",
-        filename="unattested.csv",
-        actor=user,
-    )
-    assert db_session.query(WhatsappContact).filter_by(wa_id="16315558888").one().marketing_consent == "unknown"
+    with pytest.raises(ConsentValidationError, match="import_attestation_required"):
+        import_contacts(
+            db_session,
+            account=account,
+            csv_data="wa_id\n+16315558888\n",
+            filename="unattested.csv",
+            actor=user,
+        )
 
 
 def new_contact_events(db, account_id):

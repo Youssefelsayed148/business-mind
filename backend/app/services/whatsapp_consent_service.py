@@ -28,6 +28,10 @@ class ConsentValidationError(ValueError):
     """Raised when a consent transition lacks its required audit proof."""
 
 
+MAX_IMPORT_BYTES = 2 * 1024 * 1024
+MAX_IMPORT_ROWS = 10_000
+
+
 def _actor_id(actor: object | None) -> UUID | None:
     value = getattr(actor, "id", actor)
     return value if isinstance(value, UUID) else None
@@ -127,14 +131,26 @@ def import_contacts(
     attestation_text: str | None = None,
 ) -> ImportResult:
     raw = csv_data if isinstance(csv_data, bytes) else csv_data.encode("utf-8")
-    text = raw.decode("utf-8-sig")
+    if len(raw) > MAX_IMPORT_BYTES:
+        raise ConsentValidationError("import_file_too_large")
+    if not isinstance(attestation_text, str) or not attestation_text.strip():
+        raise ConsentValidationError("import_attestation_required")
+    try:
+        text = raw.decode("utf-8-sig")
+    except UnicodeDecodeError as exc:
+        raise ConsentValidationError("import_csv_must_be_utf8") from exc
     file_hash = hashlib.sha256(raw).hexdigest()
     rows = csv.DictReader(io.StringIO(text))
     created = deduplicated = invalid = imported = 0
     for row_number, row in enumerate(rows, start=2):
+        if row_number > MAX_IMPORT_ROWS + 1:
+            raise ConsentValidationError("import_row_limit_exceeded")
         raw_id = row.get("wa_id") or row.get("phone") or row.get("phone_number") or ""
+        raw_id = str(raw_id).strip()
         wa_id = normalize_wa_id(raw_id)
-        if wa_id is None:
+        # Imports must declare an international number explicitly. Formatting
+        # and local-looking numbers are rejected instead of guessed.
+        if wa_id is None or not raw_id.startswith("+") or raw_id[1:] != wa_id:
             invalid += 1
             continue
         contact = (
@@ -160,7 +176,7 @@ def import_contacts(
         else:
             deduplicated += 1
 
-        attested = bool(attestation_text and attestation_text.strip())
+        attested = True
         # An import can grant unknown contacts, but can never undo an opt-out.
         skipped_opted_out = attested and contact.marketing_consent == "opted_out"
         if attested and contact.marketing_consent == "unknown":

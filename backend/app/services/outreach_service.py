@@ -127,7 +127,6 @@ def refuse_campaign_recipient(
 
 
 def _daily_recipient_count(db: Session, account: WhatsappAccount, now: datetime) -> int:
-    db.flush()
     return int(
         db.query(func.count(distinct(WhatsappCampaignRecipient.contact_id)))
         .join(Message, Message.id == WhatsappCampaignRecipient.message_id)
@@ -145,7 +144,7 @@ def _daily_recipient_count(db: Session, account: WhatsappAccount, now: datetime)
     )
 
 
-def check_can_send(
+def evaluate_can_send(
     db: Session,
     *,
     contact: WhatsappContact,
@@ -153,11 +152,15 @@ def check_can_send(
     account: WhatsappAccount,
     campaign: WhatsappCampaign | None = None,
     now: datetime | None = None,
+    enforce_campaign_status: bool = True,
+    enforce_daily_cap: bool = True,
 ) -> SendDecision:
-    """The fail-closed policy choke point for every business-initiated send."""
+    """Read-only outreach policy evaluation, safe for previews and dry runs."""
     now = now or _utcnow()
-    checks: list[tuple[bool, str]] = [
-        (settings.WHATSAPP_OUTREACH_ENABLED, "outreach_disabled"),
+    # Permanent recipient/template failures are evaluated before temporary
+    # account gates so dry-run can report terminal skips even while an
+    # account is paused or unhealthy.
+    terminal_checks: list[tuple[bool, str]] = [
         (normalize_wa_id(contact.wa_id) == contact.wa_id, "invalid_wa_id"),
         (contact.whatsapp_account_id == account.id, "account_mismatch"),
         (contact.workspace_id == account.workspace_id, "workspace_mismatch"),
@@ -171,42 +174,25 @@ def check_can_send(
             )),
             "outreach_scope_mismatch",
         ),
-        (campaign is None or campaign.status == "running", "campaign_not_running"),
-        (account.status == "connected", "account_disconnected"),
-        (not account.outreach_paused, "outreach_paused"),
-        (account.health_checked_at is not None, "health_unknown"),
-        (
-            account.health_checked_at is not None
-            and account.health_checked_at >= now - timedelta(minutes=settings.WHATSAPP_HEALTH_STALE_MINUTES),
-            "health_stale",
-        ),
-        (account.quality_rating is not None, "health_unknown"),
-        (account.quality_rating != "RED", "quality_red"),
         (contact.marketing_consent != "opted_out", "contact_opted_out"),
     ]
-    for passed, reason in checks:
+    for passed, reason in terminal_checks:
         if not passed:
-            return _refuse(db, campaign=campaign, contact=contact, reason=reason)
+            return SendDecision(False, reason, False)
 
     if campaign is not None and template.category == "authentication":
-        return _refuse(
-            db, campaign=campaign, contact=contact, reason="template_category_unsupported"
-        )
+        return SendDecision(False, "template_category_unsupported", False)
     if template.category == "marketing" and not is_marketing_allowed(contact, account, now=now):
-        return _refuse(db, campaign=campaign, contact=contact, reason="marketing_consent_required")
+        return SendDecision(False, "marketing_consent_required", False)
     if (
         template.category == "utility"
         and contact.marketing_consent == "unknown"
         and not account.transactional_utility_attested
     ):
-        return _refuse(
-            db, campaign=campaign, contact=contact, reason="transactional_attestation_required"
-        )
+        return SendDecision(False, "transactional_attestation_required", False)
     if template.status != "approved":
         reason = "template_paused" if template.status in {"paused", "disabled"} else "template_not_approved"
-        return _refuse(db, campaign=campaign, contact=contact, reason=reason)
-    if _daily_recipient_count(db, account, now) >= account.outreach_daily_cap:
-        return _refuse(db, campaign=campaign, contact=contact, reason="daily_cap_reached")
+        return SendDecision(False, reason, False)
     recipient = _recipient_for(db, campaign, contact)
     if recipient is not None and (
         recipient.status in _FINISHED_RECIPIENT_STATUSES
@@ -221,8 +207,65 @@ def check_can_send(
             is not None
         )
     ):
-        return _refuse(db, campaign=campaign, contact=contact, reason="already_sent_in_campaign")
+        return SendDecision(False, "already_sent_in_campaign", False)
+
+    checked_at = account.health_checked_at
+    if checked_at is not None and checked_at.tzinfo is None:
+        checked_at = checked_at.replace(tzinfo=timezone.utc)
+    deferrable_checks: list[tuple[bool, str]] = [
+        (settings.WHATSAPP_OUTREACH_ENABLED, "outreach_disabled"),
+        (
+            not enforce_campaign_status or campaign is None or campaign.status == "running",
+            "campaign_not_running",
+        ),
+        (account.status == "connected", "account_disconnected"),
+        (not account.outreach_paused, "outreach_paused"),
+        (checked_at is not None, "health_unknown"),
+        (
+            checked_at is not None
+            and checked_at >= now - timedelta(minutes=settings.WHATSAPP_HEALTH_STALE_MINUTES),
+            "health_stale",
+        ),
+        (account.quality_rating is not None, "health_unknown"),
+        (account.quality_rating != "RED", "quality_red"),
+    ]
+    for passed, reason in deferrable_checks:
+        if not passed:
+            return SendDecision(False, reason, True)
+    if enforce_daily_cap and _daily_recipient_count(db, account, now) >= account.outreach_daily_cap:
+        return SendDecision(False, "daily_cap_reached", True)
     return SendDecision(True)
+
+
+def check_can_send(
+    db: Session,
+    *,
+    contact: WhatsappContact,
+    template: WhatsappTemplate,
+    account: WhatsappAccount,
+    campaign: WhatsappCampaign | None = None,
+    now: datetime | None = None,
+) -> SendDecision:
+    """Fail-closed send choke point; records refusals only after pure evaluation."""
+    # Real sends may have just linked a reserved Message/recipient in this
+    # transaction; persist that state before the read-only policy queries.
+    db.flush()
+    decision = evaluate_can_send(
+        db,
+        contact=contact,
+        template=template,
+        account=account,
+        campaign=campaign,
+        now=now,
+    )
+    if decision.allowed:
+        return decision
+    return _refuse(
+        db,
+        campaign=campaign,
+        contact=contact,
+        reason=decision.reason_code or "outreach_scope_mismatch",
+    )
 
 
 def claim_pending_recipient(db: Session, recipient_id: UUID | str) -> UUID | None:

@@ -19,6 +19,7 @@ class Settings(BaseSettings):
     APP_NAME: str = "Instagram Automation"
     APP_SECRET_KEY: str = "change_me_local_app_secret"
     APP_BASE_URL: str = "http://localhost:8000"
+    DASHBOARD_BASE_URL: str | None = None
     FRONTEND_URL: str = "http://localhost:3000"
     ALLOWED_ORIGINS: str = "http://localhost:3000"
     DISABLE_DOCS: bool = False
@@ -58,6 +59,11 @@ class Settings(BaseSettings):
     WHATSAPP_DISPATCH_WATCHDOG_SECONDS: int = 600
     WHATSAPP_DEFER_GATE_TTL_SECONDS: int = 900
     WHATSAPP_DEFER_GATE_MAX_TTL_SECONDS: int = 86460
+    WHATSAPP_OPT_IN_LINK_TTL_SECONDS: int = 2592000
+    WHATSAPP_PUBLIC_OPT_IN_IP_LIMIT: int = 10
+    WHATSAPP_PUBLIC_OPT_IN_ACCOUNT_LIMIT: int = 100
+    WHATSAPP_PUBLIC_OPT_IN_WINDOW_SECONDS: int = 3600
+    WHATSAPP_TEST_SEND_DAILY_LIMIT: int = 20
 
     # Facebook Page connection uses "Facebook Login for Business" — the same
     # config_id/FB.login() mechanism as WhatsApp's Embedded Signup, but a

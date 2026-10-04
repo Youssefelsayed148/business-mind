@@ -13,7 +13,8 @@ class WhatsappConsentEvent(Base):
     __table_args__ = (
         PrimaryKeyConstraint("id", name="pk_whatsapp_consent_events"),
         CheckConstraint(
-            "event_type IN ('opt_in', 'opt_out', 'import', 'revoke', 'resubscribe')",
+            "event_type IN ('opt_in', 'opt_out', 'import', 'revoke', 'resubscribe', "
+            "'opt_in_unverified')",
             name="ck_whatsapp_consent_events_event_type",
         ),
         Index(

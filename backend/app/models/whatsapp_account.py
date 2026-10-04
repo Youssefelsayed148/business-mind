@@ -1,7 +1,7 @@
 import uuid
 from datetime import datetime
 
-from sqlalchemy import Boolean, CheckConstraint, DateTime, ForeignKey, Integer, String, Text, func
+from sqlalchemy import Boolean, CheckConstraint, DateTime, ForeignKey, Integer, String, Text, func, text
 from sqlalchemy.dialects.postgresql import JSONB, UUID as PGUUID
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -65,6 +65,9 @@ class WhatsappAccount(Base):
         Boolean, nullable=False, default=False, server_default="false"
     )
     outreach_paused_reason: Mapped[str | None] = mapped_column(Text, nullable=True)
+    outreach_paused_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
     health_checked_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True
     )
@@ -75,13 +78,17 @@ class WhatsappAccount(Base):
         Boolean, nullable=False, default=False, server_default="false"
     )
     opt_out_keywords: Mapped[list | None] = mapped_column(
-        JSONB, nullable=True, default=None
+        JSONB(none_as_null=True), nullable=True, default=None
     )
     opt_in_keywords: Mapped[list | None] = mapped_column(
-        JSONB, nullable=True, default=None
+        JSONB(none_as_null=True), nullable=True, default=None
     )
     outreach_daily_cap: Mapped[int] = mapped_column(
         Integer, nullable=False, default=250, server_default="250"
+    )
+    opt_in_link_salt: Mapped[uuid.UUID] = mapped_column(
+        PGUUID(as_uuid=True), nullable=False, default=uuid.uuid4,
+        server_default=text("gen_random_uuid()")
     )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()

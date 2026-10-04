@@ -314,6 +314,19 @@ def start_whatsapp_campaign(campaign_id: str) -> dict:
         template = db.get(WhatsappTemplate, campaign.template_id)
         if account is None or template is None:
             raise ValueError("whatsapp_campaign_account_or_template_missing")
+        if account.status != "connected":
+            raise ValueError("account_disconnected")
+        if account.health_checked_at is None:
+            raise ValueError("health_unknown")
+        checked_at = account.health_checked_at
+        if checked_at.tzinfo is None:
+            checked_at = checked_at.replace(tzinfo=timezone.utc)
+        if checked_at < now - timedelta(minutes=settings.WHATSAPP_HEALTH_STALE_MINUTES):
+            raise ValueError("health_stale")
+        if account.quality_rating == "RED":
+            raise ValueError("quality_red")
+        if account.outreach_paused:
+            raise ValueError("outreach_paused")
         validate_for_campaign(template)
         try:
             validate_campaign_variable_mapping(campaign, template)
@@ -602,14 +615,17 @@ def _tier_rank(value: str | None) -> int | None:
 
 
 @celery_app.task(name="app.workers.whatsapp_tasks.poll_whatsapp_account_health")
-def poll_whatsapp_account_health() -> dict:
+def poll_whatsapp_account_health(account_id: str | None = None) -> dict:
     listing = SessionLocal()
     try:
+        query = listing.query(WhatsappAccount.id).filter(
+            WhatsappAccount.status == "connected"
+        )
+        if account_id is not None:
+            query = query.filter(WhatsappAccount.id == UUID(account_id))
         account_ids = [
             row[0]
-            for row in listing.query(WhatsappAccount.id)
-            .filter(WhatsappAccount.status == "connected")
-            .all()
+            for row in query.all()
         ]
     finally:
         listing.close()
@@ -646,6 +662,8 @@ def poll_whatsapp_account_health() -> dict:
                 account.messaging_limit_tier = row.messaging_limit_tier
             account.health_checked_at = _utcnow()
             if quality == "RED" or tier_dropped:
+                if not account.outreach_paused:
+                    account.outreach_paused_at = _utcnow()
                 account.outreach_paused = True
                 account.outreach_paused_reason = (
                     "quality_red" if quality == "RED" else "messaging_limit_tier_dropped"

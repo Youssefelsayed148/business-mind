@@ -27,6 +27,9 @@ const API_URL = resolveApiBaseUrl();
 type RequestOptions = {
   body?: unknown;
   headers?: HeadersInit;
+  authenticated?: boolean;
+  redirectOnUnauthorized?: boolean;
+  logPath?: string;
 };
 
 export type ApiErrorCode =
@@ -74,6 +77,11 @@ async function extractError(response: Response): Promise<string> {
     if (!data || typeof data !== "object") return fallback;
     const body = data as Record<string, unknown>;
     if (typeof body.detail === "string") return body.detail;
+    if (body.detail && typeof body.detail === "object" && !Array.isArray(body.detail)) {
+      const detail = body.detail as Record<string, unknown>;
+      if (typeof detail.message === "string") return detail.message;
+      if (typeof detail.code === "string") return detail.code.replaceAll("_", " ");
+    }
     if (Array.isArray(body.detail)) {
       return body.detail
         .map((item: unknown) => {
@@ -123,7 +131,7 @@ function logApiError(error: ApiError, path: string) {
 // resolved once per page load from /workspaces/me, preferring the workspace
 // with slug "default" and falling back to the first membership.
 
-type WorkspaceMembership = {
+export type WorkspaceMembership = {
   id: string;
   name: string;
   slug: string;
@@ -138,23 +146,27 @@ function isWorkspaceScopedPath(path: string): boolean {
   );
 }
 
-let workspaceIdPromise: Promise<string | null> | null = null;
+let workspaceMembershipPromise: Promise<WorkspaceMembership | null> | null = null;
 
-function resolveWorkspaceId(): Promise<string | null> {
-  if (!workspaceIdPromise) {
-    workspaceIdPromise = request<WorkspaceMembership[]>("GET", "/workspaces/me")
+export function getCurrentWorkspaceMembership(): Promise<WorkspaceMembership | null> {
+  if (!workspaceMembershipPromise) {
+    workspaceMembershipPromise = request<WorkspaceMembership[]>("GET", "/workspaces/me")
       .then((memberships) => {
         if (!Array.isArray(memberships) || memberships.length === 0) return null;
         const defaultWorkspace = memberships.find((m) => m.slug === "default");
-        return (defaultWorkspace ?? memberships[0]).id;
+        return defaultWorkspace ?? memberships[0];
       })
       .catch(() => {
         // Allow a retry on the next request instead of caching the failure.
-        workspaceIdPromise = null;
+        workspaceMembershipPromise = null;
         return null;
       });
   }
-  return workspaceIdPromise;
+  return workspaceMembershipPromise;
+}
+
+async function resolveWorkspaceId(): Promise<string | null> {
+  return (await getCurrentWorkspaceMembership())?.id ?? null;
 }
 
 async function request<T>(
@@ -180,7 +192,7 @@ async function request<T>(
     body = JSON.stringify(options.body);
   }
 
-  if (token) headers.set("Authorization", `Bearer ${token}`);
+  if (token && options.authenticated !== false) headers.set("Authorization", `Bearer ${token}`);
 
   if (isWorkspaceScopedPath(path)) {
     const workspaceId = await resolveWorkspaceId();
@@ -196,7 +208,7 @@ async function request<T>(
     });
   } catch (err) {
     const error = new ApiError(0, "Cannot reach the server. Check your connection.", "network_error", err instanceof Error ? err.message : String(err));
-    logApiError(error, path);
+    logApiError(error, options.logPath || path);
     throw error;
   }
 
@@ -205,14 +217,14 @@ async function request<T>(
     const error = path === "/auth/login"
       ? new ApiError(401, backendMessage || "Incorrect email or password", "unauthorized", backendMessage)
       : normalizeHttpError(401, backendMessage);
-    logApiError(error, path);
-    redirectToLogin(path);
+    logApiError(error, options.logPath || path);
+    if (options.redirectOnUnauthorized !== false) redirectToLogin(path);
     throw error;
   }
 
   if (!response.ok) {
     const error = normalizeHttpError(response.status, await extractError(response));
-    logApiError(error, path);
+    logApiError(error, options.logPath || path);
     throw error;
   }
 
@@ -225,6 +237,13 @@ export const api = {
   get: <T>(path: string) => request<T>("GET", path),
   post: <T>(path: string, body?: unknown, headers?: HeadersInit) =>
     request<T>("POST", path, { body, headers }),
+  publicPost: <T>(path: string, body?: unknown) =>
+    request<T>("POST", path, {
+      body,
+      authenticated: false,
+      redirectOnUnauthorized: false,
+      logPath: "/public/whatsapp/opt-in/{token}",
+    }),
   patch: <T>(path: string, body?: unknown) => request<T>("PATCH", path, { body }),
   delete: <T>(path: string) => request<T>("DELETE", path),
 };

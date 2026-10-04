@@ -558,6 +558,8 @@ def process_whatsapp_phone_quality_events(
             if event.current_limit is not None:
                 account.messaging_limit_tier = event.current_limit
             if event.event.upper() in {"FLAGGED", "DOWNGRADE"}:
+                if not account.outreach_paused:
+                    account.outreach_paused_at = datetime.now(timezone.utc)
                 account.outreach_paused = True
                 account.outreach_paused_reason = "phone_number_flagged"
         db.commit()

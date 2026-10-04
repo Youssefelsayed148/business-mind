@@ -58,13 +58,14 @@ def test_unattested_reimport_preserves_existing_opt_in(db_session):
     _, user, account = _seed_account(db_session)
     contact = _contact(db_session, account, consent="opted_in")
 
-    import_contacts(
-        db_session,
-        account=account,
-        csv_data=f"wa_id,name\n{contact.wa_id},Existing\n",
-        filename="unattested.csv",
-        actor=user,
-    )
+    with pytest.raises(ConsentValidationError, match="import_attestation_required"):
+        import_contacts(
+            db_session,
+            account=account,
+            csv_data=f"wa_id,name\n+{contact.wa_id},Existing\n",
+            filename="unattested.csv",
+            actor=user,
+        )
 
     assert contact.marketing_consent == "opted_in"
     assert contact.consent_at is None
@@ -78,7 +79,7 @@ def test_attested_import_skips_opted_out_and_records_evidence(db_session):
     import_contacts(
         db_session,
         account=account,
-        csv_data=f"wa_id\n{contact.wa_id}\n",
+        csv_data=f"wa_id\n+{contact.wa_id}\n",
         filename="attested.csv",
         actor=user,
         attestation_text="I attest that these contacts opted in.",
