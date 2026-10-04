@@ -42,6 +42,7 @@ from app.services.whatsapp_consent_service import (
     grant,
     import_contacts,
     revoke,
+    record_consent_event,
 )
 from app.services.whatsapp_template_service import (
     TemplateInUseError,
@@ -173,7 +174,7 @@ def list_contacts(account_id: UUID | None = None, consent: str | None = None,
                   search: str | None = None, cursor: UUID | None = None,
                   limit: int = Query(default=50, ge=1, le=200),
                   db: Session = Depends(get_db),
-                  ctx: WorkspaceContext = Depends(require_workspace_role())):
+                  ctx: WorkspaceContext = Depends(require_workspace_role("owner", "admin"))):
     query = db.query(WhatsappContact).filter(WhatsappContact.workspace_id == ctx.workspace_id)
     if account_id:
         _account(db, account_id, ctx.workspace_id)
@@ -192,7 +193,7 @@ def list_contacts(account_id: UUID | None = None, consent: str | None = None,
 
 @router.get("/contacts/{contact_id}")
 def get_contact(contact_id: UUID, db: Session = Depends(get_db),
-                ctx: WorkspaceContext = Depends(require_workspace_role())):
+                ctx: WorkspaceContext = Depends(require_workspace_role("owner", "admin"))):
     row = _contact(db, contact_id, ctx.workspace_id)
     result = _contact_json(row)
     events = db.query(WhatsappConsentEvent).filter_by(
@@ -261,7 +262,7 @@ class TemplatePatch(BaseModel):
 @router.get("/templates")
 def list_templates(account_id: UUID | None = None, template_status: str | None = None,
                    db: Session = Depends(get_db),
-                   ctx: WorkspaceContext = Depends(require_workspace_role())):
+                   ctx: WorkspaceContext = Depends(require_workspace_role("owner", "admin"))):
     query = db.query(WhatsappTemplate).filter_by(workspace_id=ctx.workspace_id)
     if account_id:
         _account(db, account_id, ctx.workspace_id)
@@ -285,7 +286,7 @@ def post_template(payload: TemplateCreate, db: Session = Depends(get_db),
 
 @router.get("/templates/{template_id}")
 def get_template(template_id: UUID, db: Session = Depends(get_db),
-                 ctx: WorkspaceContext = Depends(require_workspace_role())):
+                 ctx: WorkspaceContext = Depends(require_workspace_role("owner", "admin"))):
     return _template_json(_template(db, template_id, ctx.workspace_id))
 
 
@@ -361,7 +362,7 @@ class VariablesPayload(BaseModel):
 
 @router.post("/templates/{template_id}/preview")
 def preview_template(template_id: UUID, payload: VariablesPayload, db: Session = Depends(get_db),
-                     ctx: WorkspaceContext = Depends(require_workspace_role())):
+                     ctx: WorkspaceContext = Depends(require_workspace_role("owner", "admin"))):
     row = _template(db, template_id, ctx.workspace_id)
     try: components = render_template_components(row, payload.variables)
     except TemplateValidationError as exc: raise HTTPException(422, str(exc)) from exc
@@ -463,7 +464,7 @@ class CampaignPatch(BaseModel):
 @router.get("/campaigns")
 def list_whatsapp_campaigns(account_id: UUID | None = None, campaign_status: str | None = None,
                             db: Session = Depends(get_db),
-                            ctx: WorkspaceContext = Depends(require_workspace_role())):
+                            ctx: WorkspaceContext = Depends(require_workspace_role("owner", "admin"))):
     query = db.query(WhatsappCampaign).filter_by(workspace_id=ctx.workspace_id)
     if account_id:
         _account(db, account_id, ctx.workspace_id)
@@ -489,7 +490,7 @@ def create_campaign(payload: CampaignCreate, db: Session = Depends(get_db),
 
 @router.get("/campaigns/{campaign_id}")
 def get_campaign(campaign_id: UUID, db: Session = Depends(get_db),
-                 ctx: WorkspaceContext = Depends(require_workspace_role())):
+                 ctx: WorkspaceContext = Depends(require_workspace_role("owner", "admin"))):
     return _campaign_json(_campaign(db, campaign_id, ctx.workspace_id))
 
 
@@ -513,7 +514,7 @@ class DryRunPayload(BaseModel):
 @router.post("/campaigns/{campaign_id}/dry-run")
 def dry_run(campaign_id: UUID, payload: DryRunPayload | None = None,
             db: Session = Depends(get_db),
-            ctx: WorkspaceContext = Depends(require_workspace_role())):
+            ctx: WorkspaceContext = Depends(require_workspace_role("owner", "admin"))):
     campaign = _campaign(db, campaign_id, ctx.workspace_id)
     account = _account(db, campaign.whatsapp_account_id, ctx.workspace_id)
     template = _template(db, campaign.template_id, ctx.workspace_id)
@@ -613,6 +614,10 @@ def resume_campaign(campaign_id: UUID, payload: ResumePayload, db: Session = Dep
     if checked < _now() - timedelta(minutes=settings.WHATSAPP_HEALTH_STALE_MINUTES): _conflict("health_stale")
     if account.quality_rating == "RED": _conflict("quality_red")
     paused_at = account.outreach_paused_at
+    if paused_at is None and not account.outreach_paused:
+        # Operator/circuit-breaker campaign pauses do not pause the account.
+        # Require a poll newer than the campaign transition in that case.
+        paused_at = campaign.updated_at
     if paused_at is None:
         _conflict("health_unconfirmed")
     if paused_at.tzinfo is None: paused_at = paused_at.replace(tzinfo=timezone.utc)
@@ -642,7 +647,7 @@ def cancel_campaign(campaign_id: UUID, db: Session = Depends(get_db),
 
 @router.get("/campaigns/{campaign_id}/stats")
 def campaign_stats(campaign_id: UUID, db: Session = Depends(get_db),
-                   ctx: WorkspaceContext = Depends(require_workspace_role())):
+                   ctx: WorkspaceContext = Depends(require_workspace_role("owner", "admin"))):
     campaign = _campaign(db, campaign_id, ctx.workspace_id)
     grouped = db.query(WhatsappCampaignRecipient.status, func.count(WhatsappCampaignRecipient.id)).filter_by(
         campaign_id=campaign.id).group_by(WhatsappCampaignRecipient.status).all()
@@ -664,7 +669,7 @@ class OutreachSettings(BaseModel):
 
 @router.get("/accounts/{account_id}/outreach-health")
 def outreach_health(account_id: UUID, db: Session = Depends(get_db),
-                    ctx: WorkspaceContext = Depends(require_workspace_role())):
+                    ctx: WorkspaceContext = Depends(require_workspace_role("owner", "admin"))):
     account = _account(db, account_id, ctx.workspace_id)
     age = (_now() - account.health_checked_at).total_seconds() if account.health_checked_at else None
     used = db.query(func.count(func.distinct(WhatsappCampaignRecipient.contact_id))).join(
@@ -777,12 +782,21 @@ def _strict_public_limit(request: Request, account_id: UUID) -> None:
         raise HTTPException(503, "Opt-in service is temporarily unavailable") from exc
 
 
-@public_router.post("/opt-in/{signed_token}", status_code=202)
+def _public_opt_in_permission(signed_token: str) -> dict:
+    """Authorize a public capability without requiring a workspace login."""
+    try:
+        return jwt.decode(signed_token, settings.APP_SECRET_KEY, algorithms=["HS256"],
+                          audience="whatsapp_opt_in", options={"require": ["exp", "aud"]})
+    except jwt.PyJWTError as exc:
+        raise HTTPException(404, "Opt-in link is invalid or expired") from exc
+
+
+@public_router.post("/opt-in/{signed_token}", status_code=202,
+                    dependencies=[Depends(_public_opt_in_permission)])
 def public_opt_in(signed_token: str, payload: PublicOptInPayload, request: Request,
                   db: Session = Depends(get_db)):
     try:
-        claims = jwt.decode(signed_token, settings.APP_SECRET_KEY, algorithms=["HS256"],
-                            audience="whatsapp_opt_in")
+        claims = _public_opt_in_permission(signed_token)
         account_id, workspace_id = UUID(claims["account_id"]), UUID(claims["workspace_id"])
     except (jwt.PyJWTError, KeyError, ValueError, TypeError) as exc:
         raise HTTPException(404, "Opt-in link is invalid or expired") from exc
@@ -806,8 +820,7 @@ def public_opt_in(signed_token: str, payload: PublicOptInPayload, request: Reque
         "user_agent": request.headers.get("user-agent"),
         "submitted_at": _now().isoformat(), "workspace_id": str(workspace_id),
         "account_id": str(account.id), "token_salt": str(account.opt_in_link_salt)}
-    db.add(WhatsappConsentEvent(contact_id=contact.id, workspace_id=workspace_id,
-        event_type="opt_in_unverified", source="web_form", evidence=evidence))
+    record_consent_event(db, contact, event_type="opt_in_unverified", source="web_form", evidence=evidence)
     db.commit()
     keyword = account.opt_in_keywords[0]
     business = normalize_wa_id(account.display_phone_number)

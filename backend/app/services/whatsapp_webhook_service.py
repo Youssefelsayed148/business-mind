@@ -27,7 +27,7 @@ from app.models.message import Message
 from app.models.whatsapp_account import WhatsappAccount
 from app.models.whatsapp_campaign import WhatsappCampaign
 from app.models.whatsapp_campaign_recipient import WhatsappCampaignRecipient
-from app.models.whatsapp_consent_event import WhatsappConsentEvent
+from app.services.whatsapp_consent_service import apply_keyword_consent, record_consent_event
 from app.models.whatsapp_contact import WhatsappContact
 from app.models.whatsapp_template import WhatsappTemplate
 from app.services.processed_event_service import check_and_mark_processed
@@ -188,25 +188,6 @@ def _get_or_create_contact(
     return contact
 
 
-def _record_consent_change(
-    db: Session,
-    *,
-    contact: WhatsappContact,
-    event_type: str,
-    source: str,
-    evidence: dict,
-) -> None:
-    db.add(
-        WhatsappConsentEvent(
-            contact_id=contact.id,
-            workspace_id=contact.workspace_id,
-            event_type=event_type,
-            source=source,
-            evidence=evidence,
-        )
-    )
-
-
 def _apply_consent(
     db: Session,
     *,
@@ -227,9 +208,9 @@ def _apply_consent(
             or expires_at > contact.free_entry_point_expires_at
         ):
             contact.free_entry_point_expires_at = expires_at
-        _record_consent_change(
+        record_consent_event(
             db,
-            contact=contact,
+            contact,
             event_type="import",
             source="click_to_whatsapp",
             evidence={
@@ -240,38 +221,13 @@ def _apply_consent(
             },
         )
 
-    if keyword is not None and keyword in opt_out:
-        if contact.marketing_consent != "opted_out":
-            contact.marketing_consent = "opted_out"
-            contact.consent_source = "inbound_keyword"
-            contact.opted_out_at = event_time
-            _record_consent_change(
-                db,
-                contact=contact,
-                event_type="opt_out",
-                source="inbound_keyword",
-                evidence={"message_id": event.message_id, "keyword": keyword},
-            )
-        return "opt_out"
-
-    if (
-        keyword is not None
-        and keyword in opt_in
-        and (has_configured_opt_in or contact.marketing_consent == "opted_out")
-    ):
-        if contact.marketing_consent != "opted_in":
-            contact.marketing_consent = "opted_in"
-            contact.consent_source = "inbound_keyword"
-            contact.consent_at = event_time
-            contact.opted_out_at = None
-            _record_consent_change(
-                db,
-                contact=contact,
-                event_type="opt_in",
-                source="inbound_keyword",
-                evidence={"message_id": event.message_id, "keyword": keyword},
-            )
-        return "opt_in"
+    action = apply_keyword_consent(
+        db, contact=contact, keyword=keyword, opt_in=opt_in, opt_out=opt_out,
+        configured_opt_in=has_configured_opt_in, event_time=event_time,
+        message_id=event.message_id,
+    )
+    if action is not None:
+        return action
 
     if event.referral is not None:
         return "ctwa_referral"

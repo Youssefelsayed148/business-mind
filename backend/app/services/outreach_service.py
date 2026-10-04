@@ -300,11 +300,17 @@ def send_outreach_message(
         select(WhatsappAccount)
         .where(WhatsappAccount.id == campaign.whatsapp_account_id)
         .with_for_update()
+        .execution_options(populate_existing=True)
     ).scalar_one()
     contact = db.get(WhatsappContact, recipient.contact_id)
     template = db.get(WhatsappTemplate, campaign.template_id)
     if contact is None or template is None:
         return OutreachSendResult(False, "outreach_record_missing")
+    # Worker preflight may have cached these rows before another session
+    # paused/cancelled a campaign, revoked consent, or changed template status.
+    db.refresh(campaign)
+    db.refresh(contact)
+    db.refresh(template)
     if claim_pending_recipient(db, recipient.id) is None:
         db.refresh(recipient)
         reason = (
@@ -384,7 +390,7 @@ def send_outreach_message(
         message.status = "failed"
         message.error_code = reason
         message.error_message = result.error_message
-        message.retryable = bool(result.retryable and not unknown)
+        message.retryable = bool(result.retryable and not unknown and result.meta_error_code not in {131048, 131049})
         recipient.status = "failed"
         recipient.error_code = reason
         recipient.error_message = result.error_message
@@ -395,7 +401,7 @@ def send_outreach_message(
         reason,
         message.id,
         result.provider_message_id,
-        retryable=bool(result.retryable and reason != "outcome_unknown"),
+        retryable=bool(result.retryable and reason != "outcome_unknown" and result.meta_error_code not in {131048, 131049}),
         meta_error_code=result.meta_error_code,
     )
 

@@ -615,10 +615,10 @@ def test_meta_error_body_is_known_failure_and_can_be_retried(monkeypatch):
                 success=False,
                 error_code="retryable",
                 error_message="Meta unavailable",
-                raw_response={"error": {"message": "Meta unavailable", "code": 131048}},
+                raw_response={"error": {"message": "Meta unavailable", "code": 130429}},
                 retryable=True,
             ),
-            meta_error_code=131048,
+            meta_error_code=130429,
         )
         result = send_outreach_message(
             session,

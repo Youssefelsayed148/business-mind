@@ -180,7 +180,9 @@ def test_default_opt_in_keyword_does_not_grant_consent_from_unknown(db_session):
 def test_default_opt_in_keyword_resubscribes_opted_out_contact(db_session):
     account = _seed_account(db_session, ai_enabled=False)
     _run_webhook(db_session, _dm_payload(account, "16315551234", "stop", "wamid.stop-first"))
-    _run_webhook(db_session, _dm_payload(account, "16315551234", "start", "wamid.start-after-stop"))
+    later_opt_in = _dm_payload(account, "16315551234", "start", "wamid.start-after-stop")
+    later_opt_in["entry"][0]["changes"][0]["value"]["messages"][0]["timestamp"] = "1700000001"
+    _run_webhook(db_session, later_opt_in)
     contact = db_session.query(WhatsappContact).filter_by(whatsapp_account_id=account.id).one()
     events = db_session.query(WhatsappConsentEvent).filter_by(contact_id=contact.id).all()
     assert contact.marketing_consent == "opted_in"

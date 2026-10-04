@@ -55,7 +55,7 @@ class WhatsappManagementClient:
         return {"Authorization": f"Bearer {access_token}"}
 
     @staticmethod
-    def _decode_response(response: httpx.Response, operation: str) -> WhatsappManagementResult:
+    def _decode_response(response: httpx.Response, operation: str, access_token: str = "") -> WhatsappManagementResult:
         try:
             data = response.json()
         except Exception:
@@ -81,9 +81,12 @@ class WhatsappManagementClient:
                     "meta_error_subcode": meta_error_subcode,
                 },
             )
+            error_message = error.get("message", "WhatsApp management API error")
+            if isinstance(error_message, str) and access_token:
+                error_message = error_message.replace(access_token, "[REDACTED]")
             return WhatsappManagementResult(
                 success=False,
-                error_message=error.get("message", "WhatsApp management API error"),
+                error_message=error_message,
                 meta_error_code=meta_error_code,
                 meta_error_subcode=meta_error_subcode,
             )
@@ -119,7 +122,7 @@ class WhatsappManagementClient:
             response = self._client.post(url, headers=self._headers(access_token), json=payload)
         except httpx.HTTPError as exc:
             return self._transport_error("create_template", exc)
-        return self._decode_response(response, "create_template")
+        return self._decode_response(response, "create_template", access_token)
 
     def list_templates(
         self,
@@ -143,7 +146,7 @@ class WhatsappManagementClient:
             except httpx.HTTPError as exc:
                 return self._transport_error("list_templates", exc)
 
-            page_result = self._decode_response(response, "list_templates")
+            page_result = self._decode_response(response, "list_templates", access_token)
             if not page_result.success:
                 return page_result
             page = page_result.data if isinstance(page_result.data, dict) else {}
@@ -176,7 +179,7 @@ class WhatsappManagementClient:
             )
         except httpx.HTTPError as exc:
             return self._transport_error("delete_template_by_name", exc)
-        return self._decode_response(response, "delete_template_by_name")
+        return self._decode_response(response, "delete_template_by_name", access_token)
 
     def get_phone_number_health(
         self,
@@ -194,7 +197,7 @@ class WhatsappManagementClient:
         except httpx.HTTPError as exc:
             return self._transport_error("get_phone_number_health", exc)
 
-        result = self._decode_response(response, "get_phone_number_health")
+        result = self._decode_response(response, "get_phone_number_health", access_token)
         if not result.success:
             return result
         payload = result.data if isinstance(result.data, dict) else {}

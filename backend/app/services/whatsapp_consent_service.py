@@ -37,7 +37,7 @@ def _actor_id(actor: object | None) -> UUID | None:
     return value if isinstance(value, UUID) else None
 
 
-def _event(
+def record_consent_event(
     db: Session,
     contact: WhatsappContact,
     *,
@@ -80,7 +80,7 @@ def grant(
     contact.consent_source = source
     contact.consent_at = now
     contact.opted_out_at = None
-    _event(
+    record_consent_event(
         db,
         contact,
         event_type="resubscribe" if resubscribe else "opt_in",
@@ -90,6 +90,41 @@ def grant(
     )
     db.flush()
     return contact
+
+
+def apply_keyword_consent(
+    db: Session, *, contact: WhatsappContact, keyword: str | None,
+    opt_in: set[str], opt_out: set[str], configured_opt_in: bool,
+    event_time: datetime, message_id: str | None,
+) -> str | None:
+    """Apply verified inbound evidence; STOP wins over older/equal opt-ins."""
+    if keyword is not None and keyword in opt_out:
+        if contact.marketing_consent != "opted_out":
+            contact.marketing_consent = "opted_out"
+            contact.consent_source = "inbound_keyword"
+            contact.opted_out_at = event_time
+            record_consent_event(db, contact, event_type="opt_out", source="inbound_keyword",
+                                 evidence={"message_id": message_id, "keyword": keyword})
+        elif contact.opted_out_at is None or event_time > contact.opted_out_at:
+            contact.opted_out_at = event_time
+        return "opt_out"
+    if (keyword is not None and keyword in opt_in
+            and (configured_opt_in or contact.marketing_consent == "opted_out")):
+        opted_out_at = contact.opted_out_at
+        if opted_out_at is not None:
+            if opted_out_at.tzinfo is None:
+                opted_out_at = opted_out_at.replace(tzinfo=timezone.utc)
+            if event_time <= opted_out_at:
+                return None
+        if contact.marketing_consent != "opted_in":
+            contact.marketing_consent = "opted_in"
+            contact.consent_source = "inbound_keyword"
+            contact.consent_at = event_time
+            contact.opted_out_at = None
+            record_consent_event(db, contact, event_type="opt_in", source="inbound_keyword",
+                                 evidence={"message_id": message_id, "keyword": keyword})
+        return "opt_in"
+    return None
 
 
 def revoke(
@@ -103,7 +138,7 @@ def revoke(
     contact.marketing_consent = "opted_out"
     contact.consent_source = source
     contact.opted_out_at = datetime.now(timezone.utc)
-    _event(db, contact, event_type="revoke", source=source, evidence=evidence or {}, actor=actor)
+    record_consent_event(db, contact, event_type="revoke", source=source, evidence=evidence or {}, actor=actor)
     db.flush()
     return contact
 
@@ -186,7 +221,7 @@ def import_contacts(
         # Unattested imports never modify an existing consent decision. New
         # contacts already start at unknown above.
 
-        _event(
+        record_consent_event(
             db,
             contact,
             event_type="import",

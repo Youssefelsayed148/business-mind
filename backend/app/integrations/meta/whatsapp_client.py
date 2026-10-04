@@ -230,6 +230,8 @@ class WhatsappClient:
             meta_error_code = _optional_int(error.get("code"))
             meta_error_subcode = _optional_int(error.get("error_subcode"))
             error_message = error.get("message", "WhatsApp Cloud API error")
+            if isinstance(error_message, str) and access_token:
+                error_message = error_message.replace(access_token, "[REDACTED]")
             logger.error(
                 "WhatsApp send_template_message API error",
                 extra={

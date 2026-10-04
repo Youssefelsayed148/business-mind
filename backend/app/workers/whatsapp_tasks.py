@@ -23,6 +23,8 @@ from app.models.whatsapp_campaign_recipient import WhatsappCampaignRecipient
 from app.models.whatsapp_contact import WhatsappContact
 from app.models.whatsapp_template import WhatsappTemplate
 from app.services.outreach_service import (
+    check_can_send,
+    OutreachSendResult,
     refuse_campaign_recipient,
     reap_stale_sending_messages,
     send_outreach_message,
@@ -438,7 +440,7 @@ def dispatch_whatsapp_campaign(campaign_id: str) -> dict:
             except RedisError:
                 pass
         if gate_ttl:
-            _schedule_dispatch(campaign.id, gate_ttl)
+            _schedule_deferred_dispatch_once(campaign.id, gate_ttl)
             try:
                 _mark_dispatch(campaign.id, gate_ttl)
             except RedisError:
@@ -528,20 +530,27 @@ def send_whatsapp_campaign_message(self, recipient_id: str) -> dict:
             )
             return {"sent": False, "reason": "variable_unresolved"}
 
-        try:
-            bucket = acquire_account_token(account.id, campaign.throttle_per_minute)
-        except RedisError:
-            send_whatsapp_campaign_message.apply_async(
-                args=[recipient_id], countdown=settings.WHATSAPP_DISPATCH_BACKOFF_SECONDS
-            )
-            return {"sent": False, "reason": "redis_unavailable"}
-        if not bucket.allowed:
-            send_whatsapp_campaign_message.apply_async(
-                args=[recipient_id], countdown=bucket.retry_after_seconds
-            )
-            return {"sent": False, "reason": "throttled", "countdown": bucket.retry_after_seconds}
-
-        result = send_outreach_message(db, recipient_id=recipient.id, components=components)
+        # Temporary policy blocks must not spend account rate-limit tokens.
+        # The choke point repeats this check under its account lock for cap safety.
+        decision = check_can_send(db, contact=contact, template=template,
+                                  account=account, campaign=campaign)
+        if not decision.allowed:
+            result = OutreachSendResult(False, decision.reason_code, deferrable=decision.deferrable)
+            db.commit()
+        else:
+            try:
+                bucket = acquire_account_token(account.id, campaign.throttle_per_minute)
+            except RedisError:
+                send_whatsapp_campaign_message.apply_async(
+                    args=[recipient_id], countdown=settings.WHATSAPP_DISPATCH_BACKOFF_SECONDS
+                )
+                return {"sent": False, "reason": "redis_unavailable"}
+            if not bucket.allowed:
+                send_whatsapp_campaign_message.apply_async(
+                    args=[recipient_id], countdown=bucket.retry_after_seconds
+                )
+                return {"sent": False, "reason": "throttled", "countdown": bucket.retry_after_seconds}
+            result = send_outreach_message(db, recipient_id=recipient.id, components=components)
         db.expire_all()
         campaign = db.get(WhatsappCampaign, campaign.id)
         recipient = db.get(WhatsappCampaignRecipient, recipient.id)

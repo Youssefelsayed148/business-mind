@@ -32,6 +32,7 @@ ORIGINAL_BEAT_SHA256 = "6b39308be50ed1666bc50fbe0d5d1013894e79f9bdfa251733d8ec38
 
 @pytest.fixture(autouse=True)
 def _use_test_session_for_worker_tasks(monkeypatch):
+    monkeypatch.setattr(settings, "WHATSAPP_OUTREACH_ENABLED", True)
     if TestingSessionLocal is not None:
         monkeypatch.setattr(whatsapp_tasks, "SessionLocal", TestingSessionLocal)
     yield
