@@ -3,8 +3,10 @@ declare global {
     FB?: {
       init: (config: { appId: string; version: string; xfbml?: boolean }) => void;
       login: (
-        callback: (response: { authResponse?: { code?: string } | null; status?: string }) => void,
-        options: { config_id: string; response_type: string; override_default_response_type: boolean },
+        callback: (
+          response: { authResponse?: { code?: string; accessToken?: string } | null; status?: string },
+        ) => void,
+        options: { config_id: string; response_type?: string; override_default_response_type?: boolean },
       ) => void;
     };
     fbAsyncInit?: () => void;

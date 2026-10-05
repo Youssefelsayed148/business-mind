@@ -8,25 +8,24 @@ import { loadFacebookSdk } from "@/lib/facebookSdk";
 import { useToast } from "@/components/ToastProvider";
 
 /** Unlike WhatsApp's Embedded Signup, plain Facebook Login for Business
- * returns only an authorization `code` from FB.login() — no postMessage
- * listener needed. Which Page(s) the user granted access to is discovered
- * server-side afterward via GET /me/accounts (see facebook_oauth.py), not
- * from a client-side event. */
+ * returns a user access token from FB.login() — no postMessage listener
+ * needed. (Requesting a `code` instead breaks: it's bound to the SDK's
+ * internal redirect_uri and can't be exchanged server-side.) The backend
+ * verifies the token was issued to our app before using it. Which Page(s)
+ * the user granted access to is discovered server-side afterward via
+ * GET /me/accounts (see facebook_oauth.py), not from a client-side event. */
 function runFacebookLogin(configId: string): Promise<string> {
   return new Promise((resolve, reject) => {
     window.FB?.login(
       (response) => {
-        if (response.status !== "connected" || !response.authResponse?.code) {
+        const accessToken = response.authResponse?.accessToken;
+        if (response.status !== "connected" || !accessToken) {
           reject(new Error("Facebook connection was cancelled or did not complete"));
           return;
         }
-        resolve(response.authResponse.code);
+        resolve(accessToken);
       },
-      {
-        config_id: configId,
-        response_type: "code",
-        override_default_response_type: true,
-      },
+      { config_id: configId },
     );
   });
 }
@@ -46,14 +45,14 @@ export function FacebookConnect({ onConnected }: { onConnected: () => void }) {
       }>("/facebook/connect/start");
 
       await loadFacebookSdk(startInfo.app_id, startInfo.graph_api_version);
-      const code = await runFacebookLogin(startInfo.config_id);
+      const accessToken = await runFacebookLogin(startInfo.config_id);
 
       const result = await api.post<{
         connected: { page_name: string | null; page_id: string }[];
         conflicts?: { page_id: string; page_name: string | null; reason: string }[];
       }>(
         "/facebook/connect/callback",
-        { code, state: startInfo.state },
+        { access_token: accessToken, state: startInfo.state },
       );
 
       const count = result.connected.length;

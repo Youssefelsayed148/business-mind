@@ -41,8 +41,8 @@ async def exchange_code_for_token(code: str) -> dict:
         response = await client.get(
             url,
             params={
-                "client_id": settings.META_APP_ID,
-                "client_secret": settings.META_APP_SECRET,
+                "client_id": settings.facebook_app_id,
+                "client_secret": settings.facebook_app_secret,
                 "code": code,
             },
         )
@@ -70,8 +70,8 @@ async def exchange_for_long_lived_token(short_lived_token: str) -> dict:
             url,
             params={
                 "grant_type": "fb_exchange_token",
-                "client_id": settings.META_APP_ID,
-                "client_secret": settings.META_APP_SECRET,
+                "client_id": settings.facebook_app_id,
+                "client_secret": settings.facebook_app_secret,
                 "fb_exchange_token": short_lived_token,
             },
         )

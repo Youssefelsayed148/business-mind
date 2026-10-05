@@ -397,8 +397,8 @@ def test_cross_workspace_facebook_reconnect_reports_conflict_and_leaves_row_unto
         .all()
     ]
 
-    async def fake_exchange(code):
-        return {"access_token": "short_lived_token"}
+    async def fake_verify(user_token):
+        return None
 
     async def fake_long_lived(short_token):
         return {"access_token": "brand_new_long_lived_token"}
@@ -415,7 +415,7 @@ def test_cross_workspace_facebook_reconnect_reports_conflict_and_leaves_row_unto
         return None
 
     monkeypatch.setattr(
-        "app.api.routes_facebook.exchange_code_for_token", fake_exchange
+        "app.api.routes_facebook.verify_user_access_token", fake_verify
     )
     monkeypatch.setattr(
         "app.api.routes_facebook.exchange_for_long_lived_token", fake_long_lived
@@ -432,7 +432,7 @@ def test_cross_workspace_facebook_reconnect_reports_conflict_and_leaves_row_unto
     response = client.post(
         "/facebook/connect/callback",
         headers=_auth_header(token, ws_other.id),
-        json={"code": "some_code", "state": state},
+        json={"access_token": "short_lived_token", "state": state},
     )
 
     assert response.status_code == 200

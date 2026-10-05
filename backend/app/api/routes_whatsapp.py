@@ -95,7 +95,7 @@ async def whatsapp_connect_start(
         raise HTTPException(status_code=503, detail="Could not start WhatsApp connect flow")
 
     return {
-        "app_id": settings.META_APP_ID,
+        "app_id": settings.facebook_app_id,
         "config_id": settings.WHATSAPP_EMBEDDED_SIGNUP_CONFIG_ID,
         "graph_api_version": settings.META_GRAPH_API_VERSION,
         "state": state,

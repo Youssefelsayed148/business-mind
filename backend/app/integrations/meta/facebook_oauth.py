@@ -26,20 +26,25 @@ def _raise_meta_error(response: httpx.Response, data: dict, fallback: str) -> No
     raise MetaAPIError(msg, status_code=response.status_code, response_body=data)
 
 
-async def exchange_code_for_token(code: str) -> dict:
-    """Exchange the Facebook Login for Business authorization code for a
-    short-lived user access token. No redirect_uri — same reasoning as
-    WhatsApp's Embedded Signup code exchange (client-side popup flow).
+async def verify_user_access_token(user_access_token: str) -> None:
+    """Confirm a client-supplied user access token is valid and was issued to
+    *our* Facebook app before trusting it.
+
+    FB.login() with a Login-for-Business config that issues user tokens
+    returns the token directly to the browser. (Asking for a `code` instead
+    fails at exchange: that code is bound to the JS SDK's internal
+    redirect_uri, which we can't reproduce server-side.) Because the token
+    comes from the client, check it with GET /debug_token using the app
+    access token, so a token minted for some other app is rejected.
     """
-    logger.info("Exchanging Facebook Login code for access token")
-    url = f"{GRAPH_BASE}/{settings.META_GRAPH_API_VERSION}/oauth/access_token"
+    logger.info("Verifying Facebook user access token")
+    url = f"{GRAPH_BASE}/{settings.META_GRAPH_API_VERSION}/debug_token"
     async with httpx.AsyncClient() as client:
         response = await client.get(
             url,
             params={
-                "client_id": settings.META_APP_ID,
-                "client_secret": settings.META_APP_SECRET,
-                "code": code,
+                "input_token": user_access_token,
+                "access_token": f"{settings.facebook_app_id}|{settings.facebook_app_secret}",
             },
         )
     try:
@@ -47,14 +52,13 @@ async def exchange_code_for_token(code: str) -> dict:
     except Exception:
         raise MetaAPIError("Invalid JSON response from Meta", status_code=response.status_code)
     if response.status_code >= 400 or "error" in data:
-        _raise_meta_error(response, data, "Facebook OAuth code exchange failed")
-    if "access_token" not in data:
+        _raise_meta_error(response, data, "Facebook token verification failed")
+    info = data.get("data") or {}
+    if not info.get("is_valid") or str(info.get("app_id")) != str(settings.facebook_app_id):
         raise MetaAPIError(
-            "No access_token in Facebook token response",
+            "Facebook access token is invalid or was not issued to this app",
             status_code=response.status_code,
-            response_body=data,
         )
-    return data
 
 
 async def exchange_for_long_lived_token(short_lived_token: str) -> dict:
@@ -66,8 +70,8 @@ async def exchange_for_long_lived_token(short_lived_token: str) -> dict:
             url,
             params={
                 "grant_type": "fb_exchange_token",
-                "client_id": settings.META_APP_ID,
-                "client_secret": settings.META_APP_SECRET,
+                "client_id": settings.facebook_app_id,
+                "client_secret": settings.facebook_app_secret,
                 "fb_exchange_token": short_lived_token,
             },
         )

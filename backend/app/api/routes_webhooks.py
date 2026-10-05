@@ -38,10 +38,9 @@ async def meta_webhook_post(request: Request, db: Session = Depends(get_db)):
     raw_body = await request.body()
     signature_header = request.headers.get("X-Hub-Signature-256")
 
-    # Use META_WEBHOOK_SECRET for signature verification if set, otherwise fall back to META_APP_SECRET
-    webhook_secret = settings.META_WEBHOOK_SECRET if settings.META_WEBHOOK_SECRET else settings.META_APP_SECRET
-
-    if not verify_meta_signature(raw_body, signature_header, webhook_secret):
+    # Instagram-Login webhooks are signed with the Instagram app secret,
+    # Page/WhatsApp webhooks with the Facebook app secret; accept either.
+    if not any(verify_meta_signature(raw_body, signature_header, s) for s in settings.webhook_secrets):
         return Response(status_code=403)
 
     payload = await request.json()

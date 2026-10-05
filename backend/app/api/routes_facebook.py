@@ -16,10 +16,10 @@ from app.core.config import settings
 from app.db.session import get_db
 from app.integrations.meta.errors import MetaAPIError
 from app.integrations.meta.facebook_oauth import (
-    exchange_code_for_token,
     exchange_for_long_lived_token,
     list_granted_pages,
     subscribe_app_to_page,
+    verify_user_access_token,
 )
 from app.models.automation_log import AutomationLog
 from app.models.facebook_campaign import FacebookCampaign
@@ -94,7 +94,7 @@ async def facebook_connect_start(
         raise HTTPException(status_code=503, detail="Could not start Facebook connect flow")
 
     return {
-        "app_id": settings.META_APP_ID,
+        "app_id": settings.facebook_app_id,
         "config_id": settings.FACEBOOK_LOGIN_CONFIG_ID,
         "graph_api_version": settings.META_GRAPH_API_VERSION,
         "state": state,
@@ -102,7 +102,7 @@ async def facebook_connect_start(
 
 
 class FacebookConnectCallback(BaseModel):
-    code: str
+    access_token: str
     state: str
 
 
@@ -112,7 +112,7 @@ async def facebook_connect_callback(
     db: Session = Depends(get_db),
     ctx: WorkspaceContext = Depends(require_workspace_permission("manage_accounts")),
 ):
-    """Exchange the code, list every Page the user granted access to via
+    """Verify the user token from FB.login(), list every Page the user granted access to via
     GET /me/accounts, and connect all of them (each already carries its own
     Page Access Token — no per-Page exchange step needed). Unlike WhatsApp's
     single-number flow, this can connect more than one Page in one pass.
@@ -129,8 +129,8 @@ async def facebook_connect_callback(
         raise HTTPException(status_code=503, detail="Could not verify Facebook connect session")
 
     try:
-        short_lived = await exchange_code_for_token(payload.code)
-        long_lived = await exchange_for_long_lived_token(short_lived["access_token"])
+        await verify_user_access_token(payload.access_token)
+        long_lived = await exchange_for_long_lived_token(payload.access_token)
         granted_pages = await list_granted_pages(long_lived["access_token"])
     except MetaAPIError as exc:
         logger.error("Facebook Login for Business error", extra={"error": str(exc)})

@@ -24,8 +24,17 @@ class Settings(BaseSettings):
     DISABLE_DOCS: bool = False
     SENTRY_DSN: str = ""
 
+    # META_APP_ID/META_APP_SECRET are the *Instagram* App ID/secret (Meta
+    # dashboard > Instagram > API setup with Instagram login). They only work
+    # for instagram.com OAuth and Instagram-Login webhooks.
     META_APP_ID: str = "local_meta_app_id"
     META_APP_SECRET: str
+    # The Facebook App ID/secret (App settings > Basic) used by the Facebook
+    # JS SDK (FB.init/FB.login), Graph API token exchanges for Facebook Pages
+    # and WhatsApp, and Page/WhatsApp webhook signatures. Blank falls back to
+    # META_APP_ID/META_APP_SECRET (local/dev, where they're the same app).
+    FACEBOOK_APP_ID: str = ""
+    FACEBOOK_APP_SECRET: str = ""
     META_WEBHOOK_SECRET: str = ""
     META_WEBHOOK_VERIFY_TOKEN: str
     META_GRAPH_API_VERSION: str = "v21.0"
@@ -34,8 +43,8 @@ class Settings(BaseSettings):
     # WhatsApp Cloud API Embedded Signup: the frontend's FB.login() call
     # needs a config_id identifying the Embedded Signup flow configured in
     # the Meta App dashboard (Business Settings > WhatsApp > Embedded
-    # Signup). Uses the same META_APP_ID/META_APP_SECRET as Instagram since
-    # both are products on the same Meta App.
+    # Signup). Uses FACEBOOK_APP_ID/FACEBOOK_APP_SECRET, not the Instagram
+    # App ID/secret.
     WHATSAPP_EMBEDDED_SIGNUP_CONFIG_ID: str = ""
 
     # Facebook Page connection uses "Facebook Login for Business" — the same
@@ -79,6 +88,22 @@ class Settings(BaseSettings):
     AI_MODEL_NAME: str = "gpt-4o-mini"
     AI_REQUEST_TIMEOUT_SECONDS: float = 15.0
     AI_MAX_CONTEXT_TURNS: int = 10
+
+    @property
+    def facebook_app_id(self) -> str:
+        return self.FACEBOOK_APP_ID or self.META_APP_ID
+
+    @property
+    def facebook_app_secret(self) -> str:
+        return self.FACEBOOK_APP_SECRET or self.META_APP_SECRET
+
+    @property
+    def webhook_secrets(self) -> list[str]:
+        """Secrets a Meta webhook signature may be made with: Instagram-Login
+        webhooks are signed with the Instagram app secret, Page/WhatsApp
+        webhooks with the Facebook app secret."""
+        candidates = [self.META_WEBHOOK_SECRET or self.META_APP_SECRET, self.facebook_app_secret]
+        return list(dict.fromkeys(c for c in candidates if c))
 
 
 settings = Settings()
