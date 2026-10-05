@@ -20,7 +20,14 @@ from app.integrations.meta.facebook_webhooks import (
     parse_facebook_postback_events,
 )
 from app.integrations.meta.whatsapp_client import WhatsappClient
-from app.integrations.meta.whatsapp_webhooks import parse_whatsapp_message_events
+from app.integrations.meta.whatsapp_ids import mask_wa_id
+from app.integrations.meta.whatsapp_webhooks import (
+    parse_whatsapp_message_events,
+    parse_whatsapp_phone_quality_events,
+    parse_whatsapp_raw_only_events,
+    parse_whatsapp_status_events,
+    parse_whatsapp_template_status_events,
+)
 from app.models.automation_log import AutomationLog
 from app.models.campaign import Campaign
 from app.models.comment import Comment
@@ -33,6 +40,7 @@ from app.models.lead import Lead
 from app.models.message import Message
 from app.models.webhook_event import WebhookEvent
 from app.models.whatsapp_account import WhatsappAccount
+from app.models.whatsapp_contact import WhatsappContact
 from app.services import ai_service, conversation_service
 from app.services import facebook_token_service, whatsapp_token_service
 from app.services.campaign_matcher import find_matching_campaigns, find_matching_keyword
@@ -46,6 +54,13 @@ from app.services.facebook_message_service import create_queued_facebook_message
 from app.services.lead_service import upsert_lead_from_comment
 from app.services.log_service import log_action
 from app.services.processed_event_service import build_event_key, check_and_mark_processed
+from app.services.whatsapp_webhook_service import (
+    process_inbound_whatsapp_event,
+    process_whatsapp_phone_quality_events,
+    process_whatsapp_status_events,
+    process_whatsapp_template_status_events,
+)
+from app.services.whatsapp_window_service import in_service_window
 from app.services.message_service import (
     create_queued_message,
     get_message_by_context,
@@ -320,137 +335,81 @@ def _dispatch_whatsapp_ai_turn(
 
 
 def _process_whatsapp_message_events(db: Session, message_events) -> None:
-    """WhatsApp equivalent of the Instagram `for msg_evt in message_events:`
-    block inside process_webhook_event — extracted into its own function
-    since this is written fresh rather than edited into the existing,
-    delicate IG loop. Simpler than the IG version: every WhatsApp
-    conversation is cold-DM-shaped, so there's no campaign-vs-cold_dm branch."""
-    for evt in message_events:
-        dedup_suffix = evt.message_id or str(evt.timestamp or "")
-        event_key = (
-            f"whatsapp_message:{evt.sender_wa_id}:{dedup_suffix}"
-            if dedup_suffix
-            else f"whatsapp_message:{evt.sender_wa_id}:{evt.text[:50]}"
-        )
-        is_new = check_and_mark_processed(
-            db,
-            event_key=event_key,
-            event_type="whatsapp_message",
-            metadata={"sender_wa_id": evt.sender_wa_id, "text": evt.text[:200]},
-        )
-        if not is_new:
-            logger.debug(
-                "Inbound WhatsApp message skipped: duplicate webhook delivery (already processed)",
-                extra={"event_key": event_key, "sender_wa_id": evt.sender_wa_id},
+    """Persist WhatsApp identity/consent before applying bot gates."""
+    for event in message_events:
+        result = process_inbound_whatsapp_event(db, event)
+        if result is None:
+            continue
+
+        account = result.account
+        lead = result.lead
+        masked_wa_id = mask_wa_id(event.sender_wa_id)
+
+        # Consent commands are state-changing control messages, not AI prompts.
+        if result.consent_action is not None:
+            logger.info(
+                "Inbound WhatsApp consent command handled",
+                extra={
+                    "whatsapp_account_id": str(account.id),
+                    "sender_wa_id": masked_wa_id,
+                    "consent_action": result.consent_action,
+                },
             )
             continue
 
-        account = (
-            db.query(WhatsappAccount)
-            .filter(WhatsappAccount.phone_number_id == evt.phone_number_id)
-            .first()
-        )
-        if not account:
-            logger.warning(
-                "Inbound WhatsApp message skipped: account not found",
-                extra={"phone_number_id": evt.phone_number_id},
+        if not event.text:
+            logger.info(
+                "Inbound WhatsApp non-text message stored without AI dispatch",
+                extra={
+                    "whatsapp_account_id": str(account.id),
+                    "sender_wa_id": masked_wa_id,
+                    "message_type": event.message_type,
+                },
             )
             continue
 
         if account.status != "connected":
-            # Disconnecting a number is a soft status flip (the row, its
-            # leads and its conversations are all kept so a reconnect
-            # restores them). That only actually stops the bot if the
-            # dispatch path honours it -- otherwise a "disconnected" number
-            # keeps sending real AI replies using its retained token.
             logger.info(
                 "Inbound WhatsApp message skipped: account is not connected",
                 extra={
                     "whatsapp_account_id": str(account.id),
                     "status": account.status,
-                    "sender_wa_id": evt.sender_wa_id,
+                    "sender_wa_id": masked_wa_id,
                 },
             )
             log_action(
                 db,
                 "ai_continuation_skipped",
                 whatsapp_account_id=account.id,
+                lead_id=lead.id,
                 details={
                     "reason": "account_not_connected",
                     "status": account.status,
-                    "sender_wa_id": evt.sender_wa_id,
+                    "sender_wa_id": masked_wa_id,
                 },
             )
             continue
 
         if not account.ai_enabled:
-            # Reactive-only bot is opt-in at the account level, same
-            # philosophy as Instagram's account.ai_enabled gate.
             logger.info(
                 "Inbound WhatsApp message skipped: account-level AI is disabled",
-                extra={"whatsapp_account_id": str(account.id), "sender_wa_id": evt.sender_wa_id},
+                extra={
+                    "whatsapp_account_id": str(account.id),
+                    "sender_wa_id": masked_wa_id,
+                },
             )
             log_action(
                 db,
                 "ai_continuation_skipped",
                 whatsapp_account_id=account.id,
-                details={"reason": "account_ai_disabled", "sender_wa_id": evt.sender_wa_id},
+                lead_id=lead.id,
+                details={"reason": "account_ai_disabled", "sender_wa_id": masked_wa_id},
             )
             continue
 
-        def _find_wa_lead():
-            return (
-                db.query(Lead)
-                .filter(
-                    Lead.workspace_id == account.workspace_id,
-                    Lead.whatsapp_account_id == account.id,
-                    Lead.ig_user_id == evt.sender_wa_id,
-                )
-                .first()
-            )
-
-        lead = _find_wa_lead()
-
-        if lead is None:
-            lead = Lead(
-                id=uuid4(),
-                workspace_id=account.workspace_id,
-                platform="whatsapp",
-                whatsapp_account_id=account.id,
-                instagram_account_id=None,
-                # Deliberate reuse of the Instagram-named columns: ig_user_id
-                # stores the WhatsApp WA ID (phone number), ig_username
-                # stores the WhatsApp profile display name.
-                ig_user_id=evt.sender_wa_id,
-                ig_username=evt.sender_profile_name,
-                last_seen_at=datetime.now(timezone.utc),
-                lead_source="cold_dm",
-                status="new",
-            )
-            created = _create_lead_or_reuse_concurrent(db, lead, _find_wa_lead)
-            if created is None:
-                continue
-            # Only log a creation we actually performed; on a lost race the
-            # winner already logged it. Either way we fall through to dispatch
-            # below with a usable lead.
-            is_new_lead = created is lead
-            lead = created
-        else:
-            is_new_lead = False
-
-        if is_new_lead:
-            log_action(
-                db,
-                "cold_dm_lead_created",
-                whatsapp_account_id=account.id,
-                lead_id=lead.id,
-                details={
-                    "sender_wa_id": evt.sender_wa_id,
-                    "username_resolved": evt.sender_profile_name is not None,
-                },
-            )
-
-        _dispatch_whatsapp_ai_turn(db, account=account, lead=lead, inbound_text=evt.text)
+        _dispatch_whatsapp_ai_turn(
+            db, account=account, lead=lead, inbound_text=event.text
+        )
 
 
 def _record_facebook_psid(db: Session, lead_id, facebook_page_id, raw_response: dict) -> None:
@@ -998,16 +957,39 @@ def process_webhook_event(webhook_event_id: str):
 
         if webhook_object == "whatsapp_business_account":
             whatsapp_message_events = parse_whatsapp_message_events(event.payload or {})
-            if not whatsapp_message_events:
+            whatsapp_status_events = parse_whatsapp_status_events(event.payload or {})
+            whatsapp_template_events = parse_whatsapp_template_status_events(event.payload or {})
+            whatsapp_quality_events = parse_whatsapp_phone_quality_events(event.payload or {})
+            whatsapp_raw_only_events = parse_whatsapp_raw_only_events(event.payload or {})
+            if not any(
+                (
+                    whatsapp_message_events,
+                    whatsapp_status_events,
+                    whatsapp_template_events,
+                    whatsapp_quality_events,
+                    whatsapp_raw_only_events,
+                )
+            ):
                 event.processing_status = "skipped"
                 db.commit()
                 log_action(
                     db,
                     "webhook_skipped",
-                    details={"reason": "no_whatsapp_message_events", "event_id": webhook_event_id},
+                    details={"reason": "no_supported_whatsapp_events", "event_id": webhook_event_id},
                 )
                 return
             _process_whatsapp_message_events(db, whatsapp_message_events)
+            process_whatsapp_status_events(db, whatsapp_status_events)
+            process_whatsapp_template_status_events(db, whatsapp_template_events)
+            process_whatsapp_phone_quality_events(db, whatsapp_quality_events)
+            if whatsapp_raw_only_events:
+                logger.info(
+                    "Stored WhatsApp webhook event without state mutation",
+                    extra={
+                        "event_id": webhook_event_id,
+                        "fields": sorted({item.field for item in whatsapp_raw_only_events}),
+                    },
+                )
             event.processing_status = "processed"
             db.commit()
             log_action(
@@ -2727,6 +2709,29 @@ def process_whatsapp_ai_conversation_turn(conversation_id: str, inbound_message_
         lead = db.query(Lead).filter(Lead.id == conversation.lead_id).first()
         if not lead:
             logger.warning("Lead not found for WhatsApp AI turn", extra={"conversation_id": conversation_id})
+            return
+
+        contact = (
+            db.query(WhatsappContact)
+            .filter(
+                WhatsappContact.whatsapp_account_id == account.id,
+                WhatsappContact.wa_id == lead.ig_user_id,
+            )
+            .first()
+        )
+        if (
+            contact is None
+            or contact.marketing_consent == "opted_out"
+            or not in_service_window(contact)
+        ):
+            conversation_service.hand_off(db, conversation, "whatsapp_window_closed")
+            log_action(
+                db,
+                "ai_conversation_handed_off",
+                lead_id=lead.id,
+                whatsapp_account_id=account.id,
+                details={"conversation_id": conversation_id, "reason": "whatsapp_window_closed"},
+            )
             return
 
         result = ai_service.generate_reply(db, account, None, conversation.id, platform="whatsapp")

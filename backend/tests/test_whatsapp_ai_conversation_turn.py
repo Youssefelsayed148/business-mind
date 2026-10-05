@@ -16,6 +16,7 @@ from app.models.conversation import Conversation
 from app.models.lead import Lead
 from app.models.message import Message
 from app.models.whatsapp_account import WhatsappAccount
+from app.models.whatsapp_contact import WhatsappContact
 from app.models.whatsapp_token import WhatsappToken
 from app.models.workspace import Workspace
 from app.services import ai_service
@@ -68,6 +69,17 @@ def _seed(
         status="new",
     )
     db.add(lead)
+    db.commit()
+
+    db.add(
+        WhatsappContact(
+            workspace_id=ws.id,
+            whatsapp_account_id=account.id,
+            lead_id=lead.id,
+            wa_id=lead.ig_user_id,
+            last_inbound_at=datetime.now(timezone.utc),
+        )
+    )
     db.commit()
 
     conversation = Conversation(

@@ -7,8 +7,17 @@ from fastapi.testclient import TestClient
 from app.core.config import settings
 from app.integrations.meta.webhooks import verify_meta_signature
 from app.main import app
+from app.api.routes_webhooks import _payload_preview
 
 client = TestClient(app)
+
+
+def test_receiver_preview_redacts_only_whatsapp_payloads():
+    whatsapp = {"object": "whatsapp_business_account", "entry": [{"phone": "16315551234"}]}
+    instagram = {"object": "instagram", "entry": [{"id": "visible-id"}]}
+    assert _payload_preview(whatsapp) == "[redacted whatsapp_business_account payload]"
+    assert "16315551234" not in _payload_preview(whatsapp)
+    assert "visible-id" in _payload_preview(instagram)
 
 
 def _generate_signature(body: bytes, secret: str) -> str:

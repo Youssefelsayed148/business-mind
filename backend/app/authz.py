@@ -21,6 +21,9 @@ ROLE_PERMISSIONS: dict[str, set[str]] = {
         "delete_accounts",
         "view_audit_logs",
         "retry_messages",
+        "manage_contacts",
+        "manage_templates",
+        "run_campaigns",
     },
     ROLE_ADMIN: {
         "manage_campaigns",
@@ -29,6 +32,9 @@ ROLE_PERMISSIONS: dict[str, set[str]] = {
         "disconnect_accounts",
         "view_audit_logs",
         "retry_messages",
+        "manage_contacts",
+        "manage_templates",
+        "run_campaigns",
     },
     ROLE_OPERATOR: {
         "manage_campaigns",
@@ -169,5 +175,33 @@ def require_workspace_permission(permission: str) -> Callable:
         return _resolve_workspace_context(
             x_workspace_id, current_user, db, permission=permission
         )
+
+    return dependency
+
+
+def require_workspace_any_permission(*permissions: str) -> Callable:
+    """Require at least one workspace-scoped permission."""
+
+    async def dependency(
+        x_workspace_id: str | None = Header(default=None, alias="X-Workspace-Id"),
+        current_user: User = Depends(get_current_user),
+        db: Session = Depends(get_db),
+    ) -> WorkspaceContext:
+        ctx = _resolve_workspace_context(x_workspace_id, current_user, db)
+        membership = (
+            db.query(UserWorkspaceMembership)
+            .filter(
+                UserWorkspaceMembership.user_id == current_user.id,
+                UserWorkspaceMembership.workspace_id == ctx.workspace_id,
+            )
+            .one()
+        )
+        role_permissions = ROLE_PERMISSIONS.get(normalize_role(membership.role), set())
+        if not any(permission in role_permissions for permission in permissions):
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="You do not have permission to perform this action",
+            )
+        return ctx
 
     return dependency

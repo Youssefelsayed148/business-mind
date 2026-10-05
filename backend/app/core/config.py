@@ -19,6 +19,7 @@ class Settings(BaseSettings):
     APP_NAME: str = "Instagram Automation"
     APP_SECRET_KEY: str = "change_me_local_app_secret"
     APP_BASE_URL: str = "http://localhost:8000"
+    DASHBOARD_BASE_URL: str | None = None
     FRONTEND_URL: str = "http://localhost:3000"
     ALLOWED_ORIGINS: str = "http://localhost:3000"
     DISABLE_DOCS: bool = False
@@ -46,6 +47,32 @@ class Settings(BaseSettings):
     # Signup). Uses FACEBOOK_APP_ID/FACEBOOK_APP_SECRET, not the Instagram
     # App ID/secret.
     WHATSAPP_EMBEDDED_SIGNUP_CONFIG_ID: str = ""
+    WHATSAPP_OUTREACH_ENABLED: bool = False
+    WHATSAPP_HEALTH_STALE_MINUTES: int = 60
+    WHATSAPP_CAMPAIGN_BREAKER_WINDOW: int = 20
+    WHATSAPP_CAMPAIGN_BREAKER_FAILURE_THRESHOLD: float = 0.25
+    # Empty by default: Meta send failures are retried only after an operator
+    # explicitly allowlists their numeric codes (comma-separated).
+    WHATSAPP_RETRYABLE_META_CODES: str = ""
+    WHATSAPP_SEND_MAX_ATTEMPTS: int = 5
+    WHATSAPP_SEND_RETRY_BASE_SECONDS: int = 30
+    WHATSAPP_SEND_RETRY_MAX_SECONDS: int = 900
+    WHATSAPP_DISPATCH_BATCH_SIZE: int = 20
+    WHATSAPP_DISPATCH_TICK_SECONDS: int = 60
+    WHATSAPP_DISPATCH_BACKOFF_SECONDS: int = 900
+    # Redis brokers default to a 3600-second visibility timeout. Keep every
+    # dispatched batch inside the much smaller window below so delayed tasks
+    # are claimable well before an unacked delivery could be redelivered.
+    WHATSAPP_BROKER_VISIBILITY_TIMEOUT_SECONDS: int = 3600
+    WHATSAPP_DISPATCH_MAX_BATCH_WINDOW_SECONDS: int = 300
+    WHATSAPP_DISPATCH_WATCHDOG_SECONDS: int = 600
+    WHATSAPP_DEFER_GATE_TTL_SECONDS: int = 900
+    WHATSAPP_DEFER_GATE_MAX_TTL_SECONDS: int = 86460
+    WHATSAPP_OPT_IN_LINK_TTL_SECONDS: int = 2592000
+    WHATSAPP_PUBLIC_OPT_IN_IP_LIMIT: int = 10
+    WHATSAPP_PUBLIC_OPT_IN_ACCOUNT_LIMIT: int = 100
+    WHATSAPP_PUBLIC_OPT_IN_WINDOW_SECONDS: int = 3600
+    WHATSAPP_TEST_SEND_DAILY_LIMIT: int = 20
 
     # Facebook Page connection uses "Facebook Login for Business" — the same
     # config_id/FB.login() mechanism as WhatsApp's Embedded Signup, but a

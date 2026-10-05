@@ -15,6 +15,7 @@ from app.api import (
     routes_messages,
     routes_webhooks,
     routes_whatsapp,
+    routes_whatsapp_outreach,
     routes_workspaces,
 )
 from app.core.config import get_allowed_origins, settings
@@ -63,6 +64,8 @@ app.include_router(routes_messages.router)
 app.include_router(routes_conversations.router)
 app.include_router(routes_dashboard.router)
 app.include_router(routes_whatsapp.router)
+app.include_router(routes_whatsapp_outreach.router)
+app.include_router(routes_whatsapp_outreach.public_router)
 app.include_router(routes_facebook.router)
 app.include_router(routes_workspaces.router)
 
