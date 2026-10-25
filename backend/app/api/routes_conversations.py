@@ -16,10 +16,18 @@ from app.models.message import Message
 from app.models.user import User
 from app.models.whatsapp_account import WhatsappAccount
 from app.services import conversation_service
+from app.services import saas_delegation_service as delegation
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter()
+
+
+def _managed_by_saas() -> HTTPException:
+    return HTTPException(
+        status_code=409,
+        detail={"code": delegation.MANAGED_BY_SAAS_CODE, "message": delegation.MANAGED_BY_SAAS_MESSAGE},
+    )
 
 
 def _conversation_response(db: Session, conversation: Conversation) -> dict:
@@ -71,6 +79,7 @@ def _conversation_response(db: Session, conversation: Conversation) -> dict:
         "whatsapp_account_username": whatsapp_account.display_phone_number if whatsapp_account else None,
         "facebook_page_id": str(conversation.facebook_page_id) if conversation.facebook_page_id else None,
         "facebook_page_username": facebook_page.page_name if facebook_page else None,
+        "managed_by_saas": delegation.conversation_is_delegated(db, conversation),
         "status": conversation.status,
         "handoff_reason": conversation.handoff_reason,
         "turn_count": conversation.turn_count,
@@ -134,6 +143,9 @@ async def take_over_conversation(
     if not conversation:
         raise HTTPException(status_code=404, detail="Conversation not found")
 
+    if delegation.conversation_is_delegated(db, conversation):
+        raise _managed_by_saas()
+
     conversation_service.hand_off(db, conversation, "manual")
     logger.info("Conversation manually taken over", extra={"conversation_id": str(conversation_id), "user_id": str(current_user.id)})
     return _conversation_response(db, conversation)
@@ -149,6 +161,9 @@ async def resume_bot_conversation(
     conversation = db.query(Conversation).filter(Conversation.id == conversation_id).first()
     if not conversation:
         raise HTTPException(status_code=404, detail="Conversation not found")
+
+    if delegation.conversation_is_delegated(db, conversation):
+        raise _managed_by_saas()
 
     conversation_service.resume_bot(db, conversation)
     logger.info("Conversation bot resumed", extra={"conversation_id": str(conversation_id), "user_id": str(current_user.id)})

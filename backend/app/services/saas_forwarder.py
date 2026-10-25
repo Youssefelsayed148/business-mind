@@ -1,0 +1,258 @@
+"""Outbox + delivery loop for events Many forwards to the SaaS (M-02).
+
+Contract: section 6 and delta A7/A13. Events are stored in saas_forward_events
+and sent in seq order per ordering key. Network errors, 5xx and 429 are
+retried with exponential backoff and jitter (Retry-After honoured) for up to
+24 h with the same event_id; any other 4xx fails the event permanently. There
+is never an AI fallback: a failing SaaS only queues and marks the channel
+degraded.
+"""
+
+import json
+import logging
+import random
+import uuid
+from dataclasses import dataclass
+from datetime import datetime, timedelta, timezone
+
+import httpx
+from sqlalchemy.dialects.postgresql import insert as pg_insert
+from sqlalchemy.orm import Session
+
+from app.models.facebook_page import FacebookPage
+from app.models.instagram_account import InstagramAccount
+from app.models.saas_forward_event import SaasForwardEvent
+from app.models.whatsapp_account import WhatsappAccount
+from app.services import saas_delegation_service as delegation
+from app.services.saas_signing import sign_headers
+
+logger = logging.getLogger(__name__)
+
+EVENTS_PATH = "/api/channels/manyosiris/events"
+RETRY_BUDGET = timedelta(hours=24)
+BACKOFF_BASE_SECONDS = 5
+BACKOFF_CAP_SECONDS = 30 * 60
+RETRY_AFTER_CAP_SECONDS = 60 * 60
+CONNECT_TIMEOUT = 5.0
+READ_TIMEOUT = 15.0
+
+CHANNEL_MODELS = {
+    "instagram": InstagramAccount,
+    "whatsapp": WhatsappAccount,
+    "facebook": FacebookPage,
+}
+# Value of `channel` in the payload. The contract names the channels
+# "WhatsApp number / Messenger page / Instagram account" without spelling the
+# enum; keep the mapping in this one place.
+CONTRACT_CHANNEL = {"instagram": "instagram", "whatsapp": "whatsapp", "facebook": "messenger"}
+
+
+def _now() -> datetime:
+    return datetime.now(timezone.utc)
+
+
+def new_http_client() -> httpx.Client:
+    return httpx.Client(
+        timeout=httpx.Timeout(READ_TIMEOUT, connect=CONNECT_TIMEOUT),
+        follow_redirects=False,
+    )
+
+
+def enqueue_event(
+    db: Session,
+    *,
+    platform: str,
+    channel,
+    ordering_key: str,
+    event_id: str,
+    event_type: str,
+    payload: dict,
+    now: datetime | None = None,
+) -> bool:
+    """Insert an outbox row (idempotent on event_id). Does not commit.
+    Returns True if a new row was stored."""
+    stmt = (
+        pg_insert(SaasForwardEvent)
+        .values(
+            id=uuid.uuid4(),
+            event_id=event_id,
+            ordering_key=ordering_key,
+            platform=platform,
+            channel_id=channel.id,
+            event_type=event_type,
+            payload=payload,
+            status="pending",
+            attempts=0,
+            next_attempt_at=now or _now(),
+        )
+        .on_conflict_do_nothing(index_elements=["event_id"])
+        .returning(SaasForwardEvent.id)
+    )
+    return db.execute(stmt).first() is not None
+
+
+def drop_pending(db: Session, *, platform: str, channel_id, reason: str = "delegation_disabled") -> int:
+    """Drop every queued, unsent event of a channel (contract A13). Does not
+    commit."""
+    rows = (
+        db.query(SaasForwardEvent)
+        .filter(
+            SaasForwardEvent.platform == platform,
+            SaasForwardEvent.channel_id == channel_id,
+            SaasForwardEvent.status == "pending",
+        )
+        .all()
+    )
+    for row in rows:
+        _finish(row, "dropped", reason)
+    if rows:
+        logger.info(
+            "Dropped queued SaaS forwards",
+            extra={"platform": platform, "channel_id": str(channel_id), "count": len(rows), "reason": reason},
+        )
+    return len(rows)
+
+
+def _finish(row: SaasForwardEvent, status: str, error: str | None = None, now: datetime | None = None) -> None:
+    row.status = status
+    row.last_error = (error or None) and error[:200]
+    row.completed_at = now or _now()
+    row.next_attempt_at = None
+    row.payload = {}
+
+
+def backoff_seconds(attempts: int, rng: random.Random | None = None) -> float:
+    """Exponential backoff with jitter: half fixed, half random."""
+    rng = rng or random
+    ceiling = min(BACKOFF_CAP_SECONDS, BACKOFF_BASE_SECONDS * (2 ** max(attempts - 1, 0)))
+    return ceiling / 2 + rng.uniform(0, ceiling / 2)
+
+
+def _retry_after(response: httpx.Response) -> float | None:
+    value = response.headers.get("Retry-After")
+    if not value:
+        return None
+    try:
+        return max(0.0, min(float(value), RETRY_AFTER_CAP_SECONDS))
+    except ValueError:
+        return None
+
+
+@dataclass
+class ProcessResult:
+    sent: int = 0
+    failed: int = 0
+    dropped: int = 0
+    retry_in: float | None = None  # seconds until the head should be retried
+
+
+def _record(channel, status: str, *, degraded: bool | None = None, now: datetime) -> None:
+    channel.saas_last_forward_status = status
+    channel.saas_last_forward_at = now
+    if degraded is not None:
+        channel.saas_degraded = degraded
+
+
+def process_ordering_key(
+    db: Session,
+    ordering_key: str,
+    *,
+    client: httpx.Client | None = None,
+    now: datetime | None = None,
+    rng: random.Random | None = None,
+) -> ProcessResult:
+    """Send the pending events of one ordering key in order until one has to
+    wait. The caller serialises calls per key (advisory lock in the task)."""
+    result = ProcessResult()
+    owns_client = client is None
+    client = client or new_http_client()
+    try:
+        while True:
+            current = now or _now()
+            head = (
+                db.query(SaasForwardEvent)
+                .filter(SaasForwardEvent.ordering_key == ordering_key, SaasForwardEvent.status == "pending")
+                .order_by(SaasForwardEvent.seq)
+                .first()
+            )
+            if head is None:
+                return result
+            if head.next_attempt_at and head.next_attempt_at > current:
+                result.retry_in = (head.next_attempt_at - current).total_seconds()
+                return result
+
+            channel = db.get(CHANNEL_MODELS[head.platform], head.channel_id)
+            if channel is None or not channel.saas_delegation_enabled:
+                # A13: switched off (or gone) -> never send queued events.
+                drop_pending(db, platform=head.platform, channel_id=head.channel_id)
+                db.commit()
+                result.dropped += 1
+                continue
+
+            outcome = _attempt(db, head, channel, client, current, rng)
+            db.commit()
+            if outcome == "sent":
+                result.sent += 1
+            elif outcome == "failed":
+                result.failed += 1
+            else:
+                result.retry_in = (head.next_attempt_at - current).total_seconds()
+                return result
+    finally:
+        if owns_client:
+            client.close()
+
+
+def _attempt(db, row: SaasForwardEvent, channel, client, current: datetime, rng) -> str:
+    """One delivery attempt. Returns 'sent', 'failed' or 'retry'."""
+    row.attempts += 1
+    try:
+        base_url = delegation.validate_base_url(channel.saas_base_url or "")
+        secret, _previous = delegation.get_secrets(channel)
+        if not secret or not channel.saas_connection_id:
+            raise delegation.DelegationConfigError("incomplete delegation config")
+    except delegation.DelegationConfigError as exc:
+        # Misconfiguration will not fix itself between retries of one event.
+        _finish(row, "failed", f"config_error: {exc}", current)
+        _record(channel, "config_error", degraded=True, now=current)
+        return "failed"
+
+    body = json.dumps(row.payload, separators=(",", ":"), ensure_ascii=False).encode("utf-8")
+    headers = sign_headers(channel.saas_connection_id, secret, body)
+    headers["Content-Type"] = "application/json"
+
+    retry_after: float | None = None
+    try:
+        response = client.post(base_url + EVENTS_PATH, content=body, headers=headers)
+    except httpx.HTTPError as exc:
+        error = f"network_error: {type(exc).__name__}"
+    else:
+        code = response.status_code
+        if 200 <= code < 300:
+            _finish(row, "sent", None, current)
+            _record(channel, f"sent_{code}", degraded=False, now=current)
+            return "sent"
+        if code >= 500 or code == 429:
+            error = f"http_{code}"
+            retry_after = _retry_after(response) if code == 429 else None
+        else:
+            # Other 4xx (and unfollowed 3xx) are permanent; never retried.
+            _finish(row, "failed", f"http_{code}", current)
+            _record(channel, f"rejected_{code}", degraded=True, now=current)
+            logger.warning(
+                "SaaS rejected forwarded event",
+                extra={"event_id": row.event_id, "status_code": code},
+            )
+            return "failed"
+
+    created = row.created_at or current
+    if current - created >= RETRY_BUDGET:
+        _finish(row, "failed", f"retry_budget_exhausted ({error})", current)
+        _record(channel, "retry_budget_exhausted", degraded=True, now=current)
+        return "failed"
+
+    delay = max(backoff_seconds(row.attempts, rng), retry_after or 0.0)
+    row.next_attempt_at = current + timedelta(seconds=delay)
+    row.last_error = error[:200]
+    _record(channel, "retrying", degraded=True, now=current)
+    return "retry"

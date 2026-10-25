@@ -59,3 +59,5 @@ __all__ = [
     "WhatsappToken",
     "Workspace",
 ]
+from app.models.saas_forward_event import SaasForwardEvent
+from app.models.saas_outbound_message import SaasOutboundMessage

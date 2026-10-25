@@ -16,6 +16,8 @@ from app.api import (
     routes_webhooks,
     routes_whatsapp,
     routes_whatsapp_outreach,
+    routes_saas_delegation,
+    routes_saas_messages,
     routes_workspaces,
 )
 from app.core.config import get_allowed_origins, settings
@@ -68,6 +70,11 @@ app.include_router(routes_whatsapp_outreach.router)
 app.include_router(routes_whatsapp_outreach.public_router)
 app.include_router(routes_facebook.router)
 app.include_router(routes_workspaces.router)
+app.include_router(routes_saas_delegation.instagram_router)
+app.include_router(routes_saas_delegation.whatsapp_router)
+app.include_router(routes_saas_delegation.facebook_router)
+app.include_router(routes_saas_messages.router, prefix="/saas")
+app.include_router(routes_saas_messages.router, prefix="/api/saas")
 
 
 @app.get("/")

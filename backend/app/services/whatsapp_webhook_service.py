@@ -31,6 +31,8 @@ from app.services.whatsapp_consent_service import apply_keyword_consent, record_
 from app.models.whatsapp_contact import WhatsappContact
 from app.models.whatsapp_template import WhatsappTemplate
 from app.services.processed_event_service import check_and_mark_processed
+from app.services.saas_error_mapping import error_detail, map_meta_error
+from app.services.saas_status import emit_message_status
 from app.utils.db import is_unique_violation
 
 
@@ -332,6 +334,31 @@ def _increment(campaign: WhatsappCampaign | None, field: str) -> None:
         setattr(campaign, field, (getattr(campaign, field) or 0) + 1)
 
 
+def _report_to_saas(db: Session, message: Message, event: ParsedWhatsappStatusEvent) -> None:
+    """Forward delivered/read/failed for messages the SaaS asked us to send.
+    No-op for every other message; never lets a SaaS problem break the
+    status handler."""
+    if event.status not in {"delivered", "read", "failed"}:
+        return
+    try:
+        error_code = detail = None
+        if event.status == "failed":
+            first = event.errors[0] if event.errors else {}
+            error_code = map_meta_error("whatsapp", first.get("code"))
+            detail = error_detail(first.get("code"))
+        emit_message_status(
+            db,
+            message,
+            event.status,
+            error_code=error_code,
+            error_detail=detail,
+            occurred_at=whatsapp_event_time(event.timestamp),
+        )
+    except Exception:
+        db.rollback()
+        logger.warning("Could not queue SaaS status event", exc_info=True)
+
+
 def process_whatsapp_status_events(
     db: Session, events: list[ParsedWhatsappStatusEvent]
 ) -> None:
@@ -436,6 +463,7 @@ def process_whatsapp_status_events(
                 recipient.error_message = error_message
                 _increment(campaign, "failed_count")
         db.commit()
+        _report_to_saas(db, message, event)
 
 
 def process_whatsapp_template_status_events(

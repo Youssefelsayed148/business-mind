@@ -6,9 +6,10 @@ from sqlalchemy.dialects.postgresql import UUID as PGUUID
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.db.base import Base
+from app.models.saas_delegation import SaasDelegationMixin
 
 
-class FacebookPage(Base):
+class FacebookPage(SaasDelegationMixin, Base):
     """A connected Facebook Page. Modeled on InstagramAccount's full shape
     (not WhatsappAccount's trimmed one) because Facebook Pages have a real
     campaign/comment-trigger concept, same as Instagram — unlike WhatsApp,

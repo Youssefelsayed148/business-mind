@@ -6,9 +6,10 @@ from sqlalchemy.dialects.postgresql import UUID as PGUUID
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.db.base import Base
+from app.models.saas_delegation import SaasDelegationMixin
 
 
-class InstagramAccount(Base):
+class InstagramAccount(SaasDelegationMixin, Base):
     __tablename__ = "instagram_accounts"
 
     id: Mapped[uuid.UUID] = mapped_column(

@@ -6,9 +6,10 @@ from sqlalchemy.dialects.postgresql import JSONB, UUID as PGUUID
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.db.base import Base
+from app.models.saas_delegation import SaasDelegationMixin
 
 
-class WhatsappAccount(Base):
+class WhatsappAccount(SaasDelegationMixin, Base):
     """A connected WhatsApp Cloud API phone number for a workspace.
 
     Modeled on InstagramAccount's shape, but WhatsApp has no campaign concept

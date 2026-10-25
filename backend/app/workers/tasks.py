@@ -54,6 +54,7 @@ from app.services.facebook_message_service import create_queued_facebook_message
 from app.services.lead_service import upsert_lead_from_comment
 from app.services.log_service import log_action
 from app.services.processed_event_service import build_event_key, check_and_mark_processed
+from app.services.saas_inbound import delegate_inbound, delegate_whatsapp_event
 from app.services.whatsapp_webhook_service import (
     process_inbound_whatsapp_event,
     process_whatsapp_phone_quality_events,
@@ -357,6 +358,11 @@ def _process_whatsapp_message_events(db: Session, message_events) -> None:
             )
             continue
 
+        if account.saas_delegation_enabled:
+            # Delegated channel: the SaaS answers, Many's AI gates never run.
+            delegate_whatsapp_event(db, result, event)
+            continue
+
         if not event.text:
             logger.info(
                 "Inbound WhatsApp non-text message stored without AI dispatch",
@@ -545,6 +551,134 @@ def _dispatch_facebook_ai_turn(
     process_facebook_ai_conversation_turn.delay(str(conversation.id), str(inbound_message.id))
 
 
+def _delegate_instagram_message(db: Session, *, account: InstagramAccount, msg_evt) -> None:
+    """Delegated-mode counterpart of the lead resolution + dispatch in the
+    Instagram message loop: find or create the lead (no ai_cold_dm_enabled
+    gate), then hand the message to the shared SaaS helper. Nothing in the
+    existing Instagram handlers is reused or changed."""
+    if account.status != "connected":
+        logger.info(
+            "Delegated Instagram message not forwarded: account is not connected",
+            extra={"instagram_account_id": str(account.id), "status": account.status},
+        )
+        return
+
+    def _find():
+        return (
+            db.query(Lead)
+            .filter(
+                Lead.workspace_id == account.workspace_id,
+                Lead.instagram_account_id == account.id,
+                Lead.ig_user_id == msg_evt.sender_ig_id,
+            )
+            .first()
+        )
+
+    lead = _find()
+    if lead is None:
+        username: str | None = None
+        try:
+            token = get_decrypted_token(db, account.id)
+            if token:
+                client = MetaMessagingClient()
+                try:
+                    username = client.get_username(token, msg_evt.sender_ig_id)
+                finally:
+                    client.close()
+        except Exception:
+            logger.warning("Delegated Instagram username lookup failed", exc_info=True)
+        new_lead = Lead(
+            id=uuid4(),
+            workspace_id=account.workspace_id,
+            instagram_account_id=account.id,
+            ig_user_id=msg_evt.sender_ig_id,
+            ig_username=username,
+            last_seen_at=datetime.now(timezone.utc),
+            source_campaign_id=None,
+            lead_source="cold_dm",
+            status="new",
+        )
+        lead = _create_lead_or_reuse_concurrent(db, new_lead, _find)
+        if lead is None:
+            return
+    delegate_inbound(
+        db,
+        platform="instagram",
+        channel=account,
+        lead=lead,
+        external_contact_id=msg_evt.sender_ig_id,
+        contact={"handle": lead.ig_username},
+        text=msg_evt.text,
+        message_type="text",
+        external_message_id=msg_evt.mid,
+        timestamp=msg_evt.timestamp,
+        received_at=_meta_event_time(msg_evt.timestamp),
+    )
+
+
+def _delegate_facebook_message(db: Session, *, page: FacebookPage, evt) -> None:
+    """Delegated-mode counterpart of the lead resolution + dispatch below:
+    find or create the lead (no ai_cold_dm_enabled gate), then hand the
+    message to the shared SaaS helper."""
+
+    def _find():
+        return (
+            db.query(Lead)
+            .filter(
+                Lead.workspace_id == page.workspace_id,
+                Lead.facebook_page_id == page.id,
+                or_(Lead.facebook_psid == evt.sender_id, Lead.ig_user_id == evt.sender_id),
+            )
+            .order_by(Lead.facebook_psid.is_(None))
+            .first()
+        )
+
+    lead = _find()
+    if lead is not None and lead.facebook_psid is None:
+        lead.facebook_psid = evt.sender_id
+        db.commit()
+    if lead is None:
+        new_lead = Lead(
+            id=uuid4(),
+            workspace_id=page.workspace_id,
+            platform="facebook",
+            facebook_page_id=page.id,
+            instagram_account_id=None,
+            ig_user_id=evt.sender_id,
+            facebook_psid=evt.sender_id,
+            ig_username=None,
+            last_seen_at=datetime.now(timezone.utc),
+            lead_source="cold_dm",
+            status="new",
+        )
+        lead = _create_lead_or_reuse_concurrent(db, new_lead, _find)
+        if lead is None:
+            return
+    delegate_inbound(
+        db,
+        platform="facebook",
+        channel=page,
+        lead=lead,
+        external_contact_id=evt.sender_id,
+        contact={},
+        text=evt.text,
+        message_type="text",
+        external_message_id=evt.mid,
+        timestamp=evt.timestamp,
+        received_at=_meta_event_time(evt.timestamp),
+    )
+
+
+def _meta_event_time(timestamp) -> datetime:
+    """Messenger/Instagram webhook timestamps are epoch milliseconds; a value
+    too small to be one is read as seconds."""
+    try:
+        value = int(timestamp)
+        return datetime.fromtimestamp(value / 1000 if value > 10**11 else value, tz=timezone.utc)
+    except (TypeError, ValueError, OSError, OverflowError):
+        return datetime.now(timezone.utc)
+
+
 def _process_facebook_message_events(db: Session, message_events) -> None:
     """Facebook equivalent of the Instagram `for msg_evt in message_events:`
     block — Facebook has the same campaign-vs-cold_dm branch Instagram does
@@ -600,6 +734,11 @@ def _process_facebook_message_events(db: Session, message_events) -> None:
                     "sender_id": evt.sender_id,
                 },
             )
+            continue
+
+        if page.saas_delegation_enabled:
+            # Delegated channel: the SaaS answers, Many's AI gates never run.
+            _delegate_facebook_message(db, page=page, evt=evt)
             continue
 
         if not page.ai_enabled:
@@ -1388,6 +1527,11 @@ def process_webhook_event(webhook_event_id: str):
                         "sender_ig_id": msg_evt.sender_ig_id,
                     },
                 )
+                continue
+
+            if account.saas_delegation_enabled:
+                # Delegated channel: the SaaS answers, Many's AI gates never run.
+                _delegate_instagram_message(db, account=account, msg_evt=msg_evt)
                 continue
 
             if not account.ai_enabled:
