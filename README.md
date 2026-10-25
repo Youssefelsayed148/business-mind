@@ -395,6 +395,67 @@ curl -X POST http://localhost:8000/messages/<message_id>/retry \
   -H "Authorization: Bearer <access_token>"
 ```
 
+## SaaS Delegation (ManyOsirisChat)
+
+A channel (Instagram account, WhatsApp number or Facebook page) can run in
+**delegated mode**: an external SaaS writes the replies, Many keeps everything
+Meta (tokens, webhooks, the WhatsApp window and templates, campaigns,
+automations). The contract is in `docs/saas-delegation/CONTRACT-V1.md` and
+`CONTRACT-V1.1-DELTA.md` (the delta wins). Delegation is **off by default**
+and per channel; with it off, behaviour is exactly as before.
+
+### Turning it on (owner/admin)
+
+On *Accounts*, each channel has a "SaaS delegation" panel: enable, the SaaS
+`connection_id`, the SaaS base URL (https, no private hosts) and the signing
+secret (min. 32 chars; write-only, never shown again). API:
+`GET|PATCH /{instagram|whatsapp|facebook}/accounts/{id}/saas-delegation`.
+Rotating the secret keeps the previous one valid for 24 h. Disabling returns
+the channel to the old behaviour at once and drops queued, unsent forwards.
+
+### What happens
+
+- **Inbound:** every genuine customer DM is stored and forwarded (signed,
+  `POST {base_url}/api/channels/manyosiris/events`, `message.received`)
+  before any Many AI gate. Many's own AI never runs on the channel and never
+  acts as a fallback. Echoes, follow-gate postbacks/quick replies, WhatsApp
+  consent commands, receipts and reactions are not forwarded.
+- **Delivery:** an outbox with per-conversation ordering; retries on network
+  errors, 5xx and 429 (honours `Retry-After`) with backoff and jitter for up
+  to 24 h with the same `event_id`; other 4xx are final. While retrying the
+  channel shows "degraded".
+- **Outbound:** `POST /api/saas/messages` (signed, idempotent on `message_id`)
+  sends through Many's existing Meta send paths. The result comes back as
+  `message.status` (`sent`, `failed`, and `delivered`/`read` on WhatsApp),
+  with `error_code` mapped from Meta code/subcode, never message text. A send
+  is never retried by Many (a timeout may have reached Meta).
+- **Health:** `channel.status` on every transition and at least every 5 h,
+  plus the signed `GET /api/saas/connections/{connection_id}/health`.
+- **Take Over / Resume Bot** return `409 CHANNEL_MANAGED_BY_SAAS` on delegated
+  channels; the dashboard shows "Managed in the SaaS inbox".
+
+Signing: `X-Osiris-Connection`, `X-Osiris-Timestamp`,
+`X-Osiris-Signature: sha256=HMAC_SHA256(secret, timestamp + "." + raw_body)`;
+5 minute skew, 64 KB cap, every authentication failure is one generic 401.
+Behind the proxy the public `/api` prefix is stripped, so the endpoints are
+mounted at both `/saas/...` and `/api/saas/...`.
+
+Run Celery beat as well as the worker: the forward, send and health sweeps
+(`app/workers/saas_beat_schedule.py`) are the safety nets for lost tasks.
+
+### Contract tests
+
+`backend/tests/test_saas_contract.py` drives Many against a fake SaaS
+(`backend/tests/fake_saas.py`) that verifies signatures independently of
+Many's code, records requests and answers from a script. No network, Meta or
+OpenAI is involved.
+
+```bash
+cd backend
+APP_ENV=test TEST_DATABASE_URL=postgresql://USER:PASS@localhost:5432/many_test \
+  pytest tests/test_saas_*.py
+```
+
 ## Celery Workers
 
 The `worker` and `beat` services are started automatically by Docker Compose.
