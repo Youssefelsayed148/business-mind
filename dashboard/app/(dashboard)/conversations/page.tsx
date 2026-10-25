@@ -234,7 +234,9 @@ export default function ConversationsPage() {
                 )}
               </div>
 
-              {canManage ? (
+              {selected.managed_by_saas ? (
+                <div className="border-t border-line/70 pt-3 text-sm text-muted">Managed in the SaaS inbox</div>
+              ) : canManage ? (
                 <div className="flex gap-2 border-t border-line/70 pt-3">
                   {selected.status === "bot_active" ? (
                     <Button type="button" variant="secondary" disabled={actionPending} className="gap-2" onClick={() => takeOver(selected.id)}>

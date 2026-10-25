@@ -207,6 +207,9 @@ export type Conversation = {
   whatsapp_account_username?: string | null;
   facebook_page_id?: Id | null;
   facebook_page_username?: string | null;
+  // True when the channel is delegated to the SaaS: Take over / Resume bot
+  // are managed there, not in Many.
+  managed_by_saas?: boolean;
   status: "bot_active" | "handed_off" | "closed" | string;
   handoff_reason?: string | null;
   turn_count: number;
@@ -355,4 +358,17 @@ export type InstagramMediaResponse = {
   account_id: string;
   media: InstagramMedia[];
   next_cursor?: string | null;
+};
+
+export type SaasDelegationConfig = {
+  saas_delegation_enabled: boolean;
+  saas_connection_id: string | null;
+  saas_base_url: string | null;
+  secret_set: boolean;
+  previous_secret_active: boolean;
+  previous_secret_expires_at: string | null;
+  last_forward_status: string | null;
+  last_forward_at: string | null;
+  queue_depth: number | null;
+  degraded: boolean;
 };

@@ -4,6 +4,7 @@ import { Fragment, useEffect, useState } from "react";
 import { Bot, Link2, Trash2 } from "lucide-react";
 import { FacebookConnect } from "@/components/accounts/FacebookConnect";
 import { MockConnect } from "@/components/accounts/MockConnect";
+import { SaasDelegationPanel } from "@/components/accounts/SaasDelegationPanel";
 import { WhatsappConnect } from "@/components/accounts/WhatsappConnect";
 import { Avatar } from "@/components/ui/Avatar";
 import { Badge } from "@/components/ui/Badge";
@@ -729,6 +730,7 @@ export default function AccountsPage() {
                               setAccounts((prev) => prev.map((a) => (a.id === updated.id ? updated : a)));
                             }}
                           />
+                          <SaasDelegationPanel accountPath={`/instagram/accounts/${account.id}`} canManage={canManageAccounts} />
                         </td>
                       </tr>
                     ) : null}
@@ -825,6 +827,7 @@ export default function AccountsPage() {
                                 setWhatsappAccounts((prev) => prev.map((a) => (a.id === updated.id ? updated : a)));
                               }}
                             />
+                            <SaasDelegationPanel accountPath={`/whatsapp/accounts/${account.id}`} canManage={canManageAccounts} />
                           </td>
                         </tr>
                       ) : null}
@@ -921,6 +924,7 @@ export default function AccountsPage() {
                                 setFacebookPages((prev) => prev.map((p) => (p.id === updated.id ? updated : p)));
                               }}
                             />
+                            <SaasDelegationPanel accountPath={`/facebook/accounts/${page.id}`} canManage={canManageAccounts} />
                           </td>
                         </tr>
                       ) : null}
