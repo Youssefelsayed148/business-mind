@@ -1,6 +1,6 @@
 # Contract v1.1 delta (amends docs/17 v1)
 
-Status: PROPOSED 2026-10-26 from the Phase 6 review. Takes effect when the owner approves it (issuing the rebuild prompt counts as approval; record it as ADR-021 and merge it into docs/17 as part of ticket R-00). Where this delta and docs/17 v1 differ, this delta wins. Anything not mentioned stays as in v1.
+Status: ADOPTED (ADR-023). Proposed 2026-10-26 from the Phase 6 review; adopted by the owner on the SaaS side (branch `feature/phase-6-channels`) as ADR-023, which also carries A14. A15 is an owner-assumed default and is being implemented on the SaaS side in parallel. Where this delta and CONTRACT-V1.md differ, this delta wins. Anything not mentioned stays as in v1.
 
 A1. Channel must match. `message.received.channel` MUST equal the connection's channel. Otherwise the SaaS returns `422` (signed, malformed; Many must not retry).
 
@@ -30,3 +30,17 @@ A11. Campaign origin. WhatsApp: outreach campaign name and the rendered template
 A12. Rotation (clarification). During the 24 h grace window each side accepts either secret on inbound and signs outbound with the NEW secret. Many stores current and previous secret with the previous expiry.
 
 A13. Delegation off. Turning delegation off in Many returns the channel to today's behaviour immediately. Messages already queued for forwarding are dropped after the switch (logged), never sent to the SaaS afterwards.
+
+A14. SaaS-side behaviour Many must respect (already built on the SaaS side).
+- Retention: channel event payloads are purged at the tenant's retention cutoff; the dedupe record (connection_id, event_id) is kept 30 days.
+- Origin caps (A11) are enforced by the SaaS: `campaign_name` <= 120, `opening_message_text` <= 2000, `campaign_ref` <= 128, all of them strings; anything else is a signed `422` (Many must not retry). The SaaS fences the opening message, caps it at 500 characters and gives it to the bot as untrusted context only.
+- The SaaS sends `Accept-Encoding: identity`: Many must not compress the `202` body. A `Retry-After` from Many is honoured by the SaaS up to 300 s.
+- The health response (section 5.2) is capped at 64 KB by the SaaS.
+- A pushed `channel.status` with an `occurred_at` in the future counts as now.
+- SaaS-local delivery codes outside Many's `error_code` enum (A3): `connection_paused`, `connection_revoked`, `secret_unavailable`, `many_unreachable`, `invalid_many_target`, and `many_auth_rejected` (A15). Many never sends these.
+- A second secret rotation inside 24 h keeps only the newest and the immediately previous secret.
+
+A15. A 401 from the receiver is retryable for the sender (owner-assumed default), because secret rotation makes the two sides disagree for a while.
+- Many -> SaaS: retry a `401` with the normal backoff inside the 24 h budget, mark the channel degraded with `saas_last_forward_status = auth_rejected`, and keep the payload. This amends section 6 of v1 ("do not retry other 4xx"); every other 4xx stays permanent.
+- SaaS -> Many: a `401` is retried inside the SaaS retry budget (about 9 minutes), then the message is failed with `many_auth_rejected`. All other 4xx stay permanent.
+- Rotation runbook: pause the SaaS connection, rotate the secret in the SaaS, enter the new secret in Many, resume the connection.

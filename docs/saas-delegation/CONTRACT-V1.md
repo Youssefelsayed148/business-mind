@@ -1,6 +1,7 @@
 # ManyOsirisChat channel integration (ADR-002, ADR-017) - contract v1
 
 Status: contract v1, updated 2026-10-18 after the owner design session (supersedes the 2026-10-12 draft). 
+Amended by CONTRACT-V1.1-DELTA.md (ADOPTED, ADR-023, clauses A1-A15); where they differ the delta wins.
 Companion documents: implementation/PHASE-06/PLAN.md (SaaS build plan), implementation/PHASE-06/MANY-AGENT-PROMPT.md (Many-side requirements and prompt), docs/19-CHATBOT-STRATEGY-AND-MANYOSIRISCHAT-PLAN.md (decisions record).
 
 ## 1. Roles
