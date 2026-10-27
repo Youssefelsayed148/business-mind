@@ -8,6 +8,8 @@ callbacks (M-04) read that outcome.
 """
 
 import logging
+import random
+import time
 import uuid
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
@@ -27,7 +29,7 @@ from app.models.saas_outbound_message import SaasOutboundMessage
 from app.models.whatsapp_account import WhatsappAccount
 from app.models.whatsapp_contact import WhatsappContact
 from app.services import conversation_service, facebook_token_service, token_service, whatsapp_token_service
-from app.services.saas_error_mapping import error_detail, map_meta_error
+from app.services.saas_error_mapping import error_detail, is_rate_limited, map_meta_error
 from app.services.saas_status import emit_message_status
 from app.services.whatsapp_window_service import in_free_entry_window, in_service_window
 
@@ -36,6 +38,13 @@ logger = logging.getLogger(__name__)
 KINDS = {"reply", "agent", "handoff"}
 MESSAGE_TYPE = "saas_message"
 WINDOW = timedelta(hours=24)
+# Seconds to wait before each retry of a send that Meta rejected with a
+# rate-limit error (up to 3 retries). Only a definite Meta rate-limit response
+# is retried: the request was refused, so nothing was sent. A timeout, a
+# network error or an unreadable response is never retried (the message may
+# have been delivered).
+RATE_LIMIT_RETRY_DELAYS = (2.0, 5.0, 15.0)
+_TRANSPORT_ERRORS = ("network_error", "timeout", "invalid_json")
 
 # Meta's real per-message text limits (contract: Many enforces them and never
 # truncates). Instagram is counted in UTF-8 bytes, the others in characters.
@@ -259,7 +268,7 @@ def _deliver(db: Session, message_pk, *, now: datetime | None = None) -> str:
     if not _window_open(db, platform, channel, conversation, lead, now):
         return _fail(db, message, "window_closed", "outside the messaging window")
 
-    result = _send(db, platform, channel, lead, text)
+    result = _send_with_rate_limit_retries(db, platform, channel, lead, text)
     if result is None:
         return _fail(db, message, "channel_disconnected", "no active access token")
     if result.success:
@@ -271,15 +280,40 @@ def _deliver(db: Session, message_pk, *, now: datetime | None = None) -> str:
         db.commit()
         return "sent"
 
-    body = (result.raw_response or {}).get("error", {}) if isinstance(result.raw_response, dict) else {}
-    code, subcode = body.get("code"), body.get("error_subcode")
-    transport = result.error_code if result.error_code in ("network_error", "timeout", "invalid_json") else None
+    code, subcode = _meta_error(result)
+    transport = result.error_code if result.error_code in _TRANSPORT_ERRORS else None
     message.status = "failed"
     message.error_code = map_meta_error(platform, code, subcode)
     message.error_message = error_detail(code, subcode, transport)
     message.retryable = bool(result.retryable)
     db.commit()
     return "failed"
+
+
+def _meta_error(result) -> tuple[object, object]:
+    body = (result.raw_response or {}).get("error", {}) if isinstance(result.raw_response, dict) else {}
+    if not isinstance(body, dict):
+        return None, None
+    return body.get("code"), body.get("error_subcode")
+
+
+def definite_rate_limit(platform: str, result) -> bool:
+    """True only when Meta answered with a rate-limit error code."""
+    if result is None or result.success or result.error_code in _TRANSPORT_ERRORS:
+        return False
+    code, subcode = _meta_error(result)
+    return code is not None and is_rate_limited(platform, code, subcode)
+
+
+def _send_with_rate_limit_retries(db: Session, platform: str, channel, lead: Lead, text: str):
+    result = _send(db, platform, channel, lead, text)
+    for delay in RATE_LIMIT_RETRY_DELAYS:
+        if not definite_rate_limit(platform, result):
+            break
+        logger.info("Meta rate limit on a delegated send; retrying", extra={"platform": platform, "delay": delay})
+        time.sleep(delay + random.uniform(0, delay / 2))
+        result = _send(db, platform, channel, lead, text)
+    return result
 
 
 def _send(db: Session, platform: str, channel, lead: Lead, text: str):
