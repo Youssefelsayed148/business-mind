@@ -6,6 +6,11 @@ retried with exponential backoff and jitter (Retry-After honoured) for up to
 24 h with the same event_id; any other 4xx fails the event permanently. There
 is never an AI fallback: a failing SaaS only queues and marks the channel
 degraded.
+
+A15: a 401 is also retried (secret rotation makes the two sides disagree for a
+while). It uses the normal backoff inside the 24 h budget, marks the channel
+degraded with saas_last_forward_status=auth_rejected and keeps the payload.
+Every other 4xx stays permanent.
 """
 
 import json
@@ -316,6 +321,7 @@ def _attempt(db, row: SaasForwardEvent, channel, client, current: datetime, rng)
     headers["Content-Type"] = "application/json"
 
     retry_after: float | None = None
+    retry_status = "retrying"
     try:
         response = client.post(base_url + EVENTS_PATH, content=body, headers=headers)
     except httpx.HTTPError as exc:
@@ -329,8 +335,12 @@ def _attempt(db, row: SaasForwardEvent, channel, client, current: datetime, rng)
         if code >= 500 or code == 429:
             error = f"http_{code}"
             retry_after = _retry_after(response) if code == 429 else None
+        elif code == 401:
+            # A15: retryable, the operator may still be entering the new secret.
+            error = "http_401"
+            retry_status = "auth_rejected"
         else:
-            # Other 4xx (and unfollowed 3xx) are permanent; never retried.
+            # Other 4xx (401 is handled above) and unfollowed 3xx are permanent.
             _finish(row, "failed", f"http_{code}", current)
             _record(channel, f"rejected_{code}", degraded=True, now=current)
             logger.warning(
@@ -348,5 +358,5 @@ def _attempt(db, row: SaasForwardEvent, channel, client, current: datetime, rng)
     delay = max(backoff_seconds(row.attempts, rng), retry_after or 0.0)
     row.next_attempt_at = current + timedelta(seconds=delay)
     row.last_error = error[:200]
-    _record(channel, "retrying", degraded=True, now=current)
+    _record(channel, retry_status, degraded=True, now=current)
     return "retry"

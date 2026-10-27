@@ -152,7 +152,7 @@ def test_retry_after_is_honoured_on_429(db_session, account):
 
 
 @skip_if_no_db
-@pytest.mark.parametrize("code", [400, 401, 403, 404, 422])
+@pytest.mark.parametrize("code", [400, 403, 404, 422])
 def test_other_4xx_are_permanent_and_not_retried(db_session, account, code):
     _enqueue(db_session, account, "e1")
     saas = FakeSaas(_resp(code))
@@ -161,6 +161,62 @@ def test_other_4xx_are_permanent_and_not_retried(db_session, account, code):
     assert _row(db_session, "e1").status == "failed"
     db_session.refresh(account)
     assert account.saas_last_forward_status == f"rejected_{code}"
+
+
+@skip_if_no_db
+def test_401_is_retried_with_backoff_marks_auth_rejected_and_keeps_payload(db_session, account):
+    _enqueue(db_session, account, "e1", text="keep")
+    saas = FakeSaas(_resp(401))
+    result = fwd.process_ordering_key(db_session, "conv-1", client=saas.client(), now=T0, rng=random.Random(1))
+    assert result.failed == 0 and result.retry_in and result.retry_in > 0
+    row = _row(db_session, "e1")
+    assert row.status == "pending" and row.attempts == 1 and row.next_attempt_at > T0
+    assert row.last_error == "http_401" and row.payload["text"] == "keep"
+    db_session.refresh(account)
+    assert account.saas_degraded is True and account.saas_last_forward_status == "auth_rejected"
+
+
+@skip_if_no_db
+def test_401_then_202_succeeds_after_the_secret_is_fixed(db_session, account):
+    _enqueue(db_session, account, "e1")
+    fwd.process_ordering_key(db_session, "conv-1", client=FakeSaas(_resp(401)).client(), now=T0)
+    # The operator enters the new secret in Many; the retry signs with it.
+    delegation.apply_config(account, {"secret": "n" * 40}, now=T0)
+    db_session.commit()
+    ok = FakeSaas(_resp(202))
+    later = _row(db_session, "e1").next_attempt_at + timedelta(seconds=1)
+    result = fwd.process_ordering_key(db_session, "conv-1", client=ok.client(), now=later)
+    assert result.sent == 1
+    request = ok.requests[0]
+    assert json.loads(request.content)["event_id"] == "e1"
+    assert verify_signature(
+        ["n" * 40], request.headers["x-osiris-timestamp"], request.headers["x-osiris-signature"], request.content
+    )
+    assert _row(db_session, "e1").status == "sent"
+    db_session.refresh(account)
+    assert account.saas_degraded is False and account.saas_last_forward_status == "sent_202"
+
+
+@skip_if_no_db
+def test_401_until_the_24h_budget_ends_fails_and_keeps_payload(db_session, account):
+    _enqueue(db_session, account, "e1", text="keep")
+    _row(db_session, "e1").created_at = T0 - timedelta(hours=24, minutes=1)
+    db_session.commit()
+    saas = FakeSaas(_resp(401))
+    result = fwd.process_ordering_key(db_session, "conv-1", client=saas.client(), now=T0)
+    assert result.failed == 1
+    row = _row(db_session, "e1")
+    assert row.status == "failed" and "retry_budget_exhausted" in row.last_error and "http_401" in row.last_error
+    assert row.payload["text"] == "keep"
+
+
+@skip_if_no_db
+def test_401_blocks_later_events_of_the_conversation_like_any_retry(db_session, account):
+    _enqueue(db_session, account, "e1")
+    _enqueue(db_session, account, "e2")
+    saas = FakeSaas(_resp(401))
+    fwd.process_ordering_key(db_session, "conv-1", client=saas.client(), now=T0)
+    assert len(saas.requests) == 1 and _row(db_session, "e2").attempts == 0
 
 
 @skip_if_no_db
