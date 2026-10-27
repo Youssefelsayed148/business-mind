@@ -83,7 +83,7 @@ def test_rollback_disabling_delegation_restores_the_actions(client, db_session, 
 @skip_if_no_db
 def test_conversation_payloads_flag_managed_by_saas(client, db_session, as_admin):
     on = _world(db_session, "whatsapp")
-    off = _world(db_session, "facebook", connection="conn-off")
+    off = _world(db_session, "facebook", connection="33333333-3333-4333-8333-333333333333")
     off.channel.saas_delegation_enabled = False
     db_session.commit()
     assert client.get(f"/conversations/{on.conv.id}").json()["managed_by_saas"] is True

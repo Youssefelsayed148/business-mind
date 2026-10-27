@@ -130,7 +130,7 @@ def test_push_on_transition_only_then_heartbeat(db_session, _no_broker):
 @skip_if_no_db
 def test_sweep_pushes_for_delegated_channels_only(db_session):
     w = _world(db_session)
-    off = _world(db_session, connection="conn-off")
+    off = _world(db_session, connection="33333333-3333-4333-8333-333333333333")
     off.channel.saas_delegation_enabled = False
     db_session.commit()
     _webhook_failures(db_session, 0)
@@ -214,7 +214,7 @@ def test_pull_accepts_previous_secret_during_rotation(client, db_session):
 @skip_if_no_db
 def test_pull_failures_are_one_generic_401(client, db_session):
     w = _world(db_session)
-    other = _world(db_session, connection="conn-2")
+    other = _world(db_session, connection="22222222-2222-4222-8222-222222222222")
     other.channel.saas_delegation_enabled = False
     db_session.commit()
     stale = (datetime.now(timezone.utc) - timedelta(minutes=6)).timestamp()
@@ -222,8 +222,8 @@ def test_pull_failures_are_one_generic_401(client, db_session):
         "bad secret": _get(client, secret="z" * 40),
         "stale": _get(client, now=stale),
         "unknown connection": _get(client, connection="nope"),
-        "delegation off": _get(client, connection="conn-2"),
-        "path mismatch": _get(client, path_id="conn-2"),
+        "delegation off": _get(client, connection="22222222-2222-4222-8222-222222222222"),
+        "path mismatch": _get(client, path_id="22222222-2222-4222-8222-222222222222"),
         "body present": _get(client, content=b"{}"),
         "no signature": client.get(f"/api/saas/connections/{CONN}/health"),
         "bad signature header": _get(client, headers_over={"X-Osiris-Signature": "sha256=00"}),

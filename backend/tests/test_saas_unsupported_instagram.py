@@ -2,6 +2,8 @@
 are forwarded as `unsupported` only for delegated accounts; with delegation
 off nothing changes."""
 
+from unittest.mock import patch
+
 import pytest
 
 from app.integrations.meta.unsupported_messages import parse_instagram_unsupported_message_events
@@ -69,10 +71,18 @@ def test_instagram_delegated_forwards_image_as_unsupported_without_ai(db_session
 
 @skip_if_no_db
 def test_instagram_unsupported_is_deduplicated_and_text_still_forwarded(db_session):
+    from app.workers import tasks
+
     acc = _ig_account(db_session, delegated=True)
-    payload = _payload(acc.ig_user_id, IMAGE)
-    _run(db_session, payload, "instagram")
-    _run(db_session, payload, "instagram")
+    events = parse_instagram_unsupported_message_events(_payload(acc.ig_user_id, IMAGE))
+    with patch.object(tasks, "check_and_mark_processed", return_value=False) as marked, patch(
+        "app.services.saas_inbound._kick"
+    ):
+        tasks._process_delegated_instagram_unsupported(db_session, events)
+    assert marked.call_args.kwargs["event_key"] == "ig_message:9000011:mid.img"
+    assert _events(db_session, acc) == []  # a re-delivery forwards nothing
+
+    _run(db_session, _payload(acc.ig_user_id, IMAGE), "instagram")  # first delivery is forwarded
     _run(db_session, ig_text_payload(acc.ig_user_id, "9000011", "and text", "mid.text"), "instagram")
     kinds = [(e.event_id, e.payload["type"]) for e in _events(db_session, acc)]
     assert kinds == [("in:instagram:mid.img", "unsupported"), ("in:instagram:mid.text", "text")]

@@ -35,7 +35,7 @@ from tests.test_saas_messages import CONN, OLD_SECRET, SECRET, _world, _accept, 
 
 @pytest.fixture
 def saas():
-    return FakeSaas("conn-1", [SECRET])
+    return FakeSaas("11111111-1111-4111-8111-111111111111", [SECRET])
 
 
 def _deliver(db, key, fake, **kw):
@@ -67,7 +67,7 @@ def test_delegation_on_dm_reaches_the_saas_signed_and_ai_never_runs(db_session, 
     [req] = saas.requests
     assert req.path == fwd.EVENTS_PATH and req.signature_ok and saas.problems == []
     [p] = saas.delivered("message.received")
-    assert p["channel"] == "whatsapp" and p["text"] == "hello" and p["connection_id"] == "conn-1"
+    assert p["channel"] == "whatsapp" and p["text"] == "hello" and p["connection_id"] == "11111111-1111-4111-8111-111111111111"
     assert p["external_conversation_id"] == str(conv.id) and p["external_message_id"] == "wamid.c1"
 
 
@@ -197,7 +197,7 @@ def test_duplicate_acknowledged_by_the_saas_is_success_and_never_resent(db_sessi
     acc = _wa_account(db_session, delegated=True)
     _run(db_session, wa_payload(acc, "16315551234", "hello", "wamid.dup"), "whatsapp_business_account")
     key = str(_conv(db_session, whatsapp_account_id=acc.id).id)
-    saas.seen.add(("conn-1", "in:whatsapp:wamid.dup"))
+    saas.seen.add(("11111111-1111-4111-8111-111111111111", "in:whatsapp:wamid.dup"))
     assert _deliver(db_session, key, saas).sent == 1
     assert _deliver(db_session, key, saas).sent == 0 and len(saas.requests) == 1
 
@@ -224,7 +224,7 @@ def test_events_carry_the_contract_headers_and_envelope(db_session, saas):
     _deliver(db_session, str(_conv(db_session, whatsapp_account_id=acc.id).id), saas)
     [req] = saas.requests
     h = {k.lower(): v for k, v in req.headers.items()}
-    assert h["x-osiris-connection"] == "conn-1" and h["x-osiris-signature"].startswith("sha256=")
+    assert h["x-osiris-connection"] == "11111111-1111-4111-8111-111111111111" and h["x-osiris-signature"].startswith("sha256=")
     assert h["x-osiris-timestamp"].isdigit() and h["content-type"].startswith("application/json")
     assert req.signature_ok and saas.problems == []
 
@@ -251,7 +251,7 @@ def test_signature_rejection_matrix_is_one_generic_401(client, db_session, start
     import time
 
     w = _world(db_session)
-    off = _world(db_session, connection="conn-off")
+    off = _world(db_session, connection="33333333-3333-4333-8333-333333333333")
     off.channel.saas_delegation_enabled = False
     db_session.commit()
     big = json.dumps({"message_id": "x", "text": "a" * 70000}).encode()
@@ -263,7 +263,7 @@ def test_signature_rejection_matrix_is_one_generic_401(client, db_session, start
         "missing timestamp": _post_many(client, w, drop=("X-Osiris-Timestamp",)),
         "missing connection": _post_many(client, w, drop=("X-Osiris-Connection",)),
         "unknown connection": _post_many(client, w, connection="nope"),
-        "delegation off": _post_many(client, w, connection="conn-off"),
+        "delegation off": _post_many(client, w, connection="33333333-3333-4333-8333-333333333333"),
         "oversize body": _post_many(client, w, raw=big),
     }
     tampered = fake_saas.sign(CONN, SECRET, b'{"a":1}')
@@ -282,12 +282,12 @@ def test_dual_secret_rotation_both_directions(client, db_session, saas, started)
     assert _post_many(client, w, secret=SECRET).status_code == 202
     assert _post_many(client, w, secret="n" * 40).status_code == 202
     # ...and signs outbound with the NEW one only.
-    fresh = FakeSaas("conn-1", ["n" * 40])
+    fresh = FakeSaas("11111111-1111-4111-8111-111111111111", ["n" * 40])
     saas_event = saas_health.sync_channel(db_session, "whatsapp", w.channel, force=True, kick=False)
     assert saas_event
     _deliver(db_session, f"channel:whatsapp:{w.channel.id}", fresh)
     assert fresh.requests and all(r.signature_ok for r in fresh.requests)
-    old_only = FakeSaas("conn-1", [SECRET])
+    old_only = FakeSaas("11111111-1111-4111-8111-111111111111", [SECRET])
     w.channel.saas_last_health_at = None
     db_session.commit()
     saas_health.sync_channel(db_session, "whatsapp", w.channel, force=True, kick=False)

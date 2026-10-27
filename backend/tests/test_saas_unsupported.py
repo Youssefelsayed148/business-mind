@@ -2,6 +2,7 @@
 delegated WhatsApp and Facebook channels; the existing parsers and every
 non-delegated channel behave exactly as before."""
 
+from unittest.mock import patch
 from uuid import uuid4
 
 import pytest
@@ -109,11 +110,19 @@ def test_whatsapp_delegated_forwards_messages_the_parser_drops(db_session, case)
 
 @skip_if_no_db
 def test_whatsapp_unparsed_message_is_deduplicated(db_session):
+    # A real duplicate insert rolls back the whole test transaction, so the
+    # shared dedupe service is stubbed: "already processed" must forward nothing.
+    from app.services.saas_inbound import delegated_whatsapp_unparsed_events, process_delegated_whatsapp_unparsed
+
     acc = _wa_account(db_session, delegated=True)
     payload = _wa_payload(acc, {"type": "interactive", "interactive": {"type": "nfm_reply"}}, message_id="wamid.d")
-    _run(db_session, payload, "whatsapp_business_account")
-    _run(db_session, payload, "whatsapp_business_account")
-    assert len(_events(db_session, acc)) == 1
+    events = delegated_whatsapp_unparsed_events(db_session, payload)
+    with patch("app.services.whatsapp_webhook_service.check_and_mark_processed", return_value=False) as marked, patch(
+        "app.services.saas_inbound._kick"
+    ):
+        process_delegated_whatsapp_unparsed(db_session, events)
+    assert marked.call_args.kwargs["event_key"] == "whatsapp_message:wamid.d"
+    assert _events(db_session, acc) == []
 
 
 @skip_if_no_db
@@ -197,12 +206,21 @@ def test_facebook_delegated_forwards_image_as_unsupported_without_ai(db_session)
 
 @skip_if_no_db
 def test_facebook_unsupported_message_is_deduplicated_and_text_still_forwarded(db_session):
+    from app.integrations.meta.unsupported_messages import parse_facebook_unsupported_message_events
+    from app.workers import tasks
+
     page = _fb_page(db_session, delegated=True)
     page.status = "connected"
     db_session.commit()
-    payload = _messaging(page.page_id, IMAGE)
-    _run(db_session, payload, "page")
-    _run(db_session, payload, "page")
+    events = parse_facebook_unsupported_message_events(_messaging(page.page_id, IMAGE))
+    with patch.object(tasks, "check_and_mark_processed", return_value=False) as marked, patch(
+        "app.services.saas_inbound._kick"
+    ):
+        tasks._process_delegated_facebook_unsupported(db_session, events)
+    assert marked.call_args.kwargs["event_key"] == "facebook_message:psid-1:m.img"
+    assert _events(db_session, page) == []
+
+    _run(db_session, _messaging(page.page_id, IMAGE), "page")  # first delivery is forwarded
     _run(db_session, fb_text_payload(page.page_id, "psid-1", "and some text", "m.text"), "page")
     kinds = [(e.event_id, e.payload["type"]) for e in _events(db_session, page)]
     assert kinds == [("in:facebook:m.img", "unsupported"), ("in:facebook:m.text", "text")]
