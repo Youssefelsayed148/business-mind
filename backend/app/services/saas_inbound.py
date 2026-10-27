@@ -315,3 +315,21 @@ def delegated_facebook_unsupported_events(db: Session, payload: dict) -> list:
         )
     }
     return [e for e in events if e.facebook_page_id in delegated]
+
+
+def delegated_instagram_unsupported_events(db: Session, payload: dict) -> list:
+    """Non-text Instagram DMs, limited to accounts in delegated mode."""
+    from app.integrations.meta.unsupported_messages import parse_instagram_unsupported_message_events
+    from app.models.instagram_account import InstagramAccount
+
+    events = parse_instagram_unsupported_message_events(payload)
+    if not events:
+        return []
+    delegated = {
+        ig_user_id
+        for (ig_user_id,) in db.query(InstagramAccount.ig_user_id).filter(
+            InstagramAccount.ig_user_id.in_({e.instagram_account_ig_user_id for e in events}),
+            InstagramAccount.saas_delegation_enabled.is_(True),
+        )
+    }
+    return [e for e in events if e.instagram_account_ig_user_id in delegated]

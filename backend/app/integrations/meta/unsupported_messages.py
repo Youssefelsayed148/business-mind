@@ -74,3 +74,19 @@ def parse_facebook_unsupported_message_events(payload: dict):
         )
         for page_id, sender_id, item, message in iter_unsupported_messaging_items(payload)
     ]
+
+
+def parse_instagram_unsupported_message_events(payload: dict):
+    from app.integrations.meta.webhooks import ParsedMessageEvent
+
+    return [
+        ParsedMessageEvent(
+            instagram_account_ig_user_id=ig_user_id,
+            sender_ig_id=sender_id,
+            text="",
+            mid=message.get("mid"),
+            timestamp=item.get("timestamp"),
+            raw_event=item,
+        )
+        for ig_user_id, sender_id, item, message in iter_unsupported_messaging_items(payload)
+    ]

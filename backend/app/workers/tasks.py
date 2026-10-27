@@ -58,6 +58,7 @@ from app.services.saas_inbound import (
     delegate_inbound,
     delegate_whatsapp_event,
     delegated_facebook_unsupported_events,
+    delegated_instagram_unsupported_events,
     delegated_whatsapp_unparsed_events,
     process_delegated_whatsapp_unparsed,
 )
@@ -614,12 +615,36 @@ def _delegate_instagram_message(db: Session, *, account: InstagramAccount, msg_e
         lead=lead,
         external_contact_id=msg_evt.sender_ig_id,
         contact={"handle": lead.ig_username},
-        text=msg_evt.text,
-        message_type="text",
+        text=msg_evt.text or None,
+        message_type="text" if msg_evt.text else "unsupported",
         external_message_id=msg_evt.mid,
         timestamp=msg_evt.timestamp,
         received_at=_meta_event_time(msg_evt.timestamp),
     )
+
+
+def _process_delegated_instagram_unsupported(db: Session, events) -> None:
+    """Non-text Instagram DMs (voice, image, sticker, ...) of delegated
+    accounts: same dedupe and account lookup as the text path, then the
+    delegated helper forwards them as `unsupported`. Never called for a
+    non-delegated account."""
+    for msg_evt in events:
+        is_new = check_and_mark_processed(
+            db,
+            event_key=f"ig_message:{msg_evt.sender_ig_id}:{msg_evt.mid or msg_evt.timestamp or ''}",
+            event_type="ig_message",
+            metadata={"sender_ig_id": msg_evt.sender_ig_id, "type": "unsupported"},
+        )
+        if not is_new:
+            continue
+        account = (
+            db.query(InstagramAccount)
+            .filter(InstagramAccount.ig_user_id == msg_evt.instagram_account_ig_user_id)
+            .first()
+        )
+        if account is None or not account.saas_delegation_enabled:
+            continue
+        _delegate_instagram_message(db, account=account, msg_evt=msg_evt)
 
 
 def _delegate_facebook_message(db: Session, *, page: FacebookPage, evt) -> None:
@@ -1240,11 +1265,14 @@ def process_webhook_event(webhook_event_id: str):
         comment_events = parse_instagram_comment_events(event.payload or {})
         postback_events = parse_instagram_postback_events(event.payload or {})
         message_events = parse_instagram_message_events(event.payload or {})
-        if not comment_events and not postback_events and not message_events:
+        delegated_unsupported_events = delegated_instagram_unsupported_events(db, event.payload or {})
+        if not comment_events and not postback_events and not message_events and not delegated_unsupported_events:
             event.processing_status = "skipped"
             db.commit()
             log_action(db, "webhook_skipped", details={"reason": "no_comment_postback_or_message_events", "event_id": webhook_event_id})
             return
+
+        _process_delegated_instagram_unsupported(db, delegated_unsupported_events)
 
         for parsed in comment_events:
             # Per-change deduplication: skip if this comment was already processed.
