@@ -54,7 +54,13 @@ from app.services.facebook_message_service import create_queued_facebook_message
 from app.services.lead_service import upsert_lead_from_comment
 from app.services.log_service import log_action
 from app.services.processed_event_service import build_event_key, check_and_mark_processed
-from app.services.saas_inbound import delegate_inbound, delegate_whatsapp_event
+from app.services.saas_inbound import (
+    delegate_inbound,
+    delegate_whatsapp_event,
+    delegated_facebook_unsupported_events,
+    delegated_whatsapp_unparsed_events,
+    process_delegated_whatsapp_unparsed,
+)
 from app.services.whatsapp_webhook_service import (
     process_inbound_whatsapp_event,
     process_whatsapp_phone_quality_events,
@@ -661,12 +667,31 @@ def _delegate_facebook_message(db: Session, *, page: FacebookPage, evt) -> None:
         lead=lead,
         external_contact_id=evt.sender_id,
         contact={},
-        text=evt.text,
-        message_type="text",
+        text=evt.text or None,
+        message_type="text" if evt.text else "unsupported",
         external_message_id=evt.mid,
         timestamp=evt.timestamp,
         received_at=_meta_event_time(evt.timestamp),
     )
+
+
+def _process_delegated_facebook_unsupported(db: Session, events) -> None:
+    """Non-text Messenger messages (voice, image, sticker, ...) of delegated
+    Pages: the same dedupe and connected-page gate as the text path, then
+    forwarded as `unsupported`. Never called for a non-delegated Page."""
+    for evt in events:
+        is_new = check_and_mark_processed(
+            db,
+            event_key=f"facebook_message:{evt.sender_id}:{evt.mid or evt.timestamp or ''}",
+            event_type="facebook_message",
+            metadata={"sender_id": evt.sender_id, "type": "unsupported"},
+        )
+        if not is_new:
+            continue
+        page = db.query(FacebookPage).filter(FacebookPage.page_id == evt.facebook_page_id).first()
+        if page is None or not page.saas_delegation_enabled or page.status != "connected":
+            continue
+        _delegate_facebook_message(db, page=page, evt=evt)
 
 
 def _meta_event_time(timestamp) -> datetime:
@@ -1100,9 +1125,12 @@ def process_webhook_event(webhook_event_id: str):
             whatsapp_template_events = parse_whatsapp_template_status_events(event.payload or {})
             whatsapp_quality_events = parse_whatsapp_phone_quality_events(event.payload or {})
             whatsapp_raw_only_events = parse_whatsapp_raw_only_events(event.payload or {})
+            # Delegated accounts only ([] for every other account).
+            whatsapp_delegated_unparsed = delegated_whatsapp_unparsed_events(db, event.payload or {})
             if not any(
                 (
                     whatsapp_message_events,
+                    whatsapp_delegated_unparsed,
                     whatsapp_status_events,
                     whatsapp_template_events,
                     whatsapp_quality_events,
@@ -1118,6 +1146,7 @@ def process_webhook_event(webhook_event_id: str):
                 )
                 return
             _process_whatsapp_message_events(db, whatsapp_message_events)
+            process_delegated_whatsapp_unparsed(db, whatsapp_delegated_unparsed)
             process_whatsapp_status_events(db, whatsapp_status_events)
             process_whatsapp_template_status_events(db, whatsapp_template_events)
             process_whatsapp_phone_quality_events(db, whatsapp_quality_events)
@@ -1142,7 +1171,14 @@ def process_webhook_event(webhook_event_id: str):
             facebook_comment_events = parse_facebook_comment_events(event.payload or {})
             facebook_message_events = parse_facebook_message_events(event.payload or {})
             facebook_postback_events = parse_facebook_postback_events(event.payload or {})
-            if not facebook_comment_events and not facebook_message_events and not facebook_postback_events:
+            # Delegated Pages only ([] for every other Page).
+            facebook_delegated_unsupported = delegated_facebook_unsupported_events(db, event.payload or {})
+            if (
+                not facebook_comment_events
+                and not facebook_message_events
+                and not facebook_postback_events
+                and not facebook_delegated_unsupported
+            ):
                 event.processing_status = "skipped"
                 db.commit()
                 log_action(
@@ -1153,6 +1189,7 @@ def process_webhook_event(webhook_event_id: str):
                 return
             _process_facebook_comment_events(db, facebook_comment_events)
             _process_facebook_message_events(db, facebook_message_events)
+            _process_delegated_facebook_unsupported(db, facebook_delegated_unsupported)
             if facebook_postback_events:
                 # No Facebook feature sends buttons/quick-replies yet (unlike
                 # Instagram's FOLLOW_CHECK follow-gate), so there is nothing

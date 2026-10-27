@@ -218,6 +218,11 @@ def _kick(ordering_key: str) -> None:
         logger.warning("Could not start SaaS forward task; sweep will retry", exc_info=True)
 
 
+# consent_action values that still mean "a genuine customer message": a
+# click-to-WhatsApp referral is a normal first message. Only the opt-out and
+# opt-in keywords are Many-owned (contract A5).
+_FORWARDED_CONSENT_ACTIONS = (None, "ctwa_referral")
+
 # WhatsApp message types that are not customer DMs (contract A5: reactions
 # are not forwarded; system notices are Meta's, not the customer's).
 _WHATSAPP_NOT_FORWARDED = {"reaction", "system"}
@@ -260,3 +265,53 @@ def delegate_whatsapp_event(db: Session, result, event) -> bool:
         window_expires_at=window,
     )
     return True
+
+
+def delegated_whatsapp_unparsed_events(db: Session, payload: dict) -> list:
+    """Customer messages the regular WhatsApp parser drops, limited to
+    accounts in delegated mode. For every other account this returns [], so
+    a non-delegated channel sees exactly the events it always did."""
+    from app.integrations.meta.whatsapp_webhooks import parse_whatsapp_unparsed_message_events
+    from app.models.whatsapp_account import WhatsappAccount
+
+    events = parse_whatsapp_unparsed_message_events(payload)
+    if not events:
+        return []
+    delegated = {
+        phone_number_id
+        for (phone_number_id,) in db.query(WhatsappAccount.phone_number_id).filter(
+            WhatsappAccount.phone_number_id.in_({e.phone_number_id for e in events}),
+            WhatsappAccount.saas_delegation_enabled.is_(True),
+        )
+    }
+    return [e for e in events if e.phone_number_id in delegated]
+
+
+def process_delegated_whatsapp_unparsed(db: Session, events: list) -> None:
+    """Identity, dedupe and consent exactly as for a regular inbound message,
+    then forward as `unsupported`."""
+    from app.services.whatsapp_webhook_service import process_inbound_whatsapp_event
+
+    for event in events:
+        result = process_inbound_whatsapp_event(db, event)
+        if result is None or result.consent_action not in _FORWARDED_CONSENT_ACTIONS:
+            continue
+        delegate_whatsapp_event(db, result, event)
+
+
+def delegated_facebook_unsupported_events(db: Session, payload: dict) -> list:
+    """Non-text Messenger messages, limited to Pages in delegated mode."""
+    from app.integrations.meta.unsupported_messages import parse_facebook_unsupported_message_events
+    from app.models.facebook_page import FacebookPage
+
+    events = parse_facebook_unsupported_message_events(payload)
+    if not events:
+        return []
+    delegated = {
+        page_id
+        for (page_id,) in db.query(FacebookPage.page_id).filter(
+            FacebookPage.page_id.in_({e.facebook_page_id for e in events}),
+            FacebookPage.saas_delegation_enabled.is_(True),
+        )
+    }
+    return [e for e in events if e.facebook_page_id in delegated]

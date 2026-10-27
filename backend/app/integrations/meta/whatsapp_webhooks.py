@@ -211,6 +211,46 @@ def parse_whatsapp_message_events(payload: dict) -> list[ParsedWhatsappMessageEv
     return events
 
 
+def parse_whatsapp_unparsed_message_events(payload: dict) -> list[ParsedWhatsappMessageEvent]:
+    """Customer messages `parse_whatsapp_message_events` drops because it has
+    no content parser for them (a text with an empty body, a button or
+    interactive message without a readable reply, a message with no type).
+    Returned with empty text and message_type "unsupported" so a delegated
+    channel can forward them (contract 4.1, A5). Only delegated code calls
+    this; the regular parser and its handlers are untouched."""
+    events: list[ParsedWhatsappMessageEvent] = []
+    for _, _, field, value in _changes(payload):
+        if field != "messages":
+            continue
+        phone_number_id = _phone_number_id(value)
+        messages = value.get("messages")
+        if not phone_number_id or not isinstance(messages, list):
+            continue
+        profiles = _profile_names(value)
+        for message in messages:
+            if not isinstance(message, dict) or message.get("from") is None:
+                continue
+            if _message_text(message) is not None:
+                continue
+            sender_wa_id = str(message["from"])
+            events.append(
+                ParsedWhatsappMessageEvent(
+                    phone_number_id=phone_number_id,
+                    sender_wa_id=sender_wa_id,
+                    text="",
+                    sender_profile_name=profiles.get(sender_wa_id),
+                    message_id=str(message["id"]) if message.get("id") else None,
+                    timestamp=(
+                        str(message["timestamp"]) if message.get("timestamp") is not None else None
+                    ),
+                    message_type="unsupported",
+                    referral=_referral(message),
+                    raw_event=message,
+                )
+            )
+    return events
+
+
 def parse_whatsapp_status_events(payload: dict) -> list[ParsedWhatsappStatusEvent]:
     events: list[ParsedWhatsappStatusEvent] = []
     for _, _, field, value in _changes(payload):
