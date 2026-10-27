@@ -55,7 +55,15 @@ def _limit_account_mutation(current_user: User) -> None:
     )
 
 
-def _account_response(account: InstagramAccount) -> dict:
+def _account_response(account: InstagramAccount, db: Session) -> dict:
+    # The dashboard's expiry badge reads expires_at; it comes from the newest token.
+    token_expires_at = (
+        db.query(MetaToken.expires_at)
+        .filter(MetaToken.instagram_account_id == account.id)
+        .order_by(MetaToken.created_at.desc())
+        .limit(1)
+        .scalar()
+    )
     return {
         "id": str(account.id),
         "ig_user_id": account.ig_user_id,
@@ -69,6 +77,7 @@ def _account_response(account: InstagramAccount) -> dict:
         "ai_daily_message_cap": account.ai_daily_message_cap,
         "ai_messages_sent_today": account.ai_messages_sent_today,
         "ai_handoff_after_turns": account.ai_handoff_after_turns,
+        "expires_at": token_expires_at.isoformat() if token_expires_at else None,
         "created_at": account.created_at.isoformat() if account.created_at else None,
         "updated_at": account.updated_at.isoformat() if account.updated_at else None,
     }
@@ -101,7 +110,7 @@ async def list_accounts(
     current_user: User = Depends(get_current_user),
 ):
     accounts = db.query(InstagramAccount).all()
-    return [_account_response(account) for account in accounts]
+    return [_account_response(account, db) for account in accounts]
 
 
 @router.get("/accounts/{account_id}")
@@ -114,7 +123,7 @@ async def get_account(
     account = db.query(InstagramAccount).filter(InstagramAccount.id == account_id).first()
     if not account:
         raise HTTPException(status_code=404, detail="Account not found")
-    return _account_response(account)
+    return _account_response(account, db)
 
 
 class AISettingsUpdate(BaseModel):
@@ -148,7 +157,7 @@ async def update_ai_settings(
     _add_account_log(db, "ai_settings_updated", account, details=update_data)
     db.commit()
 
-    return _account_response(account)
+    return _account_response(account, db)
 
 
 @router.post("/accounts/{account_id}/reconnect")
@@ -423,7 +432,7 @@ async def disconnect_account(
     db.commit()
     db.refresh(account)
     logger.info("Account disconnected", extra={"account_id": str(account_id)})
-    return _account_response(account)
+    return _account_response(account, db)
 
 
 @router.get("/accounts/{account_id}/health")

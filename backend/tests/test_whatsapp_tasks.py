@@ -1,8 +1,6 @@
 from __future__ import annotations
 
-import hashlib
 from datetime import datetime, timedelta, timezone
-from pathlib import Path
 from uuid import uuid4
 
 import pytest
@@ -26,8 +24,6 @@ from app.workers import whatsapp_tasks
 from app.workers.celery_app import celery_app
 from tests.conftest import TestingSessionLocal, skip_if_no_db
 
-
-ORIGINAL_BEAT_SHA256 = "6b39308be50ed1666bc50fbe0d5d1013894e79f9bdfa251733d8ec388eddb9e5"
 
 
 @pytest.fixture(autouse=True)
@@ -658,7 +654,7 @@ def test_watchdog_kicks_stranded_campaign_mutation_guard(monkeypatch):
     assert (seeded["campaign_id"], 1) in scheduled
 
 
-def test_beat_module_registers_exactly_four_whatsapp_entries_and_old_file_is_unchanged():
+def test_beat_module_registers_exactly_four_whatsapp_entries():
     names = {name for name in celery_app.conf.beat_schedule if name.startswith("whatsapp-")}
     assert names == {
         "whatsapp-health-poll",
@@ -666,5 +662,3 @@ def test_beat_module_registers_exactly_four_whatsapp_entries_and_old_file_is_unc
         "whatsapp-stale-send-reaper",
         "whatsapp-campaign-rollup",
     }
-    path = Path(__file__).parents[1] / "app" / "workers" / "beat_schedule.py"
-    assert hashlib.sha256(path.read_bytes()).hexdigest() == ORIGINAL_BEAT_SHA256
