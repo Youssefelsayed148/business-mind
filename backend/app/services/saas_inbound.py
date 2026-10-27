@@ -23,6 +23,13 @@ from app.services.saas_forwarder import CONTRACT_CHANNEL, enqueue_event
 logger = logging.getLogger(__name__)
 
 MAX_TEXT_CHARS = 4000
+# SaaS-side field caps; anything longer is a permanent signed 422 there, so the
+# payload is trimmed here instead of losing the message.
+MAX_EVENT_ID = 128
+MAX_CONTACT_NAME = 200
+MAX_CONTACT_PHONE = 100
+MAX_CONTACT_HANDLE = 200
+_CONTACT_CAPS = {"name": MAX_CONTACT_NAME, "phone": MAX_CONTACT_PHONE, "handle": MAX_CONTACT_HANDLE}
 WINDOW = timedelta(hours=24)
 
 
@@ -110,15 +117,19 @@ def build_message_received_payload(
     origin: dict | None,
     occurred_at: datetime | None = None,
 ) -> dict:
+    if message_type == "text" and not text:
+        message_type = "unsupported"  # never send `text` without a body
     payload = {
         "version": 1,
-        "event_id": event_id,
+        "event_id": event_id[:MAX_EVENT_ID],
         "event_type": "message.received",
         "connection_id": connection_id,
         "occurred_at": _iso(occurred_at or datetime.now(timezone.utc)),
         "channel": CONTRACT_CHANNEL[platform],
         "external_contact_id": external_contact_id,
-        "contact": {k: v for k, v in contact.items() if v},
+        "contact": {
+            k: str(v)[: _CONTACT_CAPS.get(k, MAX_CONTACT_NAME)] for k, v in contact.items() if v
+        },
         "external_conversation_id": str(conversation_id),
         "external_message_id": external_message_id,
         "type": message_type,
