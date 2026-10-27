@@ -370,5 +370,9 @@ export type SaasDelegationConfig = {
   last_forward_status: string | null;
   last_forward_at: string | null;
   queue_depth: number | null;
+  failed_events: number | null;
+  retryable_failed_events: number | null;
   degraded: boolean;
 };
+
+export type SaasDelegationRetryResult = SaasDelegationConfig & { requeued: number };

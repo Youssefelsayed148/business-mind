@@ -16,12 +16,14 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 
 import httpx
+from sqlalchemy import func
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.orm import Session
 
 from app.models.facebook_page import FacebookPage
 from app.models.instagram_account import InstagramAccount
 from app.models.saas_forward_event import SaasForwardEvent
+from app.models.saas_outbound_message import SaasOutboundMessage
 from app.models.whatsapp_account import WhatsappAccount
 from app.services import saas_delegation_service as delegation
 from app.services.saas_signing import sign_headers
@@ -33,6 +35,13 @@ RETRY_BUDGET = timedelta(hours=24)
 BACKOFF_BASE_SECONDS = 5
 BACKOFF_CAP_SECONDS = 30 * 60
 RETRY_AFTER_CAP_SECONDS = 60 * 60
+# Retention (F-02). A failed event keeps its payload so an operator can replay
+# it; the message text is cleared after FAILED_PAYLOAD_RETENTION. Terminal
+# rows and the outbound idempotency records go after TERMINAL_ROW_RETENTION
+# (the contract minimum for the latter is 7 days).
+FAILED_PAYLOAD_RETENTION = timedelta(days=7)
+TERMINAL_ROW_RETENTION = timedelta(days=30)
+OUTBOUND_RETENTION = timedelta(days=30)
 CONNECT_TIMEOUT = 5.0
 READ_TIMEOUT = 15.0
 
@@ -118,7 +127,92 @@ def _finish(row: SaasForwardEvent, status: str, error: str | None = None, now: d
     row.last_error = (error or None) and error[:200]
     row.completed_at = now or _now()
     row.next_attempt_at = None
-    row.payload = {}
+    if status != "failed":
+        # Failed rows keep their payload for replay until purge_expired().
+        row.payload = {}
+
+
+def count_failed(db: Session, *, platform: str, channel_id) -> tuple[int, int]:
+    """(failed events, failed events that can still be replayed because their
+    payload has not been cleared yet) for one channel."""
+    base = db.query(func.count(SaasForwardEvent.id)).filter(
+        SaasForwardEvent.platform == platform,
+        SaasForwardEvent.channel_id == channel_id,
+        SaasForwardEvent.status == "failed",
+    )
+    failed = base.scalar() or 0
+    replayable = base.filter(SaasForwardEvent.payload != {}).scalar() or 0
+    return failed, replayable
+
+
+def requeue_failed(db: Session, *, platform: str, channel_id, now: datetime | None = None) -> int:
+    """Put the failed events of a channel that still have a payload back in
+    the queue with the same event_id. Does not commit; the per-minute sweep
+    picks them up. The 24 h budget restarts (it is measured from created_at),
+    and seq order keeps them ahead of later pending events of the same
+    conversation."""
+    now = now or _now()
+    rows = (
+        db.query(SaasForwardEvent)
+        .filter(
+            SaasForwardEvent.platform == platform,
+            SaasForwardEvent.channel_id == channel_id,
+            SaasForwardEvent.status == "failed",
+            SaasForwardEvent.payload != {},
+        )
+        .all()
+    )
+    for row in rows:
+        row.status = "pending"
+        row.attempts = 0
+        row.last_error = None
+        row.completed_at = None
+        row.created_at = now
+        row.next_attempt_at = now
+    return len(rows)
+
+
+@dataclass
+class PurgeResult:
+    payloads_cleared: int = 0
+    events_deleted: int = 0
+    outbound_deleted: int = 0
+
+
+def purge_expired(db: Session, *, now: datetime | None = None) -> PurgeResult:
+    """Retention sweep. Commits.
+
+    (a) clear the payload of failed events older than 7 days,
+    (b) delete terminal (sent/dropped/failed) events older than 30 days,
+    (c) delete saas_outbound_messages older than 30 days.
+    Pending rows are never touched.
+    """
+    now = now or _now()
+    result = PurgeResult()
+    result.payloads_cleared = (
+        db.query(SaasForwardEvent)
+        .filter(
+            SaasForwardEvent.status == "failed",
+            SaasForwardEvent.completed_at < now - FAILED_PAYLOAD_RETENTION,
+            SaasForwardEvent.payload != {},
+        )
+        .update({SaasForwardEvent.payload: {}}, synchronize_session=False)
+    )
+    result.events_deleted = (
+        db.query(SaasForwardEvent)
+        .filter(
+            SaasForwardEvent.status.in_(("sent", "dropped", "failed")),
+            SaasForwardEvent.completed_at < now - TERMINAL_ROW_RETENTION,
+        )
+        .delete(synchronize_session=False)
+    )
+    result.outbound_deleted = (
+        db.query(SaasOutboundMessage)
+        .filter(SaasOutboundMessage.created_at < now - OUTBOUND_RETENTION)
+        .delete(synchronize_session=False)
+    )
+    db.commit()
+    return result
 
 
 def backoff_seconds(attempts: int, rng: random.Random | None = None) -> float:

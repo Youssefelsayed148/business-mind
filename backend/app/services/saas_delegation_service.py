@@ -162,7 +162,9 @@ def apply_config(channel, data: dict, *, now: datetime | None = None) -> None:
         channel.saas_delegation_enabled = enabled
 
 
-def config_response(channel, now: datetime | None = None) -> dict:
+def config_response(
+    channel, now: datetime | None = None, *, failed_events: int | None = None, retryable_failed_events: int | None = None
+) -> dict:
     now = now or datetime.now(timezone.utc)
     previous_active = bool(
         channel.saas_previous_secret_encrypted
@@ -184,6 +186,10 @@ def config_response(channel, now: datetime | None = None) -> dict:
         ),
         # No forward queue exists until M-02; null means "not measured".
         "queue_depth": None,
+        # Failed forwards (kept 30 days) and those an admin can still replay
+        # (payload kept 7 days). null when the caller did not measure them.
+        "failed_events": failed_events,
+        "retryable_failed_events": retryable_failed_events,
         "degraded": bool(channel.saas_degraded),
     }
 

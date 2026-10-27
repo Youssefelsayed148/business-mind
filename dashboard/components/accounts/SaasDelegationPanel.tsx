@@ -5,7 +5,7 @@ import { useToast } from "@/components/ToastProvider";
 import { Button } from "@/components/ui/Button";
 import { Field } from "@/components/ui/Field";
 import { api } from "@/lib/api";
-import type { SaasDelegationConfig } from "@/lib/types";
+import type { SaasDelegationConfig, SaasDelegationRetryResult } from "@/lib/types";
 
 // Per-channel "delegated mode" settings. `accountPath` is the channel's
 // account URL, e.g. /whatsapp/accounts/<id>. The secret is write-only: the
@@ -44,6 +44,19 @@ export function SaasDelegationPanel({ accountPath, canManage }: { accountPath: s
   }, [path, canManage]);
 
   if (!canManage) return null;
+
+  async function retryFailed() {
+    setSaving(true);
+    try {
+      const result = await api.post<SaasDelegationRetryResult>(`${path}/retry-failed`);
+      adopt(result);
+      toast.success(`${result.requeued} failed event${result.requeued === 1 ? "" : "s"} re-queued.`);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Failed to re-queue failed events");
+    } finally {
+      setSaving(false);
+    }
+  }
 
   async function save(enabled: boolean | undefined) {
     setSaving(true);
@@ -120,7 +133,7 @@ export function SaasDelegationPanel({ accountPath, canManage }: { accountPath: s
             onChange={(e) => setSecret(e.target.value)}
           />
 
-          <dl className="grid gap-2 text-xs text-muted sm:grid-cols-3">
+          <dl className="grid gap-2 text-xs text-muted sm:grid-cols-4">
             <div>
               <dt className="font-semibold text-ink">Last forward</dt>
               <dd>
@@ -133,6 +146,13 @@ export function SaasDelegationPanel({ accountPath, canManage }: { accountPath: s
               <dd>{config.queue_depth ?? "not measured"}</dd>
             </div>
             <div>
+              <dt className="font-semibold text-ink">Failed events</dt>
+              <dd>
+                {config.failed_events ?? "not measured"}
+                {config.failed_events ? ` (${config.retryable_failed_events ?? 0} can be retried)` : ""}
+              </dd>
+            </div>
+            <div>
               <dt className="font-semibold text-ink">Health</dt>
               <dd>{config.degraded ? "Degraded" : "No problems reported"}</dd>
             </div>
@@ -142,6 +162,11 @@ export function SaasDelegationPanel({ accountPath, canManage }: { accountPath: s
             <Button type="button" variant="secondary" disabled={saving} onClick={() => save(undefined)}>
               Save
             </Button>
+            {config.saas_delegation_enabled && (config.retryable_failed_events ?? 0) > 0 ? (
+              <Button type="button" variant="secondary" disabled={saving} onClick={retryFailed}>
+                Retry failed events
+              </Button>
+            ) : null}
             {config.saas_delegation_enabled ? (
               <Button type="button" variant="secondary" disabled={saving} onClick={() => save(false)}>
                 Disable delegation

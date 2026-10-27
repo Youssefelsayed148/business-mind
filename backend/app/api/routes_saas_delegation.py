@@ -24,7 +24,7 @@ from app.roles import ROLE_ADMIN, ROLE_OWNER
 from app.schemas.saas_delegation import SaasDelegationUpdate
 from app.services.audit_service import write_audit_log
 from app.services.rate_limit_service import enforce_user_rate_limit
-from app.services.saas_forwarder import drop_pending
+from app.services.saas_forwarder import count_failed, drop_pending, requeue_failed
 from app.services.saas_health import sync_channel
 from app.services.saas_delegation_service import (
     DelegationConfigError,
@@ -87,7 +87,31 @@ def _update(
         entity_id=channel.id,
         metadata={"fields": sorted(k for k in data if k != "secret"), "secret_rotated": bool(data.get("secret"))},
     )
-    return config_response(channel)
+    return _config(db, platform, channel)
+
+
+def _config(db: Session, platform: str, channel) -> dict:
+    failed, retryable = count_failed(db, platform=platform, channel_id=channel.id)
+    return config_response(channel, failed_events=failed, retryable_failed_events=retryable)
+
+
+def _retry_failed(db: Session, channel, user: User, channel_name: str, platform: str) -> dict:
+    _limit(user)
+    if not channel.saas_delegation_enabled:
+        raise HTTPException(status_code=409, detail="Enable SaaS delegation before retrying failed events.")
+    requeued = requeue_failed(db, platform=platform, channel_id=channel.id)
+    write_audit_log(
+        db,
+        "saas_failed_events_retried",
+        f"Failed SaaS forwards re-queued for {channel_name} channel",
+        actor=user,
+        entity_type=channel_name,
+        entity_id=channel.id,
+        metadata={"requeued": requeued},
+    )
+    db.commit()
+    db.refresh(channel)
+    return {**_config(db, platform, channel), "requeued": requeued}
 
 
 def _build(prefix: str, platform: str, model, channel_name: str, role_dep: Callable, user_of: Callable, scope: Callable) -> APIRouter:
@@ -101,7 +125,7 @@ def _build(prefix: str, platform: str, model, channel_name: str, role_dep: Calla
 
     @router.get("/accounts/{channel_id}/saas-delegation")
     async def get_delegation(channel_id: UUID, db: Session = Depends(get_db), ctx=Depends(role_dep)):
-        return config_response(_load(db, channel_id, ctx))
+        return _config(db, platform, _load(db, channel_id, ctx))
 
     @router.patch("/accounts/{channel_id}/saas-delegation")
     async def patch_delegation(
@@ -111,6 +135,10 @@ def _build(prefix: str, platform: str, model, channel_name: str, role_dep: Calla
         ctx=Depends(role_dep),
     ):
         return _update(db, _load(db, channel_id, ctx), user_of(ctx), payload, channel_name, platform)
+
+    @router.post("/accounts/{channel_id}/saas-delegation/retry-failed")
+    async def retry_failed(channel_id: UUID, db: Session = Depends(get_db), ctx=Depends(role_dep)):
+        return _retry_failed(db, _load(db, channel_id, ctx), user_of(ctx), channel_name, platform)
 
     return router
 

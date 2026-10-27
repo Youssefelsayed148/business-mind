@@ -5,7 +5,7 @@ from app.core.config import settings
 from app.workers.saas_beat_schedule import SAAS_BEAT_SCHEDULE
 from app.workers.whatsapp_beat_schedule import WHATSAPP_BEAT_SCHEDULE
 
-celery_app = Celery("instagram_automation", include=["app.workers.whatsapp_tasks", "app.workers.saas_forward_tasks", "app.workers.saas_send_tasks", "app.workers.saas_health_tasks"])
+celery_app = Celery("instagram_automation", include=["app.workers.whatsapp_tasks", "app.workers.saas_forward_tasks", "app.workers.saas_send_tasks", "app.workers.saas_health_tasks", "app.workers.saas_retention_tasks"])
 celery_app.conf.broker_url = settings.REDIS_URL
 celery_app.conf.result_backend = settings.REDIS_URL
 celery_app.conf.task_serializer = "json"
