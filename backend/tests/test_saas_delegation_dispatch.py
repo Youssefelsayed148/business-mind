@@ -158,10 +158,14 @@ def test_whatsapp_delegated_does_not_forward_consent_commands(db_session):
 
 
 @skip_if_no_db
-def test_whatsapp_delegated_disconnected_account_is_not_forwarded(db_session):
+def test_whatsapp_delegated_disconnected_account_is_still_forwarded(db_session):
+    # F-05: the SaaS stores the message and flags a human; replies fail with
+    # channel_disconnected. Nothing is dropped silently.
     acc = _wa_account(db_session, delegated=True, status="disconnected")
     result = _run(db_session, wa_payload(acc, "16315551234", "hi", "wamid.d"), "whatsapp_business_account")
-    assert _events(db_session, acc) == [] and not result.ai_touched
+    [event] = _events(db_session, acc)
+    assert event.event_id == "in:whatsapp:wamid.d" and event.payload["text"] == "hi"
+    assert not result.ai_touched
 
 
 @skip_if_no_db

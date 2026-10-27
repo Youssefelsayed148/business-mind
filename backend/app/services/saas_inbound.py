@@ -233,18 +233,13 @@ def delegate_whatsapp_event(db: Session, result, event) -> bool:
     InboundWhatsappResult (account, lead, contact) after consent handling.
     Returns True if the event was forwarded."""
     from app.services.whatsapp_webhook_service import whatsapp_event_time
-    from app.integrations.meta.whatsapp_ids import mask_wa_id
 
     account, lead, contact = result.account, result.lead, result.contact
     if event.message_type in _WHATSAPP_NOT_FORWARDED:
         return False
-    if account.status != "connected":
-        # Nothing could be sent back; reported as degraded health (M-05).
-        logger.info(
-            "Delegated WhatsApp message not forwarded: account is not connected",
-            extra={"whatsapp_account_id": str(account.id), "sender_wa_id": mask_wa_id(event.sender_wa_id)},
-        )
-        return False
+    # A disconnected account is still forwarded: the SaaS stores the message
+    # and flags a human, and replies fail with channel_disconnected. Health is
+    # reported separately (M-05).
     received_at = whatsapp_event_time(event.timestamp)
     window = contact.last_inbound_at + WINDOW if contact.last_inbound_at else None
     delegate_inbound(
