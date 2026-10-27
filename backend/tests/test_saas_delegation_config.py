@@ -22,6 +22,7 @@ from tests.conftest import skip_if_no_db
 
 SECRET = "s" * 40
 SECRET_2 = "t" * 40
+CONN = "123e4567-e89b-12d3-a456-426614174000"
 
 
 def _channel():
@@ -136,16 +137,41 @@ def test_enable_requires_complete_config(monkeypatch):
     svc.apply_config(
         ch,
         {
-            "saas_connection_id": " conn-1 ",
+            "saas_connection_id": f" {CONN.upper()} ",
             "saas_base_url": "https://saas.example.com",
             "secret": SECRET,
             "saas_delegation_enabled": True,
         },
     )
-    assert ch.saas_delegation_enabled and ch.saas_connection_id == "conn-1"
+    assert ch.saas_delegation_enabled and ch.saas_connection_id == CONN
     ch.saas_degraded = True
     svc.apply_config(ch, {"saas_delegation_enabled": False})
     assert not ch.saas_delegation_enabled and not ch.saas_degraded
+
+
+@pytest.mark.parametrize(
+    "raw", [CONN.upper(), f"  {CONN}  ", CONN.replace("-", ""), "{" + CONN.upper() + "}", f"urn:uuid:{CONN}"]
+)
+def test_connection_id_is_stored_as_canonical_lowercase_uuid(raw):
+    ch = _channel()
+    svc.apply_config(ch, {"saas_connection_id": raw})
+    assert ch.saas_connection_id == CONN
+
+
+@pytest.mark.parametrize("raw", ["conn-1", "nope", "123e4567-e89b-12d3-a456", CONN + "0", "g" * 36])
+def test_connection_id_garbage_is_rejected_and_nothing_changes(raw):
+    ch = _channel()
+    ch.saas_connection_id = CONN
+    with pytest.raises(svc.DelegationConfigError, match="UUID"):
+        svc.apply_config(ch, {"saas_connection_id": raw})
+    assert ch.saas_connection_id == CONN
+
+
+def test_connection_id_can_be_cleared():
+    ch = _channel()
+    svc.apply_config(ch, {"saas_connection_id": CONN})
+    svc.apply_config(ch, {"saas_connection_id": "  "})
+    assert ch.saas_connection_id is None
 
 
 def test_response_never_contains_secret():
@@ -221,7 +247,7 @@ def test_new_rows_default_to_delegation_off(world):
 def test_admin_can_configure_and_secret_is_not_echoed(world, client, platform):
     headers = world.act_as("admin")
     body = {
-        "saas_connection_id": "conn-1",
+        "saas_connection_id": CONN.upper(),
         "saas_base_url": "https://saas.example.com",
         "secret": SECRET,
         "saas_delegation_enabled": True,
@@ -230,6 +256,7 @@ def test_admin_can_configure_and_secret_is_not_echoed(world, client, platform):
     assert put.status_code == 200, put.text
     assert put.json()["saas_delegation_enabled"] is True
     assert put.json()["secret_set"] is True
+    assert put.json()["saas_connection_id"] == CONN
     assert SECRET not in put.text
 
     got = client.get(_url(world, platform), headers=headers)
@@ -270,9 +297,22 @@ def test_enable_without_config_is_422_and_changes_nothing(world, client, db_sess
 
 
 @skip_if_no_db
+@pytest.mark.parametrize("platform", ["instagram", "whatsapp", "facebook"])
+def test_api_rejects_non_uuid_connection_id_with_422(world, client, db_session, platform):
+    headers = world.act_as("admin")
+    resp = client.patch(_url(world, platform), json={"saas_connection_id": "conn-1"}, headers=headers)
+    assert resp.status_code == 422
+    assert "UUID" in resp.json()["detail"]
+    row = {"instagram": world.ig, "whatsapp": world.wa, "facebook": world.fb}[platform]
+    db_session.refresh(row)
+    assert row.saas_connection_id is None
+
+
+@skip_if_no_db
 def test_rotation_via_api_marks_previous_active(world, client):
     headers = world.act_as("admin")
     client.patch(_url(world, "facebook"), json={"secret": SECRET}, headers=headers)
     resp = client.patch(_url(world, "facebook"), json={"secret": SECRET_2}, headers=headers)
     assert resp.json()["previous_secret_active"] is True
     assert SECRET not in resp.text and SECRET_2 not in resp.text
+

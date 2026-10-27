@@ -67,7 +67,7 @@ def account(db_session):
     delegation.apply_config(
         acc,
         {
-            "saas_connection_id": "conn-1",
+            "saas_connection_id": "11111111-1111-4111-8111-111111111111",
             "saas_base_url": "https://saas.example.com",
             "secret": SECRET,
             "saas_delegation_enabled": True,
@@ -105,7 +105,7 @@ def test_success_is_signed_to_the_contract_url_and_clears_payload(db_session, ac
     assert result.sent == 1
     request = saas.requests[0]
     assert str(request.url) == "https://saas.example.com/api/channels/manyosiris/events"
-    assert request.headers["x-osiris-connection"] == "conn-1"
+    assert request.headers["x-osiris-connection"] == "11111111-1111-4111-8111-111111111111"
     assert verify_signature(
         [SECRET], request.headers["x-osiris-timestamp"], request.headers["x-osiris-signature"], request.content
     )

@@ -41,7 +41,7 @@ def _delegate(channel, on=True):
         delegation.apply_config(
             channel,
             {
-                "saas_connection_id": "conn-1",
+                "saas_connection_id": "11111111-1111-4111-8111-111111111111",
                 "saas_base_url": "https://saas.example.com",
                 "secret": SECRET,
                 "saas_delegation_enabled": True,
@@ -121,7 +121,7 @@ def test_whatsapp_delegated_forwards_even_with_ai_disabled_and_never_calls_ai(db
     p = event.payload
     conv = db_session.query(Conversation).filter_by(whatsapp_account_id=acc.id).one()
     assert event.event_id == "in:whatsapp:wamid.1" and event.ordering_key == str(conv.id)
-    assert p["event_type"] == "message.received" and p["version"] == 1 and p["connection_id"] == "conn-1"
+    assert p["event_type"] == "message.received" and p["version"] == 1 and p["connection_id"] == "11111111-1111-4111-8111-111111111111"
     assert p["channel"] == "whatsapp" and p["external_contact_id"] == "16315551234"
     assert p["external_conversation_id"] == str(conv.id) and p["external_message_id"] == "wamid.1"
     assert p["type"] == "text" and p["text"] == "hello there"

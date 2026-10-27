@@ -6,6 +6,7 @@ the settings and renders them for the API without ever exposing a secret.
 
 import ipaddress
 import socket
+import uuid
 from datetime import datetime, timedelta, timezone
 from urllib.parse import urlsplit
 
@@ -88,6 +89,22 @@ def _reject_private_host(host: str) -> None:
             raise DelegationConfigError("Base URL must not point at a private or local host.")
 
 
+def normalize_connection_id(raw: str | None) -> str | None:
+    """Canonical lowercase UUID string, or None for an empty value.
+
+    The SaaS compares the payload connection_id with its own lowercase UUID
+    string, so any other spelling (uppercase, braces, no hyphens) would be a
+    permanent 422 on every forwarded event.
+    """
+    value = (raw or "").strip()
+    if not value:
+        return None
+    try:
+        return str(uuid.UUID(value))
+    except ValueError:
+        raise DelegationConfigError("Connection id must be a UUID, for example 123e4567-e89b-12d3-a456-426614174000.")
+
+
 def validate_secret(secret: str) -> str:
     if len(secret) < MIN_SECRET_LENGTH or secret != secret.strip():
         raise DelegationConfigError(
@@ -126,8 +143,7 @@ def apply_config(channel, data: dict, *, now: datetime | None = None) -> None:
     sent. Enabling requires a connection id, base URL and secret."""
     now = now or datetime.now(timezone.utc)
     if "saas_connection_id" in data:
-        value = (data["saas_connection_id"] or "").strip()
-        channel.saas_connection_id = value or None
+        channel.saas_connection_id = normalize_connection_id(data["saas_connection_id"])
     if "saas_base_url" in data:
         raw = data["saas_base_url"]
         channel.saas_base_url = validate_base_url(raw) if raw else None

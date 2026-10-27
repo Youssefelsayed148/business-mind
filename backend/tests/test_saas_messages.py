@@ -28,7 +28,7 @@ from tests.conftest import skip_if_no_db
 
 SECRET = "k" * 40
 OLD_SECRET = "o" * 40
-CONN = "conn-1"
+CONN = "11111111-1111-4111-8111-111111111111"
 
 
 @pytest.fixture(autouse=True)
@@ -162,7 +162,7 @@ def _assert_generic_401(resp):
 @skip_if_no_db
 def test_every_auth_failure_is_the_same_generic_401(client, db_session, started):
     w = _world(db_session)
-    other = _world(db_session, connection="conn-2")
+    other = _world(db_session, connection="22222222-2222-4222-8222-222222222222")
     other.channel.saas_delegation_enabled = False
     db_session.commit()
     data = _body(w)
@@ -175,14 +175,14 @@ def test_every_auth_failure_is_the_same_generic_401(client, db_session, started)
         "stale timestamp": _post(client, data, now=time.time() - 301),
         "future timestamp": _post(client, data, now=time.time() + 301),
         "unknown connection": _post(client, data, connection="nope"),
-        "delegation disabled": _post(client, _body(other, connection_id="conn-2"), connection="conn-2"),
+        "delegation disabled": _post(client, _body(other, connection_id="22222222-2222-4222-8222-222222222222"), connection="22222222-2222-4222-8222-222222222222"),
         "tampered body": client.post(
             "/api/saas/messages", content=body.replace(b"Hello", b"Jello"),
             headers={**good, "Content-Type": "application/json"}),
         "signature without prefix": client.post(
             "/api/saas/messages", content=body,
             headers={**good, "X-Osiris-Signature": good["X-Osiris-Signature"][7:]}),
-        "body/header connection mismatch": _post(client, _body(w, connection_id="conn-9")),
+        "body/header connection mismatch": _post(client, _body(w, connection_id="99999999-9999-4999-8999-999999999999")),
         "oversized body": _post(client, None, raw=json.dumps(_body(w, text="x" * 70_000)).encode()),
     }
     for name, resp in cases.items():
@@ -236,7 +236,7 @@ def test_not_json_is_422(client, db_session, started):
 @skip_if_no_db
 def test_unknown_conversation_contact_or_other_channels_conversation_is_404(client, db_session, started):
     w = _world(db_session)
-    other = _world(db_session, connection="conn-2")
+    other = _world(db_session, connection="22222222-2222-4222-8222-222222222222")
     assert _post(client, _body(w, external_conversation_id=str(uuid4()))).status_code == 404
     assert _post(client, _body(w, external_conversation_id="not-a-uuid")).status_code == 404
     assert _post(client, _body(w, external_contact_id="someone-else")).status_code == 404
