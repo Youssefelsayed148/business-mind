@@ -407,8 +407,9 @@ and per channel; with it off, behaviour is exactly as before.
 ### Turning it on (owner/admin)
 
 On *Accounts*, each channel has a "SaaS delegation" panel: enable, the SaaS
-`connection_id`, the SaaS base URL (https, no private hosts) and the signing
-secret (min. 32 chars; write-only, never shown again). API:
+`connection_id` (must be a UUID; stored as a lowercase UUID, anything else is
+rejected with a 422), the SaaS base URL (https, no private hosts) and the
+signing secret (min. 32 chars; write-only, never shown again). API:
 `GET|PATCH /{instagram|whatsapp|facebook}/accounts/{id}/saas-delegation`.
 Rotating the secret keeps the previous one valid for 24 h. Disabling returns
 the channel to the old behaviour at once and drops queued, unsent forwards.
@@ -419,20 +420,58 @@ the channel to the old behaviour at once and drops queued, unsent forwards.
   `POST {base_url}/api/channels/manyosiris/events`, `message.received`)
   before any Many AI gate. Many's own AI never runs on the channel and never
   acts as a fallback. Echoes, follow-gate postbacks/quick replies, WhatsApp
-  consent commands, receipts and reactions are not forwarded.
+  consent commands, receipts and reactions are not forwarded. Non-text
+  messages (voice, image, sticker, shares, unreadable interactive replies) are
+  forwarded as `type: "unsupported"` without text. WhatsApp button and list
+  replies go as text (the visible label), a click-to-WhatsApp first message is
+  forwarded, and a WhatsApp account that is not connected still forwards (the
+  SaaS stores it; replies fail with `channel_disconnected`).
 - **Delivery:** an outbox with per-conversation ordering; retries on network
   errors, 5xx and 429 (honours `Retry-After`) with backoff and jitter for up
-  to 24 h with the same `event_id`; other 4xx are final. While retrying the
-  channel shows "degraded".
+  to 24 h with the same `event_id`. A `401` is retried too (A15: secret
+  rotation makes the two sides disagree for a while): same backoff and budget,
+  the channel shows "degraded" with last status `auth_rejected` and the
+  payload is kept. Every other 4xx is final. While retrying the channel shows
+  "degraded".
 - **Outbound:** `POST /api/saas/messages` (signed, idempotent on `message_id`)
   sends through Many's existing Meta send paths. The result comes back as
   `message.status` (`sent`, `failed`, and `delivered`/`read` on WhatsApp),
   with `error_code` mapped from Meta code/subcode, never message text. A send
-  is never retried by Many (a timeout may have reached Meta).
+  that Meta refused with a rate-limit error is retried up to 3 times with
+  backoff; after a timeout or any unknown outcome it is never retried (the
+  message may have been delivered). Do not compress the `202` body: nginx has
+  `gzip off` for `/api/saas/` and `/saas/` (A14).
 - **Health:** `channel.status` on every transition and at least every 5 h,
   plus the signed `GET /api/saas/connections/{connection_id}/health`.
 - **Take Over / Resume Bot** return `409 CHANNEL_MANAGED_BY_SAAS` on delegated
   channels; the dashboard shows "Managed in the SaaS inbox".
+
+### Secret rotation runbook
+
+1. In the SaaS, **pause** the connection.
+2. Rotate the secret in the SaaS (a second rotation inside 24 h keeps only the
+   newest and the immediately previous secret).
+3. Enter the new secret in Many (Accounts -> SaaS delegation). Many keeps the
+   old one valid for 24 h.
+4. **Resume** the connection in the SaaS.
+
+If the two sides disagree meanwhile, `401`s are retried by both senders
+(Many for up to 24 h; the SaaS for about 9 minutes, then the message fails
+with `many_auth_rejected`), so nothing is lost while you finish.
+
+### Failed events, replay and retention
+
+- A forward that ends `failed` (permanent 4xx, 24 h budget used up, bad
+  config) keeps its payload for **7 days**. The panel shows "Failed events
+  (N can be retried)"; **Retry failed events** (owner/admin only,
+  `POST .../saas-delegation/retry-failed`) re-queues those with a payload,
+  with the same `event_id` and a fresh 24 h budget.
+- A daily task (`purge_saas_data`, 03:30 via beat) clears the payload of
+  failed rows older than 7 days, deletes sent/dropped/failed forward rows
+  older than 30 days and deletes `saas_outbound_messages` older than 30 days
+  (the contract minimum is 7 days).
+- Known limits (provider-wide `webhook_unhealthy`, the DNS time-of-check gap)
+  are in `docs/saas-delegation/KNOWN-LIMITS.md`.
 
 Signing: `X-Osiris-Connection`, `X-Osiris-Timestamp`,
 `X-Osiris-Signature: sha256=HMAC_SHA256(secret, timestamp + "." + raw_body)`;
