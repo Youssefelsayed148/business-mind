@@ -221,11 +221,44 @@ def _kick(ordering_key: str) -> None:
 # consent_action values that still mean "a genuine customer message": a
 # click-to-WhatsApp referral is a normal first message. Only the opt-out and
 # opt-in keywords are Many-owned (contract A5).
-_FORWARDED_CONSENT_ACTIONS = (None, "ctwa_referral")
+FORWARDED_CONSENT_ACTIONS = (None, "ctwa_referral")
 
 # WhatsApp message types that are not customer DMs (contract A5: reactions
 # are not forwarded; system notices are Meta's, not the customer's).
 _WHATSAPP_NOT_FORWARDED = {"reaction", "system"}
+
+
+# Button/list payloads Many generates itself and handles itself. Today the only
+# one in the code base is Instagram's follow-gate button (`FOLLOW_CHECK:<id>`,
+# integrations/meta/messaging.py); Many sends no WhatsApp or Messenger
+# buttons and no WhatsApp interactive messages (templates go out with
+# header/body parameters only), so no WhatsApp payload is Many-owned yet.
+# Add a prefix here when Many starts generating button payloads.
+MANY_OWNED_PAYLOAD_PREFIXES = ("FOLLOW_CHECK:",)
+
+
+def whatsapp_customer_text(event) -> tuple[str, bool]:
+    """(text to forward, payload is Many-owned) for one inbound WhatsApp
+    message. For a button or interactive reply the customer's visible choice
+    (button text / reply title) is preferred over the machine payload or id,
+    which means nothing to the SaaS; consent keywords are handled before this
+    runs. Non-delegated handling keeps using `event.text`."""
+    raw = event.raw_event if isinstance(event.raw_event, dict) else {}
+    if event.message_type == "button":
+        button = raw.get("button") if isinstance(raw.get("button"), dict) else {}
+        payload = str(button.get("payload") or "")
+        if payload.startswith(MANY_OWNED_PAYLOAD_PREFIXES):
+            return "", True
+        return str(button.get("text") or payload), False
+    if event.message_type in ("interactive_button_reply", "interactive_list_reply"):
+        kind = event.message_type.removeprefix("interactive_")
+        interactive = raw.get("interactive") if isinstance(raw.get("interactive"), dict) else {}
+        reply = interactive.get(kind) if isinstance(interactive.get(kind), dict) else {}
+        reply_id = str(reply.get("id") or "")
+        if reply_id.startswith(MANY_OWNED_PAYLOAD_PREFIXES):
+            return "", True
+        return str(reply.get("title") or reply_id), False
+    return event.text or "", False
 
 
 def delegate_whatsapp_event(db: Session, result, event) -> bool:
@@ -233,6 +266,7 @@ def delegate_whatsapp_event(db: Session, result, event) -> bool:
     InboundWhatsappResult (account, lead, contact) after consent handling.
     Returns True if the event was forwarded."""
     from app.services.whatsapp_webhook_service import whatsapp_event_time
+    from app.integrations.meta.whatsapp_ids import mask_wa_id
 
     account, lead, contact = result.account, result.lead, result.contact
     if event.message_type in _WHATSAPP_NOT_FORWARDED:
@@ -240,6 +274,13 @@ def delegate_whatsapp_event(db: Session, result, event) -> bool:
     # A disconnected account is still forwarded: the SaaS stores the message
     # and flags a human, and replies fail with channel_disconnected. Health is
     # reported separately (M-05).
+    text, many_owned = whatsapp_customer_text(event)
+    if many_owned:
+        logger.info(
+            "Delegated WhatsApp message not forwarded: payload is owned by a Many flow",
+            extra={"whatsapp_account_id": str(account.id), "sender_wa_id": mask_wa_id(event.sender_wa_id)},
+        )
+        return False
     received_at = whatsapp_event_time(event.timestamp)
     window = contact.last_inbound_at + WINDOW if contact.last_inbound_at else None
     delegate_inbound(
@@ -252,8 +293,8 @@ def delegate_whatsapp_event(db: Session, result, event) -> bool:
             "name": event.sender_profile_name,
             "phone": f"+{contact.wa_id}",
         },
-        text=event.text or None,
-        message_type="text" if event.text else "unsupported",
+        text=text or None,
+        message_type="text" if text else "unsupported",
         external_message_id=event.message_id,
         timestamp=event.timestamp,
         received_at=received_at,
@@ -289,7 +330,7 @@ def process_delegated_whatsapp_unparsed(db: Session, events: list) -> None:
 
     for event in events:
         result = process_inbound_whatsapp_event(db, event)
-        if result is None or result.consent_action not in _FORWARDED_CONSENT_ACTIONS:
+        if result is None or result.consent_action not in FORWARDED_CONSENT_ACTIONS:
             continue
         delegate_whatsapp_event(db, result, event)
 

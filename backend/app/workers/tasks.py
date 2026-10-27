@@ -56,6 +56,7 @@ from app.services.log_service import log_action
 from app.services.processed_event_service import build_event_key, check_and_mark_processed
 from app.services.saas_inbound import (
     delegate_inbound,
+    FORWARDED_CONSENT_ACTIONS,
     delegate_whatsapp_event,
     delegated_facebook_unsupported_events,
     delegated_instagram_unsupported_events,
@@ -354,7 +355,11 @@ def _process_whatsapp_message_events(db: Session, message_events) -> None:
         masked_wa_id = mask_wa_id(event.sender_wa_id)
 
         # Consent commands are state-changing control messages, not AI prompts.
-        if result.consent_action is not None:
+        # On a delegated channel a click-to-WhatsApp first message is still a
+        # genuine customer message (contract A5), so it goes on to delegation.
+        if result.consent_action is not None and not (
+            account.saas_delegation_enabled and result.consent_action in FORWARDED_CONSENT_ACTIONS
+        ):
             logger.info(
                 "Inbound WhatsApp consent command handled",
                 extra={
