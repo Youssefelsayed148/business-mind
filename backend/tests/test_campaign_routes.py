@@ -23,7 +23,7 @@ def test_simulate_returns_rendered_message(client: TestClient, db_session: Sessi
         email="sim@test.com",
         name="Sim User",
         password_hash=hash_password("secret"),
-        role="user",
+        role="admin",
         is_active=True,
     )
     db_session.add(user)
@@ -86,7 +86,7 @@ def test_simulate_no_match(client: TestClient, db_session: Session):
         email="sim2@test.com",
         name="Sim2",
         password_hash=hash_password("secret"),
-        role="user",
+        role="admin",
         is_active=True,
     )
     db_session.add(user)

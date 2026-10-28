@@ -1,109 +1,31 @@
-from unittest.mock import patch
-from uuid import UUID
+"""The mock connector is development-only; test token storage without it."""
+from uuid import uuid4
 
-import pytest
-from fastapi.testclient import TestClient
-from sqlalchemy.orm import Session
-
-from app.core.security import hash_password
-from app.models.user import User
+from app.models.instagram_account import InstagramAccount
+from app.models.meta_token import MetaToken
 from app.models.workspace import Workspace
-from app.services.token_service import get_decrypted_token
-from tests.conftest import skip_if_no_db
+from app.services.token_service import get_decrypted_token, store_encrypted_token
 
 
-@skip_if_no_db
-def test_mock_meta_connect_creates_account_and_encrypted_token(
-    client: TestClient, db_session: Session
-):
-    # Create default workspace and user
-    ws = Workspace(id=__import__("uuid").uuid4(), name="Default", slug="default")
-    db_session.add(ws)
-    user = User(
-        id=__import__("uuid").uuid4(),
-        email="meta@test.com",
-        name="Meta User",
-        password_hash=hash_password("secret"),
-        role="user",
-        is_active=True,
-    )
-    db_session.add(user)
-    db_session.commit()
-
-    token_resp = client.post(
-        "/auth/login",
-        data={"username": "meta@test.com", "password": "secret"},
-    )
-    token = token_resp.json()["access_token"]
-
-    response = client.post(
-        "/meta/connect/mock",
-        json={
-            "ig_user_id": "123456789",
-            "username": "testhandle",
-            "account_type": "BUSINESS",
-            "access_token": "test_access_token_value",
-        },
-        headers={"Authorization": f"Bearer {token}"},
-    )
-    assert response.status_code == 200
-    data = response.json()
-    assert data["status"] == "connected"
-    assert data["ig_user_id"] == "123456789"
-
-    # Verify token is encrypted in DB
-    from app.models.instagram_account import InstagramAccount
-
-    account = db_session.query(InstagramAccount).filter(InstagramAccount.ig_user_id == "123456789").first()
-    assert account is not None
-    assert account.ig_username == "testhandle"
-    assert account.status == "connected"
-
-    decrypted = get_decrypted_token(db_session, account.id)
-    assert decrypted == "test_access_token_value"
+def test_mock_meta_connect_is_unavailable_in_test(client, db_session):
+    response = client.post("/meta/connect/mock", json={
+        "ig_user_id": "test-account", "username": "test", "account_type": "BUSINESS",
+        "access_token": "synthetic-token",
+    })
+    assert response.status_code == 404
+    assert db_session.query(InstagramAccount).count() == 0
+    assert db_session.query(MetaToken).count() == 0
 
 
-@skip_if_no_db
-def test_token_is_not_plaintext_in_db(client: TestClient, db_session: Session):
-    from app.models.instagram_account import InstagramAccount
-    from app.models.meta_token import MetaToken
-
-    ws = Workspace(id=__import__("uuid").uuid4(), name="Default", slug="default")
-    db_session.add(ws)
-    user = User(
-        id=__import__("uuid").uuid4(),
-        email="plaintext@test.com",
-        name="Plaintext User",
-        password_hash=hash_password("secret"),
-        role="user",
-        is_active=True,
-    )
-    db_session.add(user)
-    db_session.commit()
-
-    token_resp = client.post(
-        "/auth/login",
-        data={"username": "plaintext@test.com", "password": "secret"},
-    )
-    token = token_resp.json()["access_token"]
-
-    client.post(
-        "/meta/connect/mock",
-        json={
-            "ig_user_id": "999888777",
-            "username": "plaincheck",
-            "account_type": "BUSINESS",
-            "access_token": "secret_token_abc",
-        },
-        headers={"Authorization": f"Bearer {token}"},
-    )
-
-    account = db_session.query(InstagramAccount).filter(InstagramAccount.ig_user_id == "999888777").first()
-    meta_token = (
-        db_session.query(MetaToken)
-        .filter(MetaToken.instagram_account_id == account.id)
-        .first()
-    )
-    assert meta_token is not None
-    assert meta_token.access_token != "secret_token_abc"
-    assert "secret_token_abc" not in meta_token.access_token
+def test_token_is_not_plaintext_in_db(db_session):
+    workspace = Workspace(id=uuid4(), name="Token test", slug="token-test")
+    db_session.add(workspace)
+    db_session.flush()
+    account = InstagramAccount(workspace_id=workspace.id, ig_user_id="test-token-account")
+    db_session.add(account)
+    db_session.flush()
+    store_encrypted_token(db_session, workspace.id, account.id, "synthetic-secret-token")
+    token = db_session.query(MetaToken).filter(MetaToken.instagram_account_id == account.id).one()
+    assert token.access_token != "synthetic-secret-token"
+    assert "synthetic-secret-token" not in token.access_token
+    assert get_decrypted_token(db_session, account.id) == "synthetic-secret-token"

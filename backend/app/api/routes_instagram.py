@@ -8,10 +8,11 @@ from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
 from redis import Redis
 from redis.exceptions import RedisError
+from sqlalchemy import or_
 from sqlalchemy.orm import Session
 
 from app.api.routes_auth import get_current_user
-from app.authz import require_permission
+from app.authz import WorkspaceContext, require_permission, require_workspace_permission
 from app.core.config import settings
 from app.db.session import get_db
 from app.integrations.meta.accounts import fetch_instagram_media
@@ -21,12 +22,16 @@ from app.models.automation_log import AutomationLog
 from app.models.campaign import Campaign
 from app.models.campaign_keyword import CampaignKeyword
 from app.models.comment import Comment
+from app.models.conversation import Conversation
 from app.models.instagram_account import InstagramAccount
 from app.models.lead import Lead
 from app.models.message import Message
 from app.models.meta_token import MetaToken
+from app.models.saas_forward_event import SaasForwardEvent
+from app.models.saas_outbound_message import SaasOutboundMessage
 from app.models.user import User
 from app.models.user_cooldown import UserCooldown
+from app.models.webhook_event import WebhookEvent
 from app.services.token_service import get_decrypted_token
 from app.services.audit_service import write_audit_log
 from app.services.rate_limit_service import enforce_user_rate_limit
@@ -211,40 +216,20 @@ async def reconnect_account(
 async def hard_delete_account(  # noqa: C901
     account_id: UUID,
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_permission("delete_accounts")),
+    ctx: WorkspaceContext = Depends(require_workspace_permission("delete_accounts")),
 ):
-    """
-    Permanently delete an Instagram account and all associated data.
+    """Delete this workspace's account-owned rows and raw webhook entries.
 
-    Full FK map (from DB introspection of instagram_automation):
-      automation_logs   → campaigns (nullable), instagram_accounts (nullable), leads (nullable)
-      campaign_keywords → campaigns
-      campaigns         → instagram_accounts
-      comments          → instagram_accounts
-      leads             → instagram_accounts, campaigns (source, nullable), comments (source, nullable)
-      messages          → campaigns, comments (nullable), leads
-      meta_tokens       → instagram_accounts
-      user_cooldowns    → campaigns
-
-    Deletion order:
-      1.  Nullify automation_logs.lead_id           (leads about to be deleted)
-      2.  Nullify automation_logs.campaign_id       (campaigns about to be deleted)
-      3.  Nullify automation_logs.instagram_account_id
-      4.  Nullify messages.comment_id               (comments about to be deleted)
-      5.  Nullify leads.source_comment_id           (comments about to be deleted)
-      6.  Nullify leads.source_campaign_id          (campaigns about to be deleted)
-      7.  Delete  messages                          (FK → campaigns, leads)
-      8.  Delete  user_cooldowns                    (FK → campaigns)
-      9.  Delete  campaign_keywords                 (FK → campaigns)
-      10. Delete  leads                             (FK → instagram_accounts)
-      11. Delete  comments                          (FK → instagram_accounts)
-      12. Delete  campaigns                         (FK → instagram_accounts)
-      13. Delete  meta_tokens                       (FK → instagram_accounts)
-      14. Delete  instagram_account row
+    Remove delegation references before messages, then conversations before
+    their leads. Existing automation/audit logs retain their nullable-reference
+    policy; this endpoint is account removal, not end-customer erasure.
     """
+    current_user = ctx.user
     _limit_account_mutation(current_user)
 
-    account = db.query(InstagramAccount).filter(InstagramAccount.id == account_id).first()
+    account = db.query(InstagramAccount).filter(
+        InstagramAccount.id == account_id, InstagramAccount.workspace_id == ctx.workspace_id
+    ).first()
     if not account:
         raise HTTPException(status_code=404, detail="Account not found")
 
@@ -264,6 +249,52 @@ async def hard_delete_account(  # noqa: C901
         row[0] for row in db.query(Lead.id)
         .filter(Lead.instagram_account_id == account_id).all()
     ]
+
+    # Conversations are non-null children of leads. Remove every message
+    # referencing one before the conversations, then their leads/account.
+    conversation_ids = [
+        row[0] for row in db.query(Conversation.id).filter(
+            or_(Conversation.instagram_account_id == account_id,
+                Conversation.lead_id.in_(lead_ids),
+                Conversation.campaign_id.in_(campaign_ids))
+        ).all()
+    ]
+    message_ids = [
+        row[0] for row in db.query(Message.id).filter(
+            or_(Message.lead_id.in_(lead_ids), Message.campaign_id.in_(campaign_ids),
+                Message.conversation_id.in_(conversation_ids))
+        ).all()
+    ]
+    db.query(SaasOutboundMessage).filter(
+        or_(
+            (SaasOutboundMessage.platform == "instagram") & (SaasOutboundMessage.channel_id == account_id),
+            SaasOutboundMessage.message_pk.in_(message_ids),
+        )
+    ).delete(synchronize_session=False)
+    db.query(SaasForwardEvent).filter(
+        SaasForwardEvent.platform == "instagram", SaasForwardEvent.channel_id == account_id
+    ).delete(synchronize_session=False)
+    if message_ids:
+        db.query(Message).filter(Message.id.in_(message_ids)).delete(synchronize_session=False)
+    if conversation_ids:
+        db.query(Conversation).filter(Conversation.id.in_(conversation_ids)).delete(synchronize_session=False)
+
+    # A Meta delivery can contain multiple accounts. Erase only this account's
+    # entries, retaining other accounts' entries and the dedupe marker.
+    events = db.query(WebhookEvent).filter(
+        WebhookEvent.provider == "meta",
+        WebhookEvent.payload["object"].astext == "instagram",
+        WebhookEvent.payload["entry"].contains([{"id": ig_user_id}]),
+    ).all()
+    for event in events:
+        payload = event.payload or {}
+        remaining = [
+            entry for entry in payload.get("entry", [])
+            if not isinstance(entry, dict) or str(entry.get("id")) != ig_user_id
+        ]
+        event.payload = {**payload, "entry": remaining} if remaining else None
+        if not remaining:
+            event.processing_status = "skipped"
 
     # 1. Nullify automation_logs.lead_id
     if lead_ids:
