@@ -35,7 +35,7 @@ def _psycopg_dsn(url: str) -> str:
 
 
 def _run_alembic(database_url: str, *arguments: str) -> subprocess.CompletedProcess[str]:
-    environment = {**os.environ, "DATABASE_URL": database_url}
+    environment = {**os.environ, "APP_ENV": "test", "TEST_DATABASE_URL": database_url, "DATABASE_URL": database_url}
     environment.pop("PYTHONPATH", None)
     result = subprocess.run(
         ["alembic", *arguments],
@@ -63,7 +63,9 @@ def _strip_0019_shape(conn: psycopg.Connection) -> None:
 
 @pytest.fixture(scope="module")
 def migration_database():
-    source_url = make_url(settings.DATABASE_URL)
+    source_url = make_url(os.environ["TEST_DATABASE_URL"])
+    assert os.environ["APP_ENV"] == "test"
+    assert source_url.database.startswith("many_test")
     database_name = f"test_whatsapp_settings_{uuid.uuid4().hex[:12]}"
     admin_url = source_url.set(database="postgres")
     target_url = source_url.set(database=database_name)

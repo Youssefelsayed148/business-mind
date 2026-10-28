@@ -10,6 +10,7 @@ from app.models.campaign import Campaign
 from app.models.campaign_keyword import CampaignKeyword
 from app.models.instagram_account import InstagramAccount
 from app.models.message import Message
+from app.models.lead import Lead
 from app.models.meta_token import MetaToken
 from app.models.user import User
 from app.models.workspace import Workspace
@@ -26,7 +27,7 @@ def test_retry_endpoint_accepts_failed_message(client: TestClient, db_session: S
         email="retry@test.com",
         name="Retry User",
         password_hash=hash_password("secret"),
-        role="user",
+        role="admin",
         is_active=True,
     )
     db_session.add(user)
@@ -53,10 +54,14 @@ def test_retry_endpoint_accepts_failed_message(client: TestClient, db_session: S
     db_session.add(campaign)
     db_session.commit()
 
+    lead = Lead(workspace_id=ws.id, instagram_account_id=acc.id, ig_user_id="customer")
+    db_session.add(lead)
+    db_session.flush()
+
     msg = Message(
         id=uuid4(),
         campaign_id=campaign.id,
-        lead_id=uuid4(),
+        lead_id=lead.id,
         status="failed",
         retryable=True,
         rendered_body="test",
@@ -70,7 +75,7 @@ def test_retry_endpoint_accepts_failed_message(client: TestClient, db_session: S
     )
     token = token_resp.json()["access_token"]
 
-    with patch("app.api.routes_messages.send_private_reply") as mock_task:
+    with patch("app.workers.tasks.send_private_reply") as mock_task:
         response = client.post(
             f"/messages/{msg.id}/retry",
             headers={"Authorization": f"Bearer {token}"},
@@ -89,7 +94,7 @@ def test_retry_endpoint_rejects_sent_message(client: TestClient, db_session: Ses
         email="retry2@test.com",
         name="Retry2",
         password_hash=hash_password("secret"),
-        role="user",
+        role="admin",
         is_active=True,
     )
     db_session.add(user)
@@ -116,10 +121,14 @@ def test_retry_endpoint_rejects_sent_message(client: TestClient, db_session: Ses
     db_session.add(campaign)
     db_session.commit()
 
+    lead = Lead(workspace_id=ws.id, instagram_account_id=acc.id, ig_user_id="customer")
+    db_session.add(lead)
+    db_session.flush()
+
     msg = Message(
         id=uuid4(),
         campaign_id=campaign.id,
-        lead_id=uuid4(),
+        lead_id=lead.id,
         status="sent",
         rendered_body="test",
     )
@@ -148,7 +157,7 @@ def test_retry_endpoint_rejects_expired_message(client: TestClient, db_session: 
         email="retry3@test.com",
         name="Retry3",
         password_hash=hash_password("secret"),
-        role="user",
+        role="admin",
         is_active=True,
     )
     db_session.add(user)
@@ -175,10 +184,14 @@ def test_retry_endpoint_rejects_expired_message(client: TestClient, db_session: 
     db_session.add(campaign)
     db_session.commit()
 
+    lead = Lead(workspace_id=ws.id, instagram_account_id=acc.id, ig_user_id="customer")
+    db_session.add(lead)
+    db_session.flush()
+
     msg = Message(
         id=uuid4(),
         campaign_id=campaign.id,
-        lead_id=uuid4(),
+        lead_id=lead.id,
         status="expired",
         rendered_body="test",
     )

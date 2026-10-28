@@ -92,7 +92,7 @@ def test_create_campaign_with_keywords(db_session: Session):
     assert campaign.name == "Test Campaign"
     assert campaign.delivery_mode == "instant"
     assert len(campaign.keywords) == 2
-    assert campaign.keywords[0].normalized_keyword == "prompt"
+    assert {keyword.normalized_keyword for keyword in campaign.keywords} == {"prompt", "ai"}
 
 
 @skip_if_no_db
