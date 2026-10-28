@@ -5,6 +5,14 @@ Many must not compress the `202` body of `POST /api/saas/messages` (the SaaS sen
 - `nginx/default.conf`: `gzip off` for `location /api/saas/` and `location /saas/` (the global `gzip on` stays for everything else). The FastAPI app itself adds no compression middleware.
 - `docker-compose.traefik.yml` (the production routing in this repo) defines no `compress` middleware for the API router, so nothing compresses there. If the platform in front of Traefik (Dokploy) adds one, exclude `PathPrefix(/api/saas)`.
 
+## Signed endpoint rate limit (T3)
+
+`nginx/default.conf` defines a separate `saas_signed:10m` zone keyed by `$binary_remote_addr`: **100 requests/second per source IP, burst 200, nodelay**. Both `/api/saas/` and `/saas/` share this budget (messages and health requests together), so switching aliases does not double the allowance. Rejections return **429** via location-scoped `limit_req_status`; both locations retain `gzip off` and their original `proxy_pass` lines. The Meta webhook zone and all other locations are unchanged.
+
+The SaaS sends only a few messages/second per connection. At an illustrative 3 requests/second, 100 requests/second leaves room for roughly 30 concurrently active connections behind one IP plus health traffic; the 200 excess-request burst absorbs short synchronized sends/retries without nginx delaying accepted requests. These are conservative initial values, not a measured capacity guarantee. Connections sharing an egress IP share the budget, so larger aggregates can still receive 429; tune against observed peak aggregate traffic before scaling. The key is the peer IP nginx sees, not an untrusted connection-id/header. If a reverse proxy fronts nginx, all its callers may share that proxy's budget unless trusted real-IP handling is configured separately.
+
+This protection applies only to traffic through this nginx config. The production Traefik routing does not acquire these limits from this change. No production configuration was changed or deployed. nginx syntax (`nginx -t`) and runtime rate/rejection behavior are **UNVERIFIED**: no nginx executable was found on the session PATH; no Docker was used.
+
 ## `webhook_unhealthy` is provider-wide
 `services/saas_health.py` derives `webhook_unhealthy` from the shared `webhook_health` record, which is kept per provider (`meta`), not per channel. One failing Meta webhook therefore marks EVERY delegated channel (WhatsApp, Messenger and Instagram alike) as `webhook_unhealthy` and the SaaS shows them all degraded, even channels whose own webhooks are fine. This is deliberate for now (there is no per-channel webhook health to read) and needs no action; when several channels go degraded at once, check Many's webhook processing first.
 
