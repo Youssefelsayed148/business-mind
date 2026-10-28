@@ -155,6 +155,12 @@ def test_provider_context_and_grant_failures(db_session, world, monkeypatch):
     with pytest.raises(ValueError):
         save_grant(db_session, identity, channel, "wrong-grant")
     with pytest.raises(ValueError):
+        save_grant(db_session, identity, channel, "456")  # different provider Page
+    with pytest.raises(ValueError):
+        save_grant(db_session, identity, world.channels[("a", "whatsapp")], "456")
+    assert db_session.query(MetaAuthorization).count() == 0
+    channel.page_id = "456"
+    with pytest.raises(ValueError):
         MetaGrantIdentity.whatsapp(debug, {"id": "789"}, [{"id": "456"}], "other")
     with pytest.raises(ValueError):
         MetaGrantIdentity.instagram({"user_id": "1"}, {"provider_user_id": "2", "provider_profile_id": "3", "ig_user_id": "2"})

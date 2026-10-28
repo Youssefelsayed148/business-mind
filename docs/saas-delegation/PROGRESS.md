@@ -1243,3 +1243,13 @@ and diff whitespace check pass. No backend test rerun for docs-only changes.
 Exact commands, files, owner placeholders and remaining live gates:
 R17-B4-IMPLEMENTATION.md. Policy publication, D4 recordings and Meta activity
 remain owner/UNVERIFIED gates; no publish/push/merge/deploy/live/paid call.
+
+
+## R1 final grant/account binding review - 2026-10-28
+
+After R1 f3a7de0 and docs d4734d4, final review added fail-closed platform and
+provider-account equality checks to save_grant. Wrong model/Page proofs cannot
+be persisted to another account. Affected identity + all three OAuth matrices:
+16 passed, 2.33 s, zero failures/errors/skips; fresh upgrade/drift pass. Evidence
+and exact command in R1-IMPLEMENTATION.md (many-r1-eXcWfH1t). No policy behavior,
+Instagram send/dispatch, live service or full-suite claim changed.

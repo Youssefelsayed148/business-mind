@@ -9,7 +9,7 @@ from sqlalchemy.orm import Session
 
 from app.core.config import settings
 from app.models.meta_authorization import MetaAuthorization
-from app.services.meta_compliance import subject_digest
+from app.services.meta_compliance import CHANNELS, subject_digest
 from app.utils.crypto import encrypt_text
 
 Namespace = Literal["app_user", "business_system_user", "unresolved"]
@@ -91,6 +91,9 @@ def save_grant(db: Session, identity: MetaGrantIdentity, account, grant_id: str)
     expected_app = settings.META_APP_ID if identity.platform == "instagram" else settings.facebook_app_id
     if identity.app_id != expected_app or grant_id not in identity.grant_ids:
         raise ValueError("app/channel grant mismatch")
+    external_key = {"facebook": "page_id", "whatsapp": "phone_number_id", "instagram": "ig_user_id"}[identity.platform]
+    if not isinstance(account, CHANNELS[identity.platform][0]) or getattr(account, external_key) != grant_id:
+        raise ValueError("account/provider grant mismatch")
     if account.status == "erasure_pending":
         raise ValueError("account erasure pending")
     values = dict(app_id=identity.app_id, subject_digest=subject_digest(identity.app_id, identity.subject),

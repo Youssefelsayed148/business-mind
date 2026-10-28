@@ -150,3 +150,20 @@ are owner gates. No push, merge or deploy was performed.
 - `backend/app/models/__init__.py`
 - `docs/saas-delegation/PROGRESS.md`
 - `docs/saas-delegation/CLOSEOUT-PLAN.md`
+
+
+## Final identity/account binding review
+
+The follow-up guard in `meta_grant_identity.save_grant` also requires the account
+model's platform and its provider account identifier to equal the verified grant.
+Being present in a provider grant list alone cannot attach proof to a different
+account. The existing focused test now asserts wrong Page and wrong platform
+rejection without a mapping write, then verifies successful replacement.
+
+Same private harness command as above; selected tests:
+`tests/test_account_erasure.py::test_provider_context_and_grant_failures tests/test_r1_oauth.py`.
+Evidence `/var/tmp/many-r1-eXcWfH1t/evidence`: 16 passed, zero failures/errors/skips,
+2.33 s, exit 0; fresh upgrade and Alembic check also pass. This targeted follow-up
+is separate from the prior 38-case run, not a new full-suite claim. Explicit
+follow-up files: the service, test_account_erasure.py, this report and the ticket
+PROGRESS entry. No generated artifacts or unrelated source is staged.
