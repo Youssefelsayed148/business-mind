@@ -2,102 +2,56 @@
 
 import Link from "next/link";
 
-// TODO(owner): unverified against the code -- there are no plan limits in the
-// application (see "Account Responsibilities"), no self-service account deletion
-// (see "Termination"), and the liability cap needs a legal check.
-const sections = [
+const sections: Array<{ id?: string; title: string; content: string[] }> = [
   {
-    title: "Acceptance of Terms",
-    content: [
-      "By accessing or using ManyOsirisChat, you agree to be bound by these Terms of Service.",
-      "If you do not agree to these terms, you may not use the platform.",
-      "We reserve the right to update these terms at any time. Continued use of the platform constitutes acceptance of updated terms.",
-    ],
+    "title": "Using the service",
+    "content": [
+      "By using ManyOsirisChat you agree to these terms and the Privacy Policy. The service connects a business's Instagram Business account, Facebook Page or WhatsApp Business number to its own campaigns and customer support workflow.",
+      "You must use the service lawfully, comply with applicable Meta policies, and obtain consent where required. You are responsible for your business instructions, campaigns, templates and messages."
+    ]
   },
   {
-    title: "Platform Description",
-    content: [
-      "ManyOsirisChat is an Instagram, Facebook, and WhatsApp automation platform that allows businesses to automate direct messages, private replies, and lead capture via Meta's official APIs.",
-      "The platform connects to your Instagram Business, Facebook Page, and WhatsApp Business accounts through Meta's official OAuth and Embedded Signup flows and operates within Meta's permitted use policies.",
-      "All automation features are built on Meta's official Graph API and WhatsApp Cloud API. We do not use unofficial or unsupported access methods for any connected platform.",
-    ],
+    "title": "Business support and AI",
+    "content": [
+      "Optional AI answers questions about the connected business using its configured information and knowledge. The service is not a general-purpose AI assistant. AI output can be wrong; the business must review its operation and provide human support when appropriate.",
+      "Many native replies and optional SaaS chatbot delegation have separate settings. When delegation is enabled, the SaaS chatbot operates reply generation, inbox and handoff while ManyOsirisChat retains Meta credentials and message delivery."
+    ]
   },
   {
-    title: "Permitted Use",
-    content: [
-      "You may use ManyOsirisChat solely for lawful business purposes in compliance with Meta's Platform Terms, Instagram's Community Guidelines, Facebook's Community Standards, and WhatsApp's Business Messaging Policy.",
-      "You are responsible for all content sent through automated campaigns, including messages, keywords, and templates.",
-      "You must not use the platform to send spam, unsolicited messages, or content that violates applicable laws or Meta's policies.",
-      "You must not attempt to circumvent Instagram's, Facebook's, or WhatsApp's rate limits, terms of service, or any platform restrictions.",
-      "You are responsible for obtaining any necessary consent from recipients of automated messages where required by applicable law, including WhatsApp's messaging opt-in requirements.",
-    ],
+    "title": "Messaging limits",
+    "content": [
+      "Support replies must respect the applicable 24-hour messaging window. Automated and AI replies must not use a human-agent tag to extend that window. WhatsApp messages outside an open service window require an approved template and applicable opt-in.",
+      "Do not send spam, impersonate another business, evade rate limits or use the service for prohibited content. Meta may restrict or revoke access independently of us."
+    ]
   },
   {
-    title: "Account Responsibilities",
-    content: [
-      "You are responsible for maintaining the confidentiality of your login credentials.",
-      "You must notify us immediately of any unauthorized access to your account.",
-      "You are responsible for all activity that occurs under your account.",
-      "Each account may connect multiple Instagram, Facebook, and WhatsApp accounts.",
-    ],
+    "title": "Data and processors",
+    "content": [
+      "You retain your rights in business content and customer data. You authorize processing needed to provide the service under your instructions, including the Osiris Labs SaaS chatbot as processor when you enable delegation and configured AI/hosting providers as described in the Privacy Policy.",
+      "Keep credentials secure, grant workspace access only to appropriate people and avoid unnecessary sensitive data in messages or business instructions."
+    ]
   },
   {
-    title: "Meta Platform Compliance",
-    content: [
-      "Your use of ManyOsirisChat must comply with Meta's Platform Terms, API Terms, and Community Guidelines for every connected platform (Instagram, Facebook, and WhatsApp) at all times.",
-      "We reserve the right to suspend or terminate your account if your use violates Meta's policies or puts our platform access at risk.",
-      "Meta may revoke our API access at any time, which may affect platform functionality. We are not liable for service disruptions caused by Meta's decisions.",
-      "You acknowledge that platform automation is subject to Meta's policies and that certain features may be restricted or discontinued based on Meta's terms.",
-    ],
+    "title": "Deletion and termination",
+    "content": [
+      "You may disconnect channels in the dashboard and request account or customer data deletion at privacy@theosirislabs.com. Disconnecting a channel or disabling delegation is not deletion of stored records.",
+      "Erasure requests require identity and scope checks, and delegated data requires confirmation from both applications. Operators aim to complete verified requests within thirty days and will explain exceptional delays. Callback receipt or queue acceptance is not completion.",
+      "We may suspend access for misuse or legal or Meta policy obligations. Retained data is handled according to the Privacy Policy and applicable law."
+    ]
   },
   {
-    title: "Data and Privacy",
-    content: [
-      "Our collection and use of your data is governed by our Privacy Policy, which is incorporated into these Terms by reference.",
-      "You retain ownership of all data you input into the platform, including campaign content and lead records.",
-      "By connecting your Instagram, Facebook, or WhatsApp account, you grant us permission to access and use your data as described in our Privacy Policy.",
-      "You may export or delete your data at any time as described in the Privacy Policy.",
-    ],
+    "title": "Availability and responsibility",
+    "content": [
+      "The service depends on Meta, hosting and configured AI providers and may be interrupted or changed. We do not guarantee uninterrupted access or accurate AI output.",
+      "Nothing in these terms removes rights that applicable law does not allow us to limit. Commercial liability and service commitments are governed by any separate agreement with your business."
+    ]
   },
   {
-    title: "AI-Generated Replies",
-    content: [
-      "AI replies are optional and are only used where you enable them for a connected account and campaign. Conversation text and your business profile are sent to our AI provider to write each reply, as described in the Privacy Policy.",
-      "AI-generated replies can be inaccurate or incomplete. You are responsible for the business profile and instructions you provide, for reviewing how replies perform, and for turning AI off where it is not appropriate.",
-    ],
-  },
-  {
-    title: "Service Availability",
-    content: [
-      "We strive to maintain high availability but do not guarantee uninterrupted access to the platform.",
-      "We may perform maintenance, updates, or modifications that temporarily affect availability.",
-      "We are not liable for losses resulting from service interruptions, API changes by Meta, or circumstances beyond our reasonable control.",
-    ],
-  },
-  {
-    title: "Limitation of Liability",
-    content: [
-      "ManyOsirisChat is provided 'as is' without warranties of any kind, express or implied.",
-      "We are not liable for any indirect, incidental, or consequential damages arising from your use of the platform.",
-      "Our total liability to you shall not exceed the amount paid by you in the 12 months preceding the claim.",
-      "We are not responsible for the content of messages sent through your campaigns or outcomes of your automation strategies.",
-    ],
-  },
-  {
-    title: "Termination",
-    content: [
-      "You may terminate your account at any time by contacting us. You may disconnect any connected account yourself from the Accounts page.",
-      "We may suspend or terminate your account for violation of these terms, Meta's policies, or for any other reason with reasonable notice.",
-      "Upon termination, your access to the platform will cease and your data will be handled as described in the Privacy Policy.",
-    ],
-  },
-  {
-    title: "Contact",
-    content: [
-      "For questions about these Terms of Service, contact us at: legal@theosirislabs.com",
-      "ManyOsirisChat is operated by Osiris Labs. Registered address available upon request.",
-    ],
-  },
+    "title": "Contact",
+    "content": [
+      "Contact legal@theosirislabs.com about these terms and privacy@theosirislabs.com about personal data. ManyOsirisChat is operated by Osiris Labs."
+    ]
+  }
 ];
 
 export default function TermsPage() {
