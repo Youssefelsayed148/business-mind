@@ -1261,3 +1261,22 @@ Completed nine unproven/wrong-app callback replay cases across all three platfor
 and a phase-two caller rollback regression. 10 passed, 2.77 s, zero failures/errors/
 skips; fresh upgrade/drift pass in many-r1-pwM6hMIH. Exact selection and evidence
 in R1-IMPLEMENTATION.md. Tests/docs only; no application behavior or full-suite claim.
+
+
+## R19 Many/SaaS local verification - 2026-10-28
+
+SaaS commit 86c992d verifies already-present phone guard, 0030 health expression
+index and bot/provisioning alignment: 41 related tests pass; actual index roundtrip
+and Alembic check clean. Current prompt has no S10; no invented prompt change or
+new migration. Both CI definitions parsed/static-checked (4 Many / 14 SaaS blocks),
+without running workflows; C3 source head test passes. webhook_unhealthy unchanged.
+Many adopts the reviewed pre-existing model-registry/received_at-index corrections
+and regression; strict CSV import is verified. Found and fixed raw formula cells
+in Many lead CSV output, with six prefix and actual-response tests. Initial related
+run 3 passed (14.01 s); expanded CSV run 8 passed (3.73 s); fresh head/drift checks
+passed in both private clusters. Full suites/hosted CI remain UNVERIFIED. Exact
+commands/files/limits: R19-VERIFICATION.md. The legacy Many export's global auth
+and lead query are unchanged and require a separate workspace-isolation review.
+Unrelated A5/config/template/canary/docs edits remain unstaged. No generated files,
+push/merge/deploy/live/paid calls. External plan synchronized only under the owner's
+explicit one-file exception; other original checkouts untouched.

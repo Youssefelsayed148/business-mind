@@ -62,7 +62,7 @@ Recommendation
 | R16 | P1 | Canary on staging with rotation drill, replay, 429, expiry, take-over, rollback | Both | D |
 | R17 | P1 | [x] Local review/policy text states business-support AI disclosure, 24 h messaging rule, existing WA free-entry exception, no human-agent tag and local rejection outside the applicable window. R17-B4-IMPLEMENTATION.md: policy tsc/lint and nine UNVERIFIED D4 evidence rows. Owner publication/recordings pending | Many/Meta | B, E |
 | R18 | P1 | IMPLEMENTED repairs: 31 targeted API passes; 17 distinct latest Playwright passes include all 12 historical failures. Full suites/D1 gate deferred to new session | SaaS | C |
-| R19 | P2 | CSV phone guard `-1-1`; health-poll index; `alembic check` drift (`bots.uq_bots_widget_locator`, `provisioning_requests`); undefined S10; `webhook_unhealthy` provider-global; CI workflow never run | Both | A, C |
+| R19 | P2 | [x] Local fixes/verification: Many model registry/index alignment and CSV formula output guard (3 related + 8 expanded CSV passes); SaaS existing phone guard/index/model alignment verified by 41 tests and actual index roundtrip/clean drift. No current S10; both manual CI YAMLs parse/static-check only. R19-VERIFICATION.md records limits; full/hosted checks and legacy Many export workspace-isolation review pending. webhook_unhealthy stays provider-global | Both | A, C, T |
 
 ## Batches
 

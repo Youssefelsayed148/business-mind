@@ -460,6 +460,11 @@ async def list_leads(
     return results
 
 
+def _csv_safe(value: str) -> str:
+    """Keep customer-controlled cells from becoming spreadsheet formulas."""
+    return "'" + value if value.startswith(("=", "+", "-", "@", "\t", "\r")) else value
+
+
 @router.get("/leads/export.csv")
 async def export_leads_csv(
     db: Session = Depends(get_db),
@@ -513,18 +518,17 @@ async def export_leads_csv(
         ]
     )
     for lead in leads:
-        writer.writerow(
-            [
-                lead.platform or "",
-                lead.ig_username or "",
-                lead.ig_user_id,
-                lead.lead_source or "",
-                _source_campaign_label(lead),
-                _account_label(lead),
-                lead.created_at.isoformat() if lead.created_at else "",
-                lead.last_seen_at.isoformat() if lead.last_seen_at else "",
-            ]
-        )
+        row = [
+            lead.platform or "",
+            lead.ig_username or "",
+            lead.ig_user_id,
+            lead.lead_source or "",
+            _source_campaign_label(lead),
+            _account_label(lead),
+            lead.created_at.isoformat() if lead.created_at else "",
+            lead.last_seen_at.isoformat() if lead.last_seen_at else "",
+        ]
+        writer.writerow([_csv_safe(value) for value in row])
     return Response(
         content=output.getvalue(),
         media_type="text/csv",
