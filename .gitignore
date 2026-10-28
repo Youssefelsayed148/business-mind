@@ -1,5 +1,6 @@
 .env
 .env.production
+dashboard/.env.local
 backups/
 *.dump
 *.sql.gz
