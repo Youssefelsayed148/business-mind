@@ -12,6 +12,7 @@ from app.api import (
     routes_health,
     routes_instagram,
     routes_meta,
+    routes_meta_compliance,
     routes_messages,
     routes_webhooks,
     routes_whatsapp,
@@ -60,6 +61,7 @@ app.include_router(routes_health.router)
 app.include_router(routes_webhooks.router)
 app.include_router(routes_auth.router)
 app.include_router(routes_meta.router)
+app.include_router(routes_meta_compliance.router)
 app.include_router(routes_instagram.router)
 app.include_router(routes_campaigns.router)
 app.include_router(routes_messages.router)

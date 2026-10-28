@@ -2,127 +2,75 @@
 
 import Link from "next/link";
 
-// TODO(owner): the claims below that depend on operations rather than code are
-// unverified: EU hosting, 30-day deletion on request, the end-user deletion
-// route, and OpenAI's own retention terms. Facebook permissions are set in the
-// Meta dashboard config (backend/app/core/config.py also lists
-// pages_manage_engagement); confirm the list matches the live config.
 const sections: Array<{ id?: string; title: string; content: string[] }> = [
   {
-    title: "Information We Collect",
-    content: [
-      "Account credentials (email address, hashed password) required to access the platform.",
-      "Instagram Business account data obtained through Meta OAuth, including your Instagram user ID, username, and access tokens.",
-      "Facebook Page data obtained through Facebook Login for Business, including your Page ID, Page name, commenter identifiers, and access tokens.",
-      "WhatsApp Business data obtained through Meta's Embedded Signup, including your WhatsApp Business Account ID, phone number ID, and access tokens.",
-      "Campaign configurations, keyword triggers, message templates, and automation rules you create within the platform.",
-      "Lead records generated when Instagram, Facebook, or WhatsApp users interact with your campaigns.",
-      "The content of direct messages and private replies exchanged with those users, stored so that conversations can be shown in your dashboard.",
-      "Audit logs of platform activity including logins, campaign changes, and message delivery outcomes.",
-    ],
+    "title": "Information we collect",
+    "content": [
+      "We collect login details, workspace membership, connected Instagram Business account, Facebook Page and WhatsApp Business identifiers, encrypted access tokens, campaign settings, customer identities and conversation content needed to provide your business messaging service.",
+      "We also retain delivery outcomes, security and operational records. Please do not send sensitive information that is unnecessary for your support request."
+    ]
   },
   {
-    title: "How We Use Your Information",
-    content: [
-      "To authenticate your access and maintain your session securely.",
-      "To connect your Instagram Business, Facebook Page, and WhatsApp Business accounts via Meta's official APIs and execute automation campaigns on your behalf.",
-      "To deliver automated direct messages and private replies to Instagram and Facebook users, and automated replies to WhatsApp users, who trigger your configured keywords or message your connected accounts.",
-      "To generate leads, track campaign performance, and provide delivery reports within your dashboard.",
-      "To maintain audit logs for security, compliance, and troubleshooting purposes.",
-    ],
+    "title": "How we use information",
+    "content": [
+      "We connect business channels through Meta authorization, receive their webhooks, run business-configured campaigns and customer support conversations, and show leads, messages and delivery reports to authorized workspace members.",
+      "Optional AI replies answer questions about the connected business using its instructions and knowledge. The service is a business support and lead follow-up tool, not a general-purpose AI assistant."
+    ]
   },
   {
-    title: "Meta and Instagram Data",
-    content: [
-      "We access your Instagram Business account solely through Meta's official Graph API using permissions you explicitly grant during OAuth.",
-      "We request the following permissions: instagram_business_basic, instagram_business_manage_messages, instagram_business_manage_comments.",
-      "Access tokens are encrypted at rest and are never shared with third parties.",
-      "We only read and send messages as instructed by your campaign configurations. We do not access personal Instagram accounts.",
-      "You may revoke our access at any time through your Instagram account settings or by disconnecting from the Accounts page.",
-    ],
+    "title": "Meta authorization and messaging",
+    "content": [
+      "Instagram Login requests instagram_business_basic, instagram_business_manage_messages and instagram_business_manage_comments. Facebook Page and WhatsApp permission grants depend on the business login configuration approved in Meta; we use those grants only for connected business channels.",
+      "Meta access tokens remain encrypted in ManyOsirisChat. We do not pass them to the SaaS chatbot or its AI providers.",
+      "Ordinary support replies use the applicable 24-hour customer service window. We do not use a human-agent tag to extend automated or AI messaging. WhatsApp messages outside an open service window require an approved template and applicable consent."
+    ]
   },
   {
-    title: "Facebook Page Data",
-    content: [
-      "We access your Facebook Page solely through Meta's official Graph API using permissions you explicitly grant during Facebook Login for Business.",
-      "We request the following permissions: pages_show_list, pages_manage_metadata, pages_read_engagement, pages_messaging.",
-      "We collect Page comments, commenter identifiers (ASID/PSID), and Messenger message content solely to deliver the private replies and automated DMs configured in your campaigns.",
-      "Page access tokens are encrypted at rest and are never shared with third parties.",
-      "We do not access personal Facebook profiles, friends lists, or any data outside your connected Page's own activity.",
-      "You may revoke our access at any time through your Facebook Business settings or by disconnecting from the Accounts page.",
-    ],
+    "title": "Optional SaaS chatbot delegation",
+    "content": [
+      "If a business enables delegation, ManyOsirisChat forwards genuine customer messages and channel identifiers to the Osiris Labs SaaS chatbot. The SaaS chatbot acts as a processor for that business support service and operates its bot knowledge, inbox, human handoff and reply generation.",
+      "Delegated data includes message text or an unsupported-message notice, customer and conversation identifiers, available contact details, campaign name and opening message context, delivery outcomes and connection health. The SaaS may send authorized agent or bot replies back through ManyOsirisChat for delivery by Meta.",
+      "The SaaS stores a separate copy. Disabling delegation stops ordinary new forwarding; it does not by itself erase data already held in either application."
+    ]
   },
   {
-    title: "WhatsApp Business Data",
-    content: [
-      "We access your WhatsApp Business phone number solely through Meta's official WhatsApp Cloud API using permissions granted during Embedded Signup.",
-      "We request the following permissions: whatsapp_business_messaging, whatsapp_business_management.",
-      "We collect the WhatsApp Business Account ID, phone number ID, and message content solely to deliver the automated replies configured for your number.",
-      "Access tokens are encrypted at rest and are never shared with third parties.",
-      "You may revoke our access at any time through Meta Business Manager or by disconnecting from the Accounts page.",
-    ],
+    "title": "AI processing",
+    "content": [
+      "Where enabled, recent conversation messages, business instructions and relevant knowledge may be sent to the AI provider configured for the service. Many native AI uses OpenAI; the delegated SaaS uses its configured provider. Messages may contain personal information supplied by customers.",
+      "The business controls whether AI is appropriate, provides its business information, reviews reply quality and can arrange a human response. AI replies can be inaccurate. Do not include unnecessary personal or confidential information in business instructions."
+    ]
   },
   {
-    id: "ai-generated-replies",
-    title: "AI-Generated Replies",
-    content: [
-      "AI-generated replies are optional and off by default. They are only used for an Instagram, Facebook, or WhatsApp account where the account owner has turned AI on, and for a campaign only when AI is also enabled on that campaign. Replying to people who message the business directly, outside any campaign, is a separate setting.",
-      "When AI is used to write a reply, we send the following to our AI provider, OpenAI: the recent messages of that conversation (the customer's messages and the replies already sent), and instructions built from your business profile, tone instructions, business type, and the campaign name. We do not send the customer's username, profile, or account identifiers in these requests.",
-      "OpenAI acts as a processor on our behalf, only to generate the reply. Replies are sent to the customer through Meta's APIs.",
-      "You can switch AI off for any connected account or campaign at any time in the dashboard, which stops further messages from being sent to the AI provider for it. We can also disable AI for the whole platform.",
-      "Do not put personal data or confidential information in your business profile or tone instructions, because that text is included in every AI request for the account.",
-    ],
+    "title": "Storage, access and security",
+    "content": [
+      "We use access controls, encrypted access-token storage, audit records and HTTPS deployment controls to protect data. Authorized operators and the business access only the data needed for their roles.",
+      "We do not sell customer data or share it for third-party advertising. Service processing may involve Meta, the SaaS chatbot and configured hosting or AI providers. We do not claim a hosting region or provider retention period without verifying the deployed service settings."
+    ]
   },
   {
-    title: "Data Storage and Security",
-    content: [
-      // TODO(owner): the previous text said all data is stored on servers within the
-      // European Union. Nothing in the repository states the hosting region; confirm
-      // it and restore the claim only if it is true.
-      "Data is protected by TLS encryption in transit.",
-      "Access tokens are encrypted at rest.",
-      "We implement rate limiting, audit logging, and role-based access controls to protect your data from unauthorized access.",
-      "We do not sell or rent your personal data, and we do not share it with third parties for advertising or marketing purposes. We share data only with Meta, through its official APIs, and with our AI provider as described under AI-Generated Replies.",
-    ],
+    "title": "Retention",
+    "content": [
+      "Campaigns, conversations and delivery records remain until the business or an authorized operator deletes them or an applicable retention process removes them. There is no universal automatic deletion period for every ManyOsirisChat record.",
+      "Many delegation payloads are cleared when successfully sent or dropped; failed payloads are cleared after seven days and terminal delegation records after thirty days by the retention job. SaaS event payloads follow tenant retention and its event deduplication records are retained for at least thirty days.",
+      "Raw webhook payloads and separately held SaaS data must be included in a verified erasure process. Operators track deletion requests and aim to complete verified requests within thirty days; we will explain identity checks, legal retention or other delays."
+    ]
   },
   {
-    title: "Data Retention",
-    content: [
-      "Account data is retained for the duration of your active account.",
-      // TODO(owner): the previous text promised 90-day log retention, but no job in the
-      // codebase purges logs or messages. Add a purge job before restoring a fixed period.
-      "Campaign logs, conversations, and message delivery records are kept for as long as your account is active; we do not currently delete them automatically on a schedule.",
-      "Upon account deletion, all personal data is removed within 30 days, except where retention is required by law.",
-      "You may request deletion of your data at any time by contacting us.",
+    "title": "Data deletion",
+    "content": [
+      "Disconnecting a channel stops its use but does not itself erase stored conversation history or all stored credentials. Revoking access in Meta can trigger a signed callback. Callback receipt and its status page confirm the request was received; they do not prove deletion is complete.",
+      "For account or customer data deletion, email privacy@theosirislabs.com with the business you contacted and the affected channel. We verify the request and locate the correct workspace and identity before deleting data. Do not email passwords or access tokens.",
+      "For delegated channels, operators must verify erasure in both ManyOsirisChat and the SaaS chatbot. Until the cross-application erasure flow is verified in the deployed systems, operators coordinate both steps. A queued request or event is never treated as completed deletion."
     ],
+    "id": "data-deletion"
   },
   {
-    id: "data-deletion",
-    title: "Data Deletion",
-    content: [
-      "You may disconnect any connected Instagram, Facebook, or WhatsApp account at any time from the Accounts page — this immediately stops all automation for that account and we stop using its access token. You can also remove ManyOsirisChat from your Instagram, Facebook, or Meta Business settings to revoke the access you granted.",
-      "To delete your ManyOsirisChat account entirely, contact us at the email below. All associated data — including leads, conversations, campaign configurations, and access tokens across every connected platform — is permanently deleted within 30 days, except where retention is required by law.",
-      "You may also request deletion of specific data (e.g. lead records for one platform) without closing your account by contacting us with the details of your request.",
-      // TODO(owner): confirm you can honour this route for end users; the app has no self-service deletion for them.
-      "If you are a person who messaged a business that uses ManyOsirisChat and want your conversation data deleted, email privacy@theosirislabs.com with your Instagram, Facebook, or WhatsApp username or number and the business you contacted. We will delete the matching records within 30 days, except where retention is required by law.",
-    ],
-  },
-  {
-    title: "Your Rights",
-    content: [
-      "You have the right to access, correct, or delete your personal data at any time.",
-      "You may export your lead records in CSV format from the Leads page.",
-      "You may disconnect your Instagram, Facebook, or WhatsApp account at any time from the Accounts page, which stops automation for it immediately.",
-      "For data requests or concerns, contact us at the email address listed below.",
-    ],
-  },
-  {
-    title: "Contact",
-    content: [
-      "For privacy-related questions or requests, contact us at: privacy@theosirislabs.com",
-      "ManyOsirisChat is operated by Osiris Labs. Registered address available upon request.",
-    ],
-  },
+    "title": "Your choices and contact",
+    "content": [
+      "You can ask to access, correct or delete personal data, and can disconnect business channels from the dashboard. Business administrators can export available lead records and manage workspace permissions.",
+      "Contact privacy@theosirislabs.com for privacy requests. ManyOsirisChat and the SaaS chatbot are operated by Osiris Labs. The connected business remains responsible for its customer messaging purpose, instructions and required consent."
+    ]
+  }
 ];
 
 export default function PrivacyPage() {
