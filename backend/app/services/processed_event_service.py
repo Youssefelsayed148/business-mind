@@ -8,12 +8,14 @@ constraint, returning True for new events and False for duplicates.
 
 import hashlib
 import logging
+import re
 import uuid
 
-from sqlalchemy.exc import IntegrityError
+from sqlalchemy import null, text
+from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.orm import Session
 
-from app.models.processed_webhook_event import ProcessedWebhookEvent
+from app.models.processed_webhook_event import ProcessedWebhookEvent, SAFE_EVENT_TYPES
 
 logger = logging.getLogger(__name__)
 
@@ -60,36 +62,62 @@ def build_event_key(
     return f"{prefix}_fallback:{digest}"
 
 
+_HASH_PREFIX = "sha256:v1:"
+_HASHED_KEY = re.compile(r"sha256:v1:[0-9a-f]{64}\Z")
+_SAFE_EVENT_TYPES = frozenset(SAFE_EVENT_TYPES)
+
+
+def storage_event_key(event_key: str) -> str:
+    """Versioned opaque storage key; callers can keep their existing key builders.
+
+    Already-normalized keys remain unchanged, including across migrations.
+    The reserved prefix cannot be produced by any current raw key builder.
+    """
+    if _HASHED_KEY.fullmatch(event_key):
+        return event_key
+    return _HASH_PREFIX + hashlib.sha256(event_key.encode("utf-8")).hexdigest()
+
+
 def check_and_mark_processed(
     db: Session,
     event_key: str,
     event_type: str | None = None,
     metadata: dict | None = None,
 ) -> bool:
-    """
-    Attempt to record event_key as processed.
+    """Atomically claim a raw key without storing its identifiers/text.
 
-    Returns True  → event is new; caller should proceed with processing.
-    Returns False → event is a duplicate; caller should skip.
-
-    Race-safe: concurrent inserts for the same key will result in exactly one
-    success (True) and all others returning False via IntegrityError.
+    Legacy raw and normalized rows are treated as the same marker during the
+    migration transition. Metadata is intentionally discarded; it is diagnostic
+    only and previously contained customer IDs and message excerpts. No commit
+    or caller rollback occurs here. Deploy migration0029 with old writers paused.
     """
-    record = ProcessedWebhookEvent(
-        id=uuid.uuid4(),
-        provider=_PROVIDER,
-        event_key=event_key,
-        event_type=event_type,
-        metadata_=metadata,
+    stored_key = storage_event_key(event_key)
+    db.execute(
+        text("SELECT pg_advisory_xact_lock(hashtextextended(:key, 0))"),
+        {"key": f"processed:{_PROVIDER}:{stored_key}"},
     )
-    try:
-        db.add(record)
+    rows = db.query(ProcessedWebhookEvent).filter(
+        ProcessedWebhookEvent.provider == _PROVIDER,
+        ProcessedWebhookEvent.event_key.in_({event_key, stored_key}),
+    ).with_for_update().all()
+    if rows:
+        canonical = next((row for row in rows if row.event_key == stored_key), rows[0])
+        oldest = min(row.received_at for row in rows)
+        for row in rows:
+            if row is not canonical:
+                db.delete(row)
         db.flush()
-        return True
-    except IntegrityError:
-        db.rollback()
-        logger.debug(
-            "Duplicate webhook change skipped",
-            extra={"provider": _PROVIDER, "event_key": event_key},
-        )
+        canonical.event_key = stored_key
+        canonical.received_at = oldest
+        canonical.metadata_ = null()
+        if canonical.event_type not in _SAFE_EVENT_TYPES:
+            canonical.event_type = None
+        db.flush()
+        logger.debug("Duplicate webhook change skipped", extra={"provider": _PROVIDER, "event_digest": stored_key})
         return False
+    statement = pg_insert(ProcessedWebhookEvent).values(
+        id=uuid.uuid4(), provider=_PROVIDER, event_key=stored_key,
+        event_type=event_type if event_type in _SAFE_EVENT_TYPES else None,
+        metadata=null(),
+    ).on_conflict_do_nothing(index_elements=["provider", "event_key"]).returning(ProcessedWebhookEvent.id)
+    return db.execute(statement).first() is not None

@@ -1,0 +1,1057 @@
+<?xml version="1.0" encoding="utf-8"?><testsuites name="pytest tests"><testsuite name="pytest" errors="0" failures="4" skipped="0" tests="8" time="2.049" timestamp="2026-10-28T11:41:10.826958+03:00" hostname="LAPTOP-SU9MG22P"><testcase classname="tests.test_contact_erasure" name="test_queue_failure_rolls_back_every_local_change" time="0.756" /><testcase classname="tests.test_contact_erasure" name="test_same_identity_on_second_channel_in_same_workspace_is_preserved[instagram]" time="0.013"><failure message="sqlalchemy.exc.IntegrityError: (psycopg.errors.NotNullViolation) null value in column &quot;connection_id&quot; of relation &quot;saas_outbound_messages&quot; violates not-null constraint&#10;DETAIL:  Failing row contains (548945b2-52dc-456f-9b8d-b8195221381e, null, f100caee-7e9f-4987-8246-5f7545ea753a, instagram, 7e7391ee-f2a0-426d-b7e5-7ddef8eb7e9d, reply, 29790044-26d9-41eb-842f-4e047c3e8223, 2026-10-28 11:41:11.714749+03).&#10;[+3 more lines; full report in element text]">self = &lt;sqlalchemy.engine.base.Connection object at 0x79c04364ba90&gt;
+dialect = &lt;sqlalchemy.dialects.postgresql.psycopg.PGDialect_psycopg object at 0x79c046f91e90&gt;
+context = &lt;sqlalchemy.dialects.postgresql.psycopg.PGExecutionContext_psycopg object at 0x79c042396fd0&gt;
+statement = &lt;sqlalchemy.dialects.postgresql.psycopg.PGCompiler_psycopg object at 0x79c0436ff050&gt;
+parameters = [{'id': UUID('548945b2-52dc-456f-9b8d-b8195221381e'), 'connection_id': None, 'message_id': 'f100caee-7e9f-4987-8246-5f7545ea753a', 'platform': 'instagram', ...}]
+
+    def _exec_single_context(
+        self,
+        dialect: Dialect,
+        context: ExecutionContext,
+        statement: Union[str, Compiled],
+        parameters: Optional[_AnyMultiExecuteParams],
+    ) -&gt; CursorResult[Unpack[TupleAny]]:
+        """continue the _execute_context() method for a single DBAPI
+        cursor.execute() or cursor.executemany() call.
+    
+        """
+        if dialect.bind_typing is BindTyping.SETINPUTSIZES:
+            generic_setinputsizes = context._prepare_set_input_sizes()
+    
+            if generic_setinputsizes:
+                try:
+                    dialect.do_set_input_sizes(
+                        context.cursor, generic_setinputsizes, context
+                    )
+                except BaseException as e:
+                    self._handle_dbapi_exception(
+                        e, str(statement), parameters, None, context
+                    )
+    
+        cursor, str_statement, parameters = (
+            context.cursor,
+            context.statement,
+            context.parameters,
+        )
+    
+        effective_parameters: Optional[_AnyExecuteParams]
+    
+        if not context.executemany:
+            effective_parameters = parameters[0]
+        else:
+            effective_parameters = parameters
+    
+        evt_handled: bool = False
+        try:
+            if self._has_events or self.engine._has_events:
+                for fn in self.dispatch.before_cursor_execute:
+                    str_statement, effective_parameters = fn(
+                        self,
+                        cursor,
+                        str_statement,
+                        effective_parameters,
+                        context,
+                        context.executemany,
+                    )
+    
+            if self._echo:
+                self._log_info(str_statement)
+    
+                stats = context._get_cache_stats()
+    
+                if not self.engine.hide_parameters:
+                    self._log_info(
+                        "[%s] %r",
+                        stats,
+                        sql_util._repr_params(
+                            effective_parameters,
+                            batches=10,
+                            ismulti=context.executemany,
+                        ),
+                    )
+                else:
+                    self._log_info(
+                        "[%s] [SQL parameters hidden due to "
+                        "hide_parameters=True]",
+                        stats,
+                    )
+            if context.execute_style is ExecuteStyle.EXECUTEMANY:
+                effective_parameters = cast(
+                    "_CoreMultiExecuteParams", effective_parameters
+                )
+                if self.dialect._has_events:
+                    for fn in self.dialect.dispatch.do_executemany:
+                        if fn(
+                            cursor,
+                            str_statement,
+                            effective_parameters,
+                            context,
+                        ):
+                            evt_handled = True
+                            break
+                if not evt_handled:
+                    self.dialect.do_executemany(
+                        cursor,
+                        str_statement,
+                        effective_parameters,
+                        context,
+                    )
+            elif not effective_parameters and context.no_parameters:
+                if self.dialect._has_events:
+                    for fn in self.dialect.dispatch.do_execute_no_params:
+                        if fn(cursor, str_statement, context):
+                            evt_handled = True
+                            break
+                if not evt_handled:
+                    self.dialect.do_execute_no_params(
+                        cursor, str_statement, context
+                    )
+            else:
+                effective_parameters = cast(
+                    "_CoreSingleExecuteParams", effective_parameters
+                )
+                if self.dialect._has_events:
+                    for fn in self.dialect.dispatch.do_execute:
+                        if fn(
+                            cursor,
+                            str_statement,
+                            effective_parameters,
+                            context,
+                        ):
+                            evt_handled = True
+                            break
+                if not evt_handled:
+&gt;                   self.dialect.do_execute(
+                        cursor, str_statement, effective_parameters, context
+                    )
+
+/var/tmp/many-t0-20261028/venv/lib/python3.11/site-packages/sqlalchemy/engine/base.py:1958: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+/var/tmp/many-t0-20261028/venv/lib/python3.11/site-packages/sqlalchemy/engine/default.py:1192: in do_execute
+    cursor.execute(statement, parameters)
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = &lt;psycopg.Cursor [closed] [INTRANS] (port=55444 user=postgres database=many_test_b2) at 0x79c0438e7040&gt;
+query = 'INSERT INTO saas_outbound_messages (id, connection_id, message_id, platform, channel_id, kind, message_pk) VALUES (%(...s::VARCHAR, %(channel_id)s::UUID, %(kind)s::VARCHAR, %(message_pk)s::UUID) RETURNING saas_outbound_messages.created_at'
+params = {'id': UUID('548945b2-52dc-456f-9b8d-b8195221381e'), 'connection_id': None, 'message_id': 'f100caee-7e9f-4987-8246-5f7545ea753a', 'platform': 'instagram', ...}
+prepare = None, binary = None
+
+    def execute(
+        self,
+        query: Query,
+        params: Params | None = None,
+        *,
+        prepare: bool | None = None,
+        binary: bool | None = None,
+    ) -&gt; Self:
+        """
+        Execute a query or command to the database.
+        """
+        try:
+            with self._conn.lock:
+                self._conn.wait(
+                    self._execute_gen(query, params, prepare=prepare, binary=binary)
+                )
+        except e._NO_TRACEBACK as ex:
+&gt;           raise ex.with_traceback(None)
+E           psycopg.errors.NotNullViolation: null value in column "connection_id" of relation "saas_outbound_messages" violates not-null constraint
+E           DETAIL:  Failing row contains (548945b2-52dc-456f-9b8d-b8195221381e, null, f100caee-7e9f-4987-8246-5f7545ea753a, instagram, 7e7391ee-f2a0-426d-b7e5-7ddef8eb7e9d, reply, 29790044-26d9-41eb-842f-4e047c3e8223, 2026-10-28 11:41:11.714749+03).
+
+/var/tmp/many-t0-20261028/venv/lib/python3.11/site-packages/psycopg/cursor.py:117: NotNullViolation
+
+The above exception was the direct cause of the following exception:
+
+client = &lt;starlette.testclient.TestClient object at 0x79c04366a790&gt;
+db_session = &lt;sqlalchemy.orm.session.Session object at 0x79c043679dd0&gt;
+world = namespace(workspace=&lt;app.models.workspace.Workspace object at 0x79c04370c6d0&gt;, other=&lt;app.models.workspace.Workspace o...OiJhY2Nlc3MifQ.91S1F-WAn-oC_57kX2Cdf7phbxMcDct6RGeIL9ydlJQ', 'X-Workspace-Id': 'f1ac5a14-2719-4ffa-818e-fc0ef7227c12'})
+platform = 'instagram'
+
+    @pytest.mark.parametrize("platform", ["instagram", "facebook", "whatsapp"])
+    def test_same_identity_on_second_channel_in_same_workspace_is_preserved(client, db_session, world, platform):
+        model = forwarder.CHANNEL_MODELS[platform]
+        key = {"instagram": "ig_user_id", "facebook": "page_id", "whatsapp": "phone_number_id"}[platform]
+        channel = model(workspace_id=world.workspace.id, **{key: "second-" + str(uuid4())})
+        db_session.add(channel); db_session.commit()
+&gt;       preserved = seed(db_session, channel, platform)[0].id
+                    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/test_contact_erasure.py:234: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+tests/test_contact_erasure.py:67: in seed
+    db.commit()
+/var/tmp/many-t0-20261028/venv/lib/python3.11/site-packages/sqlalchemy/orm/session.py:2095: in commit
+    trans.commit(_to_root=True)
+&lt;sqlalchemy generated _go() wrapper for sqlalchemy.orm.session.SessionTransaction.commit&gt;:2: in commit
+    return target(fn, self, _to_root=_to_root)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/var/tmp/many-t0-20261028/venv/lib/python3.11/site-packages/sqlalchemy/orm/state_changes.py:137: in _go
+    ret_value = fn(self, *arg, **kw)
+                ^^^^^^^^^^^^^^^^^^^^
+/var/tmp/many-t0-20261028/venv/lib/python3.11/site-packages/sqlalchemy/orm/session.py:1330: in commit
+    self._prepare_impl()
+&lt;sqlalchemy generated _go() wrapper for sqlalchemy.orm.session.SessionTransaction._prepare_impl&gt;:2: in _prepare_impl
+    return target(fn, self)
+           ^^^^^^^^^^^^^^^^
+/var/tmp/many-t0-20261028/venv/lib/python3.11/site-packages/sqlalchemy/orm/state_changes.py:137: in _go
+    ret_value = fn(self, *arg, **kw)
+                ^^^^^^^^^^^^^^^^^^^^
+/var/tmp/many-t0-20261028/venv/lib/python3.11/site-packages/sqlalchemy/orm/session.py:1304: in _prepare_impl
+    self.session.flush()
+/var/tmp/many-t0-20261028/venv/lib/python3.11/site-packages/sqlalchemy/orm/session.py:4543: in flush
+    self._flush(objects)
+&lt;sqlalchemy generated warned() wrapper for sqlalchemy.orm.session.Session._flush&gt;:2: in _flush
+    return target(fn, self, objects=objects)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/var/tmp/many-t0-20261028/venv/lib/python3.11/site-packages/sqlalchemy/util/deprecations.py:281: in warned
+    return fn(*args, **kwargs)  # type: ignore[no-any-return]
+           ^^^^^^^^^^^^^^^^^^^
+/var/tmp/many-t0-20261028/venv/lib/python3.11/site-packages/sqlalchemy/orm/session.py:4686: in _flush
+    with util.safe_reraise():
+/var/tmp/many-t0-20261028/venv/lib/python3.11/site-packages/sqlalchemy/util/langhelpers.py:166: in __exit__
+    raise exc_value.with_traceback(exc_tb)
+/var/tmp/many-t0-20261028/venv/lib/python3.11/site-packages/sqlalchemy/orm/session.py:4647: in _flush
+    flush_context.execute()
+/var/tmp/many-t0-20261028/venv/lib/python3.11/site-packages/sqlalchemy/orm/unitofwork.py:467: in execute
+    rec.execute(self)
+/var/tmp/many-t0-20261028/venv/lib/python3.11/site-packages/sqlalchemy/orm/unitofwork.py:643: in execute
+    util.preloaded.orm_persistence._save_obj(
+/var/tmp/many-t0-20261028/venv/lib/python3.11/site-packages/sqlalchemy/orm/persistence.py:92: in _save_obj
+    _emit_insert_statements(
+/var/tmp/many-t0-20261028/venv/lib/python3.11/site-packages/sqlalchemy/orm/persistence.py:1237: in _emit_insert_statements
+    result = connection.execute(
+/var/tmp/many-t0-20261028/venv/lib/python3.11/site-packages/sqlalchemy/engine/base.py:1463: in execute
+    return meth(
+/var/tmp/many-t0-20261028/venv/lib/python3.11/site-packages/sqlalchemy/sql/elements.py:533: in _execute_on_connection
+    return connection._execute_clauseelement(
+/var/tmp/many-t0-20261028/venv/lib/python3.11/site-packages/sqlalchemy/engine/base.py:1683: in _execute_clauseelement
+    ret = self._execute_context(
+/var/tmp/many-t0-20261028/venv/lib/python3.11/site-packages/sqlalchemy/engine/base.py:1837: in _execute_context
+    return self._exec_single_context(
+/var/tmp/many-t0-20261028/venv/lib/python3.11/site-packages/sqlalchemy/engine/base.py:1977: in _exec_single_context
+    self._handle_dbapi_exception(
+/var/tmp/many-t0-20261028/venv/lib/python3.11/site-packages/sqlalchemy/engine/base.py:2347: in _handle_dbapi_exception
+    raise sqlalchemy_exception.with_traceback(exc_info[2]) from e
+/var/tmp/many-t0-20261028/venv/lib/python3.11/site-packages/sqlalchemy/engine/base.py:1958: in _exec_single_context
+    self.dialect.do_execute(
+/var/tmp/many-t0-20261028/venv/lib/python3.11/site-packages/sqlalchemy/engine/default.py:1192: in do_execute
+    cursor.execute(statement, parameters)
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = &lt;psycopg.Cursor [closed] [INTRANS] (port=55444 user=postgres database=many_test_b2) at 0x79c0438e7040&gt;
+query = 'INSERT INTO saas_outbound_messages (id, connection_id, message_id, platform, channel_id, kind, message_pk) VALUES (%(...s::VARCHAR, %(channel_id)s::UUID, %(kind)s::VARCHAR, %(message_pk)s::UUID) RETURNING saas_outbound_messages.created_at'
+params = {'id': UUID('548945b2-52dc-456f-9b8d-b8195221381e'), 'connection_id': None, 'message_id': 'f100caee-7e9f-4987-8246-5f7545ea753a', 'platform': 'instagram', ...}
+prepare = None, binary = None
+
+    def execute(
+        self,
+        query: Query,
+        params: Params | None = None,
+        *,
+        prepare: bool | None = None,
+        binary: bool | None = None,
+    ) -&gt; Self:
+        """
+        Execute a query or command to the database.
+        """
+        try:
+            with self._conn.lock:
+                self._conn.wait(
+                    self._execute_gen(query, params, prepare=prepare, binary=binary)
+                )
+        except e._NO_TRACEBACK as ex:
+&gt;           raise ex.with_traceback(None)
+E           sqlalchemy.exc.IntegrityError: (psycopg.errors.NotNullViolation) null value in column "connection_id" of relation "saas_outbound_messages" violates not-null constraint
+E           DETAIL:  Failing row contains (548945b2-52dc-456f-9b8d-b8195221381e, null, f100caee-7e9f-4987-8246-5f7545ea753a, instagram, 7e7391ee-f2a0-426d-b7e5-7ddef8eb7e9d, reply, 29790044-26d9-41eb-842f-4e047c3e8223, 2026-10-28 11:41:11.714749+03).
+E           [SQL: INSERT INTO saas_outbound_messages (id, connection_id, message_id, platform, channel_id, kind, message_pk) VALUES (%(id)s::UUID, %(connection_id)s::VARCHAR, %(message_id)s::VARCHAR, %(platform)s::VARCHAR, %(channel_id)s::UUID, %(kind)s::VARCHAR, %(message_pk)s::UUID) RETURNING saas_outbound_messages.created_at]
+E           [parameters: {'id': UUID('548945b2-52dc-456f-9b8d-b8195221381e'), 'connection_id': None, 'message_id': 'f100caee-7e9f-4987-8246-5f7545ea753a', 'platform': 'instagram', 'channel_id': UUID('7e7391ee-f2a0-426d-b7e5-7ddef8eb7e9d'), 'kind': 'reply', 'message_pk': UUID('29790044-26d9-41eb-842f-4e047c3e8223')}]
+E           (Background on this error at: https://sqlalche.me/e/21/gkpj)
+
+/var/tmp/many-t0-20261028/venv/lib/python3.11/site-packages/psycopg/cursor.py:117: IntegrityError</failure></testcase><testcase classname="tests.test_contact_erasure" name="test_same_identity_on_second_channel_in_same_workspace_is_preserved[facebook]" time="0.016"><failure message="sqlalchemy.exc.IntegrityError: (psycopg.errors.NotNullViolation) null value in column &quot;connection_id&quot; of relation &quot;saas_outbound_messages&quot; violates not-null constraint&#10;DETAIL:  Failing row contains (bd9b45e2-8603-4260-8e57-37b9c80dddfc, null, b7f624ea-e145-4bea-a7b2-07d461252c6f, facebook, 33e40f0a-fd21-4c09-83d0-830f1c3b046b, reply, ee5be6e3-3975-494a-b963-08ca29570607, 2026-10-28 11:41:11.979138+03).&#10;[+3 more lines; full report in element text]">self = &lt;sqlalchemy.engine.base.Connection object at 0x79c0439df810&gt;
+dialect = &lt;sqlalchemy.dialects.postgresql.psycopg.PGDialect_psycopg object at 0x79c046f91e90&gt;
+context = &lt;sqlalchemy.dialects.postgresql.psycopg.PGExecutionContext_psycopg object at 0x79c041ddb410&gt;
+statement = &lt;sqlalchemy.dialects.postgresql.psycopg.PGCompiler_psycopg object at 0x79c0436ff050&gt;
+parameters = [{'id': UUID('bd9b45e2-8603-4260-8e57-37b9c80dddfc'), 'connection_id': None, 'message_id': 'b7f624ea-e145-4bea-a7b2-07d461252c6f', 'platform': 'facebook', ...}]
+
+    def _exec_single_context(
+        self,
+        dialect: Dialect,
+        context: ExecutionContext,
+        statement: Union[str, Compiled],
+        parameters: Optional[_AnyMultiExecuteParams],
+    ) -&gt; CursorResult[Unpack[TupleAny]]:
+        """continue the _execute_context() method for a single DBAPI
+        cursor.execute() or cursor.executemany() call.
+    
+        """
+        if dialect.bind_typing is BindTyping.SETINPUTSIZES:
+            generic_setinputsizes = context._prepare_set_input_sizes()
+    
+            if generic_setinputsizes:
+                try:
+                    dialect.do_set_input_sizes(
+                        context.cursor, generic_setinputsizes, context
+                    )
+                except BaseException as e:
+                    self._handle_dbapi_exception(
+                        e, str(statement), parameters, None, context
+                    )
+    
+        cursor, str_statement, parameters = (
+            context.cursor,
+            context.statement,
+            context.parameters,
+        )
+    
+        effective_parameters: Optional[_AnyExecuteParams]
+    
+        if not context.executemany:
+            effective_parameters = parameters[0]
+        else:
+            effective_parameters = parameters
+    
+        evt_handled: bool = False
+        try:
+            if self._has_events or self.engine._has_events:
+                for fn in self.dispatch.before_cursor_execute:
+                    str_statement, effective_parameters = fn(
+                        self,
+                        cursor,
+                        str_statement,
+                        effective_parameters,
+                        context,
+                        context.executemany,
+                    )
+    
+            if self._echo:
+                self._log_info(str_statement)
+    
+                stats = context._get_cache_stats()
+    
+                if not self.engine.hide_parameters:
+                    self._log_info(
+                        "[%s] %r",
+                        stats,
+                        sql_util._repr_params(
+                            effective_parameters,
+                            batches=10,
+                            ismulti=context.executemany,
+                        ),
+                    )
+                else:
+                    self._log_info(
+                        "[%s] [SQL parameters hidden due to "
+                        "hide_parameters=True]",
+                        stats,
+                    )
+            if context.execute_style is ExecuteStyle.EXECUTEMANY:
+                effective_parameters = cast(
+                    "_CoreMultiExecuteParams", effective_parameters
+                )
+                if self.dialect._has_events:
+                    for fn in self.dialect.dispatch.do_executemany:
+                        if fn(
+                            cursor,
+                            str_statement,
+                            effective_parameters,
+                            context,
+                        ):
+                            evt_handled = True
+                            break
+                if not evt_handled:
+                    self.dialect.do_executemany(
+                        cursor,
+                        str_statement,
+                        effective_parameters,
+                        context,
+                    )
+            elif not effective_parameters and context.no_parameters:
+                if self.dialect._has_events:
+                    for fn in self.dialect.dispatch.do_execute_no_params:
+                        if fn(cursor, str_statement, context):
+                            evt_handled = True
+                            break
+                if not evt_handled:
+                    self.dialect.do_execute_no_params(
+                        cursor, str_statement, context
+                    )
+            else:
+                effective_parameters = cast(
+                    "_CoreSingleExecuteParams", effective_parameters
+                )
+                if self.dialect._has_events:
+                    for fn in self.dialect.dispatch.do_execute:
+                        if fn(
+                            cursor,
+                            str_statement,
+                            effective_parameters,
+                            context,
+                        ):
+                            evt_handled = True
+                            break
+                if not evt_handled:
+&gt;                   self.dialect.do_execute(
+                        cursor, str_statement, effective_parameters, context
+                    )
+
+/var/tmp/many-t0-20261028/venv/lib/python3.11/site-packages/sqlalchemy/engine/base.py:1958: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+/var/tmp/many-t0-20261028/venv/lib/python3.11/site-packages/sqlalchemy/engine/default.py:1192: in do_execute
+    cursor.execute(statement, parameters)
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = &lt;psycopg.Cursor [closed] [INTRANS] (port=55444 user=postgres database=many_test_b2) at 0x79c0438e6f80&gt;
+query = 'INSERT INTO saas_outbound_messages (id, connection_id, message_id, platform, channel_id, kind, message_pk) VALUES (%(...s::VARCHAR, %(channel_id)s::UUID, %(kind)s::VARCHAR, %(message_pk)s::UUID) RETURNING saas_outbound_messages.created_at'
+params = {'id': UUID('bd9b45e2-8603-4260-8e57-37b9c80dddfc'), 'connection_id': None, 'message_id': 'b7f624ea-e145-4bea-a7b2-07d461252c6f', 'platform': 'facebook', ...}
+prepare = None, binary = None
+
+    def execute(
+        self,
+        query: Query,
+        params: Params | None = None,
+        *,
+        prepare: bool | None = None,
+        binary: bool | None = None,
+    ) -&gt; Self:
+        """
+        Execute a query or command to the database.
+        """
+        try:
+            with self._conn.lock:
+                self._conn.wait(
+                    self._execute_gen(query, params, prepare=prepare, binary=binary)
+                )
+        except e._NO_TRACEBACK as ex:
+&gt;           raise ex.with_traceback(None)
+E           psycopg.errors.NotNullViolation: null value in column "connection_id" of relation "saas_outbound_messages" violates not-null constraint
+E           DETAIL:  Failing row contains (bd9b45e2-8603-4260-8e57-37b9c80dddfc, null, b7f624ea-e145-4bea-a7b2-07d461252c6f, facebook, 33e40f0a-fd21-4c09-83d0-830f1c3b046b, reply, ee5be6e3-3975-494a-b963-08ca29570607, 2026-10-28 11:41:11.979138+03).
+
+/var/tmp/many-t0-20261028/venv/lib/python3.11/site-packages/psycopg/cursor.py:117: NotNullViolation
+
+The above exception was the direct cause of the following exception:
+
+client = &lt;starlette.testclient.TestClient object at 0x79c043872ed0&gt;
+db_session = &lt;sqlalchemy.orm.session.Session object at 0x79c0439dd690&gt;
+world = namespace(workspace=&lt;app.models.workspace.Workspace object at 0x79c041486f90&gt;, other=&lt;app.models.workspace.Workspace o...OiJhY2Nlc3MifQ.dWqduOOQB2w40VQxQQZrCWWUpr-DDSoQ1exMkcgOe08', 'X-Workspace-Id': '52c79e8f-101d-4fc2-917e-a9230ee2ca2c'})
+platform = 'facebook'
+
+    @pytest.mark.parametrize("platform", ["instagram", "facebook", "whatsapp"])
+    def test_same_identity_on_second_channel_in_same_workspace_is_preserved(client, db_session, world, platform):
+        model = forwarder.CHANNEL_MODELS[platform]
+        key = {"instagram": "ig_user_id", "facebook": "page_id", "whatsapp": "phone_number_id"}[platform]
+        channel = model(workspace_id=world.workspace.id, **{key: "second-" + str(uuid4())})
+        db_session.add(channel); db_session.commit()
+&gt;       preserved = seed(db_session, channel, platform)[0].id
+                    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/test_contact_erasure.py:234: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+tests/test_contact_erasure.py:67: in seed
+    db.commit()
+/var/tmp/many-t0-20261028/venv/lib/python3.11/site-packages/sqlalchemy/orm/session.py:2095: in commit
+    trans.commit(_to_root=True)
+&lt;sqlalchemy generated _go() wrapper for sqlalchemy.orm.session.SessionTransaction.commit&gt;:2: in commit
+    return target(fn, self, _to_root=_to_root)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/var/tmp/many-t0-20261028/venv/lib/python3.11/site-packages/sqlalchemy/orm/state_changes.py:137: in _go
+    ret_value = fn(self, *arg, **kw)
+                ^^^^^^^^^^^^^^^^^^^^
+/var/tmp/many-t0-20261028/venv/lib/python3.11/site-packages/sqlalchemy/orm/session.py:1330: in commit
+    self._prepare_impl()
+&lt;sqlalchemy generated _go() wrapper for sqlalchemy.orm.session.SessionTransaction._prepare_impl&gt;:2: in _prepare_impl
+    return target(fn, self)
+           ^^^^^^^^^^^^^^^^
+/var/tmp/many-t0-20261028/venv/lib/python3.11/site-packages/sqlalchemy/orm/state_changes.py:137: in _go
+    ret_value = fn(self, *arg, **kw)
+                ^^^^^^^^^^^^^^^^^^^^
+/var/tmp/many-t0-20261028/venv/lib/python3.11/site-packages/sqlalchemy/orm/session.py:1304: in _prepare_impl
+    self.session.flush()
+/var/tmp/many-t0-20261028/venv/lib/python3.11/site-packages/sqlalchemy/orm/session.py:4543: in flush
+    self._flush(objects)
+&lt;sqlalchemy generated warned() wrapper for sqlalchemy.orm.session.Session._flush&gt;:2: in _flush
+    return target(fn, self, objects=objects)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/var/tmp/many-t0-20261028/venv/lib/python3.11/site-packages/sqlalchemy/util/deprecations.py:281: in warned
+    return fn(*args, **kwargs)  # type: ignore[no-any-return]
+           ^^^^^^^^^^^^^^^^^^^
+/var/tmp/many-t0-20261028/venv/lib/python3.11/site-packages/sqlalchemy/orm/session.py:4686: in _flush
+    with util.safe_reraise():
+/var/tmp/many-t0-20261028/venv/lib/python3.11/site-packages/sqlalchemy/util/langhelpers.py:166: in __exit__
+    raise exc_value.with_traceback(exc_tb)
+/var/tmp/many-t0-20261028/venv/lib/python3.11/site-packages/sqlalchemy/orm/session.py:4647: in _flush
+    flush_context.execute()
+/var/tmp/many-t0-20261028/venv/lib/python3.11/site-packages/sqlalchemy/orm/unitofwork.py:467: in execute
+    rec.execute(self)
+/var/tmp/many-t0-20261028/venv/lib/python3.11/site-packages/sqlalchemy/orm/unitofwork.py:643: in execute
+    util.preloaded.orm_persistence._save_obj(
+/var/tmp/many-t0-20261028/venv/lib/python3.11/site-packages/sqlalchemy/orm/persistence.py:92: in _save_obj
+    _emit_insert_statements(
+/var/tmp/many-t0-20261028/venv/lib/python3.11/site-packages/sqlalchemy/orm/persistence.py:1237: in _emit_insert_statements
+    result = connection.execute(
+/var/tmp/many-t0-20261028/venv/lib/python3.11/site-packages/sqlalchemy/engine/base.py:1463: in execute
+    return meth(
+/var/tmp/many-t0-20261028/venv/lib/python3.11/site-packages/sqlalchemy/sql/elements.py:533: in _execute_on_connection
+    return connection._execute_clauseelement(
+/var/tmp/many-t0-20261028/venv/lib/python3.11/site-packages/sqlalchemy/engine/base.py:1683: in _execute_clauseelement
+    ret = self._execute_context(
+/var/tmp/many-t0-20261028/venv/lib/python3.11/site-packages/sqlalchemy/engine/base.py:1837: in _execute_context
+    return self._exec_single_context(
+/var/tmp/many-t0-20261028/venv/lib/python3.11/site-packages/sqlalchemy/engine/base.py:1977: in _exec_single_context
+    self._handle_dbapi_exception(
+/var/tmp/many-t0-20261028/venv/lib/python3.11/site-packages/sqlalchemy/engine/base.py:2347: in _handle_dbapi_exception
+    raise sqlalchemy_exception.with_traceback(exc_info[2]) from e
+/var/tmp/many-t0-20261028/venv/lib/python3.11/site-packages/sqlalchemy/engine/base.py:1958: in _exec_single_context
+    self.dialect.do_execute(
+/var/tmp/many-t0-20261028/venv/lib/python3.11/site-packages/sqlalchemy/engine/default.py:1192: in do_execute
+    cursor.execute(statement, parameters)
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = &lt;psycopg.Cursor [closed] [INTRANS] (port=55444 user=postgres database=many_test_b2) at 0x79c0438e6f80&gt;
+query = 'INSERT INTO saas_outbound_messages (id, connection_id, message_id, platform, channel_id, kind, message_pk) VALUES (%(...s::VARCHAR, %(channel_id)s::UUID, %(kind)s::VARCHAR, %(message_pk)s::UUID) RETURNING saas_outbound_messages.created_at'
+params = {'id': UUID('bd9b45e2-8603-4260-8e57-37b9c80dddfc'), 'connection_id': None, 'message_id': 'b7f624ea-e145-4bea-a7b2-07d461252c6f', 'platform': 'facebook', ...}
+prepare = None, binary = None
+
+    def execute(
+        self,
+        query: Query,
+        params: Params | None = None,
+        *,
+        prepare: bool | None = None,
+        binary: bool | None = None,
+    ) -&gt; Self:
+        """
+        Execute a query or command to the database.
+        """
+        try:
+            with self._conn.lock:
+                self._conn.wait(
+                    self._execute_gen(query, params, prepare=prepare, binary=binary)
+                )
+        except e._NO_TRACEBACK as ex:
+&gt;           raise ex.with_traceback(None)
+E           sqlalchemy.exc.IntegrityError: (psycopg.errors.NotNullViolation) null value in column "connection_id" of relation "saas_outbound_messages" violates not-null constraint
+E           DETAIL:  Failing row contains (bd9b45e2-8603-4260-8e57-37b9c80dddfc, null, b7f624ea-e145-4bea-a7b2-07d461252c6f, facebook, 33e40f0a-fd21-4c09-83d0-830f1c3b046b, reply, ee5be6e3-3975-494a-b963-08ca29570607, 2026-10-28 11:41:11.979138+03).
+E           [SQL: INSERT INTO saas_outbound_messages (id, connection_id, message_id, platform, channel_id, kind, message_pk) VALUES (%(id)s::UUID, %(connection_id)s::VARCHAR, %(message_id)s::VARCHAR, %(platform)s::VARCHAR, %(channel_id)s::UUID, %(kind)s::VARCHAR, %(message_pk)s::UUID) RETURNING saas_outbound_messages.created_at]
+E           [parameters: {'id': UUID('bd9b45e2-8603-4260-8e57-37b9c80dddfc'), 'connection_id': None, 'message_id': 'b7f624ea-e145-4bea-a7b2-07d461252c6f', 'platform': 'facebook', 'channel_id': UUID('33e40f0a-fd21-4c09-83d0-830f1c3b046b'), 'kind': 'reply', 'message_pk': UUID('ee5be6e3-3975-494a-b963-08ca29570607')}]
+E           (Background on this error at: https://sqlalche.me/e/21/gkpj)
+
+/var/tmp/many-t0-20261028/venv/lib/python3.11/site-packages/psycopg/cursor.py:117: IntegrityError</failure></testcase><testcase classname="tests.test_contact_erasure" name="test_same_identity_on_second_channel_in_same_workspace_is_preserved[whatsapp]" time="0.017"><failure message="sqlalchemy.exc.IntegrityError: (psycopg.errors.NotNullViolation) null value in column &quot;connection_id&quot; of relation &quot;saas_outbound_messages&quot; violates not-null constraint&#10;DETAIL:  Failing row contains (5b30deb9-1389-4725-87cb-c7f93126b97a, null, 9610b008-2b0f-4563-83fc-9ae02ee007e0, whatsapp, e20965d2-ef13-4ed0-95a4-44e565db931f, reply, 14126bde-b288-4c5e-b18f-82eff3b0b6f6, 2026-10-28 11:41:12.205916+03).&#10;[+3 more lines; full report in element text]">self = &lt;sqlalchemy.engine.base.Connection object at 0x79c041cddc50&gt;
+dialect = &lt;sqlalchemy.dialects.postgresql.psycopg.PGDialect_psycopg object at 0x79c046f91e90&gt;
+context = &lt;sqlalchemy.dialects.postgresql.psycopg.PGExecutionContext_psycopg object at 0x79c04163b590&gt;
+statement = &lt;sqlalchemy.dialects.postgresql.psycopg.PGCompiler_psycopg object at 0x79c0436ff050&gt;
+parameters = [{'id': UUID('5b30deb9-1389-4725-87cb-c7f93126b97a'), 'connection_id': None, 'message_id': '9610b008-2b0f-4563-83fc-9ae02ee007e0', 'platform': 'whatsapp', ...}]
+
+    def _exec_single_context(
+        self,
+        dialect: Dialect,
+        context: ExecutionContext,
+        statement: Union[str, Compiled],
+        parameters: Optional[_AnyMultiExecuteParams],
+    ) -&gt; CursorResult[Unpack[TupleAny]]:
+        """continue the _execute_context() method for a single DBAPI
+        cursor.execute() or cursor.executemany() call.
+    
+        """
+        if dialect.bind_typing is BindTyping.SETINPUTSIZES:
+            generic_setinputsizes = context._prepare_set_input_sizes()
+    
+            if generic_setinputsizes:
+                try:
+                    dialect.do_set_input_sizes(
+                        context.cursor, generic_setinputsizes, context
+                    )
+                except BaseException as e:
+                    self._handle_dbapi_exception(
+                        e, str(statement), parameters, None, context
+                    )
+    
+        cursor, str_statement, parameters = (
+            context.cursor,
+            context.statement,
+            context.parameters,
+        )
+    
+        effective_parameters: Optional[_AnyExecuteParams]
+    
+        if not context.executemany:
+            effective_parameters = parameters[0]
+        else:
+            effective_parameters = parameters
+    
+        evt_handled: bool = False
+        try:
+            if self._has_events or self.engine._has_events:
+                for fn in self.dispatch.before_cursor_execute:
+                    str_statement, effective_parameters = fn(
+                        self,
+                        cursor,
+                        str_statement,
+                        effective_parameters,
+                        context,
+                        context.executemany,
+                    )
+    
+            if self._echo:
+                self._log_info(str_statement)
+    
+                stats = context._get_cache_stats()
+    
+                if not self.engine.hide_parameters:
+                    self._log_info(
+                        "[%s] %r",
+                        stats,
+                        sql_util._repr_params(
+                            effective_parameters,
+                            batches=10,
+                            ismulti=context.executemany,
+                        ),
+                    )
+                else:
+                    self._log_info(
+                        "[%s] [SQL parameters hidden due to "
+                        "hide_parameters=True]",
+                        stats,
+                    )
+            if context.execute_style is ExecuteStyle.EXECUTEMANY:
+                effective_parameters = cast(
+                    "_CoreMultiExecuteParams", effective_parameters
+                )
+                if self.dialect._has_events:
+                    for fn in self.dialect.dispatch.do_executemany:
+                        if fn(
+                            cursor,
+                            str_statement,
+                            effective_parameters,
+                            context,
+                        ):
+                            evt_handled = True
+                            break
+                if not evt_handled:
+                    self.dialect.do_executemany(
+                        cursor,
+                        str_statement,
+                        effective_parameters,
+                        context,
+                    )
+            elif not effective_parameters and context.no_parameters:
+                if self.dialect._has_events:
+                    for fn in self.dialect.dispatch.do_execute_no_params:
+                        if fn(cursor, str_statement, context):
+                            evt_handled = True
+                            break
+                if not evt_handled:
+                    self.dialect.do_execute_no_params(
+                        cursor, str_statement, context
+                    )
+            else:
+                effective_parameters = cast(
+                    "_CoreSingleExecuteParams", effective_parameters
+                )
+                if self.dialect._has_events:
+                    for fn in self.dialect.dispatch.do_execute:
+                        if fn(
+                            cursor,
+                            str_statement,
+                            effective_parameters,
+                            context,
+                        ):
+                            evt_handled = True
+                            break
+                if not evt_handled:
+&gt;                   self.dialect.do_execute(
+                        cursor, str_statement, effective_parameters, context
+                    )
+
+/var/tmp/many-t0-20261028/venv/lib/python3.11/site-packages/sqlalchemy/engine/base.py:1958: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+/var/tmp/many-t0-20261028/venv/lib/python3.11/site-packages/sqlalchemy/engine/default.py:1192: in do_execute
+    cursor.execute(statement, parameters)
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = &lt;psycopg.Cursor [closed] [INTRANS] (port=55444 user=postgres database=many_test_b2) at 0x79c0438e6200&gt;
+query = 'INSERT INTO saas_outbound_messages (id, connection_id, message_id, platform, channel_id, kind, message_pk) VALUES (%(...s::VARCHAR, %(channel_id)s::UUID, %(kind)s::VARCHAR, %(message_pk)s::UUID) RETURNING saas_outbound_messages.created_at'
+params = {'id': UUID('5b30deb9-1389-4725-87cb-c7f93126b97a'), 'connection_id': None, 'message_id': '9610b008-2b0f-4563-83fc-9ae02ee007e0', 'platform': 'whatsapp', ...}
+prepare = None, binary = None
+
+    def execute(
+        self,
+        query: Query,
+        params: Params | None = None,
+        *,
+        prepare: bool | None = None,
+        binary: bool | None = None,
+    ) -&gt; Self:
+        """
+        Execute a query or command to the database.
+        """
+        try:
+            with self._conn.lock:
+                self._conn.wait(
+                    self._execute_gen(query, params, prepare=prepare, binary=binary)
+                )
+        except e._NO_TRACEBACK as ex:
+&gt;           raise ex.with_traceback(None)
+E           psycopg.errors.NotNullViolation: null value in column "connection_id" of relation "saas_outbound_messages" violates not-null constraint
+E           DETAIL:  Failing row contains (5b30deb9-1389-4725-87cb-c7f93126b97a, null, 9610b008-2b0f-4563-83fc-9ae02ee007e0, whatsapp, e20965d2-ef13-4ed0-95a4-44e565db931f, reply, 14126bde-b288-4c5e-b18f-82eff3b0b6f6, 2026-10-28 11:41:12.205916+03).
+
+/var/tmp/many-t0-20261028/venv/lib/python3.11/site-packages/psycopg/cursor.py:117: NotNullViolation
+
+The above exception was the direct cause of the following exception:
+
+client = &lt;starlette.testclient.TestClient object at 0x79c041cdecd0&gt;
+db_session = &lt;sqlalchemy.orm.session.Session object at 0x79c043f42ed0&gt;
+world = namespace(workspace=&lt;app.models.workspace.Workspace object at 0x79c041cdd750&gt;, other=&lt;app.models.workspace.Workspace o...OiJhY2Nlc3MifQ.nMZIgU2iLB_oFSyPHBdGkR8yq4GztBoEW4qM37HiiM8', 'X-Workspace-Id': 'a7b27072-cf20-43a0-8c4f-81138c612aed'})
+platform = 'whatsapp'
+
+    @pytest.mark.parametrize("platform", ["instagram", "facebook", "whatsapp"])
+    def test_same_identity_on_second_channel_in_same_workspace_is_preserved(client, db_session, world, platform):
+        model = forwarder.CHANNEL_MODELS[platform]
+        key = {"instagram": "ig_user_id", "facebook": "page_id", "whatsapp": "phone_number_id"}[platform]
+        channel = model(workspace_id=world.workspace.id, **{key: "second-" + str(uuid4())})
+        db_session.add(channel); db_session.commit()
+&gt;       preserved = seed(db_session, channel, platform)[0].id
+                    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/test_contact_erasure.py:234: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+tests/test_contact_erasure.py:67: in seed
+    db.commit()
+/var/tmp/many-t0-20261028/venv/lib/python3.11/site-packages/sqlalchemy/orm/session.py:2095: in commit
+    trans.commit(_to_root=True)
+&lt;sqlalchemy generated _go() wrapper for sqlalchemy.orm.session.SessionTransaction.commit&gt;:2: in commit
+    return target(fn, self, _to_root=_to_root)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/var/tmp/many-t0-20261028/venv/lib/python3.11/site-packages/sqlalchemy/orm/state_changes.py:137: in _go
+    ret_value = fn(self, *arg, **kw)
+                ^^^^^^^^^^^^^^^^^^^^
+/var/tmp/many-t0-20261028/venv/lib/python3.11/site-packages/sqlalchemy/orm/session.py:1330: in commit
+    self._prepare_impl()
+&lt;sqlalchemy generated _go() wrapper for sqlalchemy.orm.session.SessionTransaction._prepare_impl&gt;:2: in _prepare_impl
+    return target(fn, self)
+           ^^^^^^^^^^^^^^^^
+/var/tmp/many-t0-20261028/venv/lib/python3.11/site-packages/sqlalchemy/orm/state_changes.py:137: in _go
+    ret_value = fn(self, *arg, **kw)
+                ^^^^^^^^^^^^^^^^^^^^
+/var/tmp/many-t0-20261028/venv/lib/python3.11/site-packages/sqlalchemy/orm/session.py:1304: in _prepare_impl
+    self.session.flush()
+/var/tmp/many-t0-20261028/venv/lib/python3.11/site-packages/sqlalchemy/orm/session.py:4543: in flush
+    self._flush(objects)
+&lt;sqlalchemy generated warned() wrapper for sqlalchemy.orm.session.Session._flush&gt;:2: in _flush
+    return target(fn, self, objects=objects)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/var/tmp/many-t0-20261028/venv/lib/python3.11/site-packages/sqlalchemy/util/deprecations.py:281: in warned
+    return fn(*args, **kwargs)  # type: ignore[no-any-return]
+           ^^^^^^^^^^^^^^^^^^^
+/var/tmp/many-t0-20261028/venv/lib/python3.11/site-packages/sqlalchemy/orm/session.py:4686: in _flush
+    with util.safe_reraise():
+/var/tmp/many-t0-20261028/venv/lib/python3.11/site-packages/sqlalchemy/util/langhelpers.py:166: in __exit__
+    raise exc_value.with_traceback(exc_tb)
+/var/tmp/many-t0-20261028/venv/lib/python3.11/site-packages/sqlalchemy/orm/session.py:4647: in _flush
+    flush_context.execute()
+/var/tmp/many-t0-20261028/venv/lib/python3.11/site-packages/sqlalchemy/orm/unitofwork.py:467: in execute
+    rec.execute(self)
+/var/tmp/many-t0-20261028/venv/lib/python3.11/site-packages/sqlalchemy/orm/unitofwork.py:643: in execute
+    util.preloaded.orm_persistence._save_obj(
+/var/tmp/many-t0-20261028/venv/lib/python3.11/site-packages/sqlalchemy/orm/persistence.py:92: in _save_obj
+    _emit_insert_statements(
+/var/tmp/many-t0-20261028/venv/lib/python3.11/site-packages/sqlalchemy/orm/persistence.py:1237: in _emit_insert_statements
+    result = connection.execute(
+/var/tmp/many-t0-20261028/venv/lib/python3.11/site-packages/sqlalchemy/engine/base.py:1463: in execute
+    return meth(
+/var/tmp/many-t0-20261028/venv/lib/python3.11/site-packages/sqlalchemy/sql/elements.py:533: in _execute_on_connection
+    return connection._execute_clauseelement(
+/var/tmp/many-t0-20261028/venv/lib/python3.11/site-packages/sqlalchemy/engine/base.py:1683: in _execute_clauseelement
+    ret = self._execute_context(
+/var/tmp/many-t0-20261028/venv/lib/python3.11/site-packages/sqlalchemy/engine/base.py:1837: in _execute_context
+    return self._exec_single_context(
+/var/tmp/many-t0-20261028/venv/lib/python3.11/site-packages/sqlalchemy/engine/base.py:1977: in _exec_single_context
+    self._handle_dbapi_exception(
+/var/tmp/many-t0-20261028/venv/lib/python3.11/site-packages/sqlalchemy/engine/base.py:2347: in _handle_dbapi_exception
+    raise sqlalchemy_exception.with_traceback(exc_info[2]) from e
+/var/tmp/many-t0-20261028/venv/lib/python3.11/site-packages/sqlalchemy/engine/base.py:1958: in _exec_single_context
+    self.dialect.do_execute(
+/var/tmp/many-t0-20261028/venv/lib/python3.11/site-packages/sqlalchemy/engine/default.py:1192: in do_execute
+    cursor.execute(statement, parameters)
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = &lt;psycopg.Cursor [closed] [INTRANS] (port=55444 user=postgres database=many_test_b2) at 0x79c0438e6200&gt;
+query = 'INSERT INTO saas_outbound_messages (id, connection_id, message_id, platform, channel_id, kind, message_pk) VALUES (%(...s::VARCHAR, %(channel_id)s::UUID, %(kind)s::VARCHAR, %(message_pk)s::UUID) RETURNING saas_outbound_messages.created_at'
+params = {'id': UUID('5b30deb9-1389-4725-87cb-c7f93126b97a'), 'connection_id': None, 'message_id': '9610b008-2b0f-4563-83fc-9ae02ee007e0', 'platform': 'whatsapp', ...}
+prepare = None, binary = None
+
+    def execute(
+        self,
+        query: Query,
+        params: Params | None = None,
+        *,
+        prepare: bool | None = None,
+        binary: bool | None = None,
+    ) -&gt; Self:
+        """
+        Execute a query or command to the database.
+        """
+        try:
+            with self._conn.lock:
+                self._conn.wait(
+                    self._execute_gen(query, params, prepare=prepare, binary=binary)
+                )
+        except e._NO_TRACEBACK as ex:
+&gt;           raise ex.with_traceback(None)
+E           sqlalchemy.exc.IntegrityError: (psycopg.errors.NotNullViolation) null value in column "connection_id" of relation "saas_outbound_messages" violates not-null constraint
+E           DETAIL:  Failing row contains (5b30deb9-1389-4725-87cb-c7f93126b97a, null, 9610b008-2b0f-4563-83fc-9ae02ee007e0, whatsapp, e20965d2-ef13-4ed0-95a4-44e565db931f, reply, 14126bde-b288-4c5e-b18f-82eff3b0b6f6, 2026-10-28 11:41:12.205916+03).
+E           [SQL: INSERT INTO saas_outbound_messages (id, connection_id, message_id, platform, channel_id, kind, message_pk) VALUES (%(id)s::UUID, %(connection_id)s::VARCHAR, %(message_id)s::VARCHAR, %(platform)s::VARCHAR, %(channel_id)s::UUID, %(kind)s::VARCHAR, %(message_pk)s::UUID) RETURNING saas_outbound_messages.created_at]
+E           [parameters: {'id': UUID('5b30deb9-1389-4725-87cb-c7f93126b97a'), 'connection_id': None, 'message_id': '9610b008-2b0f-4563-83fc-9ae02ee007e0', 'platform': 'whatsapp', 'channel_id': UUID('e20965d2-ef13-4ed0-95a4-44e565db931f'), 'kind': 'reply', 'message_pk': UUID('14126bde-b288-4c5e-b18f-82eff3b0b6f6')}]
+E           (Background on this error at: https://sqlalche.me/e/21/gkpj)
+
+/var/tmp/many-t0-20261028/venv/lib/python3.11/site-packages/psycopg/cursor.py:117: IntegrityError</failure></testcase><testcase classname="tests.test_contact_erasure" name="test_comments_cooldowns_and_identifiable_automation_logs_are_erased[instagram]" time="0.057" /><testcase classname="tests.test_contact_erasure" name="test_comments_cooldowns_and_identifiable_automation_logs_are_erased[facebook]" time="0.066" /><testcase classname="tests.test_contact_erasure" name="test_whatsapp_outreach_messages_recipients_and_consent_are_erased" time="0.012"><failure message="sqlalchemy.exc.IntegrityError: (psycopg.errors.NotNullViolation) null value in column &quot;created_by&quot; of relation &quot;whatsapp_campaigns&quot; violates not-null constraint&#10;DETAIL:  Failing row contains (ef9254ea-3dad-42cc-b34b-cf5d88686c7e, e457d029-2b54-4adc-8ddb-66c3ed392637, 7dde0041-0523-4968-b37d-78a259e8ec66, d768bc68-c23a-4cc9-956d-7ade74951a04, retained, draft, null, null, 30, {}, 0, 0, 0, 0, 0, 0, null, 2026-10-28 11:41:12.598653+03, 2026-10-28 11:41:12.598653+03).&#10;[+3 more lines; full report in element text]">self = &lt;sqlalchemy.engine.base.Connection object at 0x79c042395010&gt;
+dialect = &lt;sqlalchemy.dialects.postgresql.psycopg.PGDialect_psycopg object at 0x79c046f91e90&gt;
+context = &lt;sqlalchemy.dialects.postgresql.psycopg.PGExecutionContext_psycopg object at 0x79c0417dd010&gt;
+statement = &lt;sqlalchemy.dialects.postgresql.psycopg.PGCompiler_psycopg object at 0x79c0417dd090&gt;
+parameters = [{'id': UUID('ef9254ea-3dad-42cc-b34b-cf5d88686c7e'), 'workspace_id': UUID('e457d029-2b54-4adc-8ddb-66c3ed392637'), 'w...t_id': UUID('7dde0041-0523-4968-b37d-78a259e8ec66'), 'template_id': UUID('d768bc68-c23a-4cc9-956d-7ade74951a04'), ...}]
+
+    def _exec_single_context(
+        self,
+        dialect: Dialect,
+        context: ExecutionContext,
+        statement: Union[str, Compiled],
+        parameters: Optional[_AnyMultiExecuteParams],
+    ) -&gt; CursorResult[Unpack[TupleAny]]:
+        """continue the _execute_context() method for a single DBAPI
+        cursor.execute() or cursor.executemany() call.
+    
+        """
+        if dialect.bind_typing is BindTyping.SETINPUTSIZES:
+            generic_setinputsizes = context._prepare_set_input_sizes()
+    
+            if generic_setinputsizes:
+                try:
+                    dialect.do_set_input_sizes(
+                        context.cursor, generic_setinputsizes, context
+                    )
+                except BaseException as e:
+                    self._handle_dbapi_exception(
+                        e, str(statement), parameters, None, context
+                    )
+    
+        cursor, str_statement, parameters = (
+            context.cursor,
+            context.statement,
+            context.parameters,
+        )
+    
+        effective_parameters: Optional[_AnyExecuteParams]
+    
+        if not context.executemany:
+            effective_parameters = parameters[0]
+        else:
+            effective_parameters = parameters
+    
+        evt_handled: bool = False
+        try:
+            if self._has_events or self.engine._has_events:
+                for fn in self.dispatch.before_cursor_execute:
+                    str_statement, effective_parameters = fn(
+                        self,
+                        cursor,
+                        str_statement,
+                        effective_parameters,
+                        context,
+                        context.executemany,
+                    )
+    
+            if self._echo:
+                self._log_info(str_statement)
+    
+                stats = context._get_cache_stats()
+    
+                if not self.engine.hide_parameters:
+                    self._log_info(
+                        "[%s] %r",
+                        stats,
+                        sql_util._repr_params(
+                            effective_parameters,
+                            batches=10,
+                            ismulti=context.executemany,
+                        ),
+                    )
+                else:
+                    self._log_info(
+                        "[%s] [SQL parameters hidden due to "
+                        "hide_parameters=True]",
+                        stats,
+                    )
+            if context.execute_style is ExecuteStyle.EXECUTEMANY:
+                effective_parameters = cast(
+                    "_CoreMultiExecuteParams", effective_parameters
+                )
+                if self.dialect._has_events:
+                    for fn in self.dialect.dispatch.do_executemany:
+                        if fn(
+                            cursor,
+                            str_statement,
+                            effective_parameters,
+                            context,
+                        ):
+                            evt_handled = True
+                            break
+                if not evt_handled:
+                    self.dialect.do_executemany(
+                        cursor,
+                        str_statement,
+                        effective_parameters,
+                        context,
+                    )
+            elif not effective_parameters and context.no_parameters:
+                if self.dialect._has_events:
+                    for fn in self.dialect.dispatch.do_execute_no_params:
+                        if fn(cursor, str_statement, context):
+                            evt_handled = True
+                            break
+                if not evt_handled:
+                    self.dialect.do_execute_no_params(
+                        cursor, str_statement, context
+                    )
+            else:
+                effective_parameters = cast(
+                    "_CoreSingleExecuteParams", effective_parameters
+                )
+                if self.dialect._has_events:
+                    for fn in self.dialect.dispatch.do_execute:
+                        if fn(
+                            cursor,
+                            str_statement,
+                            effective_parameters,
+                            context,
+                        ):
+                            evt_handled = True
+                            break
+                if not evt_handled:
+&gt;                   self.dialect.do_execute(
+                        cursor, str_statement, effective_parameters, context
+                    )
+
+/var/tmp/many-t0-20261028/venv/lib/python3.11/site-packages/sqlalchemy/engine/base.py:1958: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+/var/tmp/many-t0-20261028/venv/lib/python3.11/site-packages/sqlalchemy/engine/default.py:1192: in do_execute
+    cursor.execute(statement, parameters)
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = &lt;psycopg.Cursor [closed] [INTRANS] (port=55444 user=postgres database=many_test_b2) at 0x79c042ca37c0&gt;
+query = 'INSERT INTO whatsapp_campaigns (id, workspace_id, whatsapp_account_id, template_id, name, status, scheduled_at, compl...s::INTEGER, %(created_by)s::UUID, now(), now()) RETURNING whatsapp_campaigns.created_at, whatsapp_campaigns.updated_at'
+params = {'id': UUID('ef9254ea-3dad-42cc-b34b-cf5d88686c7e'), 'workspace_id': UUID('e457d029-2b54-4adc-8ddb-66c3ed392637'), 'wh...nt_id': UUID('7dde0041-0523-4968-b37d-78a259e8ec66'), 'template_id': UUID('d768bc68-c23a-4cc9-956d-7ade74951a04'), ...}
+prepare = None, binary = None
+
+    def execute(
+        self,
+        query: Query,
+        params: Params | None = None,
+        *,
+        prepare: bool | None = None,
+        binary: bool | None = None,
+    ) -&gt; Self:
+        """
+        Execute a query or command to the database.
+        """
+        try:
+            with self._conn.lock:
+                self._conn.wait(
+                    self._execute_gen(query, params, prepare=prepare, binary=binary)
+                )
+        except e._NO_TRACEBACK as ex:
+&gt;           raise ex.with_traceback(None)
+E           psycopg.errors.NotNullViolation: null value in column "created_by" of relation "whatsapp_campaigns" violates not-null constraint
+E           DETAIL:  Failing row contains (ef9254ea-3dad-42cc-b34b-cf5d88686c7e, e457d029-2b54-4adc-8ddb-66c3ed392637, 7dde0041-0523-4968-b37d-78a259e8ec66, d768bc68-c23a-4cc9-956d-7ade74951a04, retained, draft, null, null, 30, {}, 0, 0, 0, 0, 0, 0, null, 2026-10-28 11:41:12.598653+03, 2026-10-28 11:41:12.598653+03).
+
+/var/tmp/many-t0-20261028/venv/lib/python3.11/site-packages/psycopg/cursor.py:117: NotNullViolation
+
+The above exception was the direct cause of the following exception:
+
+client = &lt;starlette.testclient.TestClient object at 0x79c0422c2250&gt;
+db_session = &lt;sqlalchemy.orm.session.Session object at 0x79c041de69d0&gt;
+world = namespace(workspace=&lt;app.models.workspace.Workspace object at 0x79c041484e90&gt;, other=&lt;app.models.workspace.Workspace o...OiJhY2Nlc3MifQ.iad5YpEoXDOg3V9ITyaqND29aoSeSIwEJ05ksCpRR_s', 'X-Workspace-Id': 'e457d029-2b54-4adc-8ddb-66c3ed392637'})
+
+    def test_whatsapp_outreach_messages_recipients_and_consent_are_erased(client, db_session, world):
+        from app.models.whatsapp_template import WhatsappTemplate
+        from app.models.whatsapp_campaign import WhatsappCampaign
+        from app.models.whatsapp_campaign_recipient import WhatsappCampaignRecipient
+        from app.models.whatsapp_consent_event import WhatsappConsentEvent
+        channel = world.channels[("a", "whatsapp")]
+        template = WhatsappTemplate(workspace_id=world.workspace.id, whatsapp_account_id=channel.id, name="retained", language="en", category="utility")
+        db_session.add(template); db_session.flush()
+        campaign = WhatsappCampaign(workspace_id=world.workspace.id, whatsapp_account_id=channel.id, template_id=template.id, name="retained")
+        contact = WhatsappContact(workspace_id=world.workspace.id, whatsapp_account_id=channel.id, wa_id=IDENTITY)
+        message = Message(lead_id=None, whatsapp_campaign_id=campaign.id, content="private outreach body")
+&gt;       db_session.add_all([campaign, contact]); db_session.flush()
+                                                 ^^^^^^^^^^^^^^^^^^
+
+tests/test_contact_erasure.py:290: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+/var/tmp/many-t0-20261028/venv/lib/python3.11/site-packages/sqlalchemy/orm/session.py:4543: in flush
+    self._flush(objects)
+&lt;sqlalchemy generated warned() wrapper for sqlalchemy.orm.session.Session._flush&gt;:2: in _flush
+    return target(fn, self, objects=objects)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/var/tmp/many-t0-20261028/venv/lib/python3.11/site-packages/sqlalchemy/util/deprecations.py:281: in warned
+    return fn(*args, **kwargs)  # type: ignore[no-any-return]
+           ^^^^^^^^^^^^^^^^^^^
+/var/tmp/many-t0-20261028/venv/lib/python3.11/site-packages/sqlalchemy/orm/session.py:4686: in _flush
+    with util.safe_reraise():
+/var/tmp/many-t0-20261028/venv/lib/python3.11/site-packages/sqlalchemy/util/langhelpers.py:166: in __exit__
+    raise exc_value.with_traceback(exc_tb)
+/var/tmp/many-t0-20261028/venv/lib/python3.11/site-packages/sqlalchemy/orm/session.py:4647: in _flush
+    flush_context.execute()
+/var/tmp/many-t0-20261028/venv/lib/python3.11/site-packages/sqlalchemy/orm/unitofwork.py:467: in execute
+    rec.execute(self)
+/var/tmp/many-t0-20261028/venv/lib/python3.11/site-packages/sqlalchemy/orm/unitofwork.py:643: in execute
+    util.preloaded.orm_persistence._save_obj(
+/var/tmp/many-t0-20261028/venv/lib/python3.11/site-packages/sqlalchemy/orm/persistence.py:92: in _save_obj
+    _emit_insert_statements(
+/var/tmp/many-t0-20261028/venv/lib/python3.11/site-packages/sqlalchemy/orm/persistence.py:1237: in _emit_insert_statements
+    result = connection.execute(
+/var/tmp/many-t0-20261028/venv/lib/python3.11/site-packages/sqlalchemy/engine/base.py:1463: in execute
+    return meth(
+/var/tmp/many-t0-20261028/venv/lib/python3.11/site-packages/sqlalchemy/sql/elements.py:533: in _execute_on_connection
+    return connection._execute_clauseelement(
+/var/tmp/many-t0-20261028/venv/lib/python3.11/site-packages/sqlalchemy/engine/base.py:1683: in _execute_clauseelement
+    ret = self._execute_context(
+/var/tmp/many-t0-20261028/venv/lib/python3.11/site-packages/sqlalchemy/engine/base.py:1837: in _execute_context
+    return self._exec_single_context(
+/var/tmp/many-t0-20261028/venv/lib/python3.11/site-packages/sqlalchemy/engine/base.py:1977: in _exec_single_context
+    self._handle_dbapi_exception(
+/var/tmp/many-t0-20261028/venv/lib/python3.11/site-packages/sqlalchemy/engine/base.py:2347: in _handle_dbapi_exception
+    raise sqlalchemy_exception.with_traceback(exc_info[2]) from e
+/var/tmp/many-t0-20261028/venv/lib/python3.11/site-packages/sqlalchemy/engine/base.py:1958: in _exec_single_context
+    self.dialect.do_execute(
+/var/tmp/many-t0-20261028/venv/lib/python3.11/site-packages/sqlalchemy/engine/default.py:1192: in do_execute
+    cursor.execute(statement, parameters)
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = &lt;psycopg.Cursor [closed] [INTRANS] (port=55444 user=postgres database=many_test_b2) at 0x79c042ca37c0&gt;
+query = 'INSERT INTO whatsapp_campaigns (id, workspace_id, whatsapp_account_id, template_id, name, status, scheduled_at, compl...s::INTEGER, %(created_by)s::UUID, now(), now()) RETURNING whatsapp_campaigns.created_at, whatsapp_campaigns.updated_at'
+params = {'id': UUID('ef9254ea-3dad-42cc-b34b-cf5d88686c7e'), 'workspace_id': UUID('e457d029-2b54-4adc-8ddb-66c3ed392637'), 'wh...nt_id': UUID('7dde0041-0523-4968-b37d-78a259e8ec66'), 'template_id': UUID('d768bc68-c23a-4cc9-956d-7ade74951a04'), ...}
+prepare = None, binary = None
+
+    def execute(
+        self,
+        query: Query,
+        params: Params | None = None,
+        *,
+        prepare: bool | None = None,
+        binary: bool | None = None,
+    ) -&gt; Self:
+        """
+        Execute a query or command to the database.
+        """
+        try:
+            with self._conn.lock:
+                self._conn.wait(
+                    self._execute_gen(query, params, prepare=prepare, binary=binary)
+                )
+        except e._NO_TRACEBACK as ex:
+&gt;           raise ex.with_traceback(None)
+E           sqlalchemy.exc.IntegrityError: (psycopg.errors.NotNullViolation) null value in column "created_by" of relation "whatsapp_campaigns" violates not-null constraint
+E           DETAIL:  Failing row contains (ef9254ea-3dad-42cc-b34b-cf5d88686c7e, e457d029-2b54-4adc-8ddb-66c3ed392637, 7dde0041-0523-4968-b37d-78a259e8ec66, d768bc68-c23a-4cc9-956d-7ade74951a04, retained, draft, null, null, 30, {}, 0, 0, 0, 0, 0, 0, null, 2026-10-28 11:41:12.598653+03, 2026-10-28 11:41:12.598653+03).
+E           [SQL: INSERT INTO whatsapp_campaigns (id, workspace_id, whatsapp_account_id, template_id, name, status, scheduled_at, completed_at, throttle_per_minute, variable_mapping, total_recipients, sent_count, delivered_count, read_count, failed_count, skipped_count, created_by, created_at, updated_at) VALUES (%(id)s::UUID, %(workspace_id)s::UUID, %(whatsapp_account_id)s::UUID, %(template_id)s::UUID, %(name)s::VARCHAR, %(status)s::VARCHAR, %(scheduled_at)s::TIMESTAMP WITH TIME ZONE, %(completed_at)s::TIMESTAMP WITH TIME ZONE, %(throttle_per_minute)s::INTEGER, %(variable_mapping)s::JSONB, %(total_recipients)s::INTEGER, %(sent_count)s::INTEGER, %(delivered_count)s::INTEGER, %(read_count)s::INTEGER, %(failed_count)s::INTEGER, %(skipped_count)s::INTEGER, %(created_by)s::UUID, now(), now()) RETURNING whatsapp_campaigns.created_at, whatsapp_campaigns.updated_at]
+E           [parameters: {'id': UUID('ef9254ea-3dad-42cc-b34b-cf5d88686c7e'), 'workspace_id': UUID('e457d029-2b54-4adc-8ddb-66c3ed392637'), 'whatsapp_account_id': UUID('7dde0041-0523-4968-b37d-78a259e8ec66'), 'template_id': UUID('d768bc68-c23a-4cc9-956d-7ade74951a04'), 'name': 'retained', 'status': 'draft', 'scheduled_at': None, 'completed_at': None, 'throttle_per_minute': 30, 'variable_mapping': Jsonb({}), 'total_recipients': 0, 'sent_count': 0, 'delivered_count': 0, 'read_count': 0, 'failed_count': 0, 'skipped_count': 0, 'created_by': None}]
+E           (Background on this error at: https://sqlalche.me/e/21/gkpj)
+
+/var/tmp/many-t0-20261028/venv/lib/python3.11/site-packages/psycopg/cursor.py:117: IntegrityError</failure></testcase><testcase classname="tests.test_contact_erasure" name="test_only_customer_webhook_body_is_sql_null_and_pending_work_is_skipped" time="0.065" /></testsuite></testsuites>

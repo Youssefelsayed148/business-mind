@@ -21,6 +21,7 @@ from app.api import (
     routes_saas_messages,
     routes_workspaces,
 )
+from app.api import routes_contact_erasure
 from app.core.config import get_allowed_origins, settings
 from app.core.logging import setup_logging
 
@@ -77,6 +78,7 @@ app.include_router(routes_saas_delegation.whatsapp_router)
 app.include_router(routes_saas_delegation.facebook_router)
 app.include_router(routes_saas_messages.router, prefix="/saas")
 app.include_router(routes_saas_messages.router, prefix="/api/saas")
+app.include_router(routes_contact_erasure.router)
 
 
 @app.get("/")
