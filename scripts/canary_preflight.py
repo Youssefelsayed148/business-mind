@@ -8,12 +8,14 @@ from __future__ import annotations
 
 import argparse
 import ast
+import ipaddress
 from collections import Counter
 import os
 from pathlib import Path
 import re
 import sys
 from uuid import UUID
+from urllib.parse import urlsplit
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -154,9 +156,40 @@ def canonical_uuid(value: object) -> bool:
         return False
 
 
+def public_https_base_url(value: object) -> bool:
+    """Offline syntax check only; runtime delegation validation also checks DNS."""
+    if not isinstance(value, str):
+        return False
+    try:
+        url = urlsplit(value)
+        if (url.scheme != "https" or not url.hostname or url.username or url.password
+                or url.query or url.fragment):
+            return False
+        url.port  # Reject malformed port syntax without narrowing the runtime contract.
+        host = url.hostname.rstrip(".").lower()
+        if host == "localhost" or host.endswith((".localhost", ".local", ".internal")):
+            return False
+        try:
+            literal = ipaddress.ip_address(host)
+            return literal.is_global and not literal.is_multicast and not literal.is_reserved
+        except ValueError:
+            return "." in host and all(
+                re.fullmatch(r"[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?", label)
+                for label in host.split(".")
+            )
+    except ValueError:
+        return False
+
+
+def check_beat_process_count(count: int | None) -> None:
+    """Require an operator-observed count, separately from source scheduling."""
+    if count != 1:
+        raise CheckFailed("supply --beat-process-count 1 only after observing exactly one running beat")
+
+
 def check_database(raw_url: str, account_id: UUID, expected_head: str) -> None:
     # These dependencies already belong to the backend; no new packages.
-    from sqlalchemy import create_engine, select, text
+    from sqlalchemy import create_engine, func, select, text
     from sqlalchemy.engine import make_url
     from sqlalchemy.pool import NullPool
 
@@ -168,8 +201,8 @@ def check_database(raw_url: str, account_id: UUID, expected_head: str) -> None:
             or not re.fullmatch(r"/[A-Za-z0-9_./-]+", url.query["host"])
             or not url.database):
         raise CheckFailed("DB URL must use psycopg and one local Unix socket; TCP is refused")
-    if os.environ.get("APP_ENV") == "test" and url.database != "many_test":
-        raise CheckFailed("test mode permits only many_test")
+    if os.environ.get("APP_ENV") == "test" and not re.fullmatch(r"many_test(?:_[a-z0-9_]+)?", url.database):
+        raise CheckFailed("test mode permits only explicitly named many_test databases")
     sys.path.insert(0, str(ROOT / "backend"))
     from app.models.whatsapp_account import WhatsappAccount
 
@@ -186,12 +219,17 @@ def check_database(raw_url: str, account_id: UUID, expected_head: str) -> None:
                 versions = list(connection.execute(text("SELECT version_num FROM alembic_version")).scalars())
                 if versions != [expected_head]:
                     raise CheckFailed("database is not at the single Alembic source head")
-                # Select only the connection id; never fetch tokens or secrets.
-                value = connection.execute(select(WhatsappAccount.saas_connection_id).where(
-                    WhatsappAccount.id == account_id
-                )).scalar_one_or_none()
-                if not canonical_uuid(value):
+                # Never retrieve secret ciphertext: PostgreSQL returns only its presence.
+                row = connection.execute(select(
+                    WhatsappAccount.saas_connection_id,
+                    WhatsappAccount.saas_delegation_enabled,
+                    WhatsappAccount.saas_base_url,
+                    func.length(func.trim(WhatsappAccount.saas_secret_encrypted)) > 0,
+                ).where(WhatsappAccount.id == account_id)).one_or_none()
+                if row is None or not canonical_uuid(row[0]):
                     raise CheckFailed("selected WhatsApp account is missing or its connection id is not a lowercase UUID")
+                if not row[1] or not public_https_base_url(row[2]) or not row[3]:
+                    raise CheckFailed("selected channel needs delegation enabled, a public HTTPS base URL and a stored secret")
     finally:
         engine.dispose()
 
@@ -202,6 +240,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--nginx-config", type=Path, help="nginx config to inspect (source default)")
     parser.add_argument("--account-id", help="Many WhatsApp account UUID, not SaaS connection UUID")
     parser.add_argument("--database-url-env", default="CANARY_DATABASE_URL", help="explicit URL env name; never DATABASE_URL")
+    parser.add_argument("--beat-process-count", type=int, help="operator-observed running beat count across the deployment; must be one")
     parser.add_argument("--static-only", action="store_true", help="no DB access; exits 2 because DB readiness is unverified")
     args = parser.parse_args(argv)
     failed = False
@@ -236,7 +275,9 @@ def main(argv: list[str] | None = None) -> int:
         except ValueError:
             raise CheckFailed("a Many WhatsApp account UUID is required") from None
         check_database(raw_url, account_id, head)
-        print("PASS: local read-only DB is at head; selected connection id is a lowercase UUID")
+        print("PASS: local read-only DB at head; selected delegation enabled, UUID/HTTPS URL/secret presence valid (DNS unverified)")
+        check_beat_process_count(args.beat_process_count)
+        print("PASS: operator-observed running beat count is one (source schedule checked separately)")
     except Exception as exc:
         # Never print library exceptions/tracebacks: they may embed a DB URL.
         detail = str(exc) if isinstance(exc, CheckFailed) else "DB check unavailable; verify dependencies, local socket and schema"

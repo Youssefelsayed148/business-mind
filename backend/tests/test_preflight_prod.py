@@ -19,7 +19,7 @@ def _good_env() -> dict[str, str]:
         "DATABASE_URL": "postgresql://x",
         "REDIS_URL": "redis://r",
         "DISABLE_DOCS": "true",
-        "TRUST_PROXY_HEADERS": "true",
+        "FORWARDED_ALLOW_IPS": "172.20.0.2",
         "META_MOCK_PRIVATE_REPLIES": "false",
         "TOKEN_ENCRYPTION_KEY": Fernet.generate_key().decode(),
         "JWT_SECRET": "a" * 64,
@@ -39,7 +39,7 @@ def test_each_bad_value_fails_a_check():
     for key, bad in [
         ("APP_ENV", "development"),
         ("DISABLE_DOCS", "false"),
-        ("TRUST_PROXY_HEADERS", "false"),
+        ("FORWARDED_ALLOW_IPS", "*"),
         ("META_MOCK_PRIVATE_REPLIES", "true"),
         ("TOKEN_ENCRYPTION_KEY", "not-a-key"),
         ("JWT_SECRET", "change_me"),
@@ -65,3 +65,9 @@ def test_output_never_contains_values(tmp_path, capsys):
     preflight.main(["preflight_prod.py", str(path)])
     out = capsys.readouterr().out
     assert env["JWT_SECRET"] not in out and env["TOKEN_ENCRYPTION_KEY"] not in out
+
+
+def test_proxy_trust_rejects_ambiguous_or_global_peers():
+    for peers in (None, "", "*", "0.0.0.0/0", "::/0", "127.0.0.1,", "ingress"):
+        assert not preflight.specific_proxy_peers(peers)
+    assert preflight.specific_proxy_peers("127.0.0.1,172.20.0.2/32,::1")
