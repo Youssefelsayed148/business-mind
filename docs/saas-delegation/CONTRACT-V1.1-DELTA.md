@@ -1,6 +1,6 @@
 # Contract v1.1 delta (amends docs/17 v1)
 
-Status: ADOPTED (ADR-023). Proposed 2026-10-26 from the Phase 6 review; adopted by the owner on the SaaS side (branch `feature/phase-6-channels`) as ADR-023, which also carries A14. A15 is an owner-assumed default and is being implemented on the SaaS side in parallel. Where this delta and CONTRACT-V1.md differ, this delta wins. Anything not mentioned stays as in v1.
+Status: ADOPTED 2026-10-26 as ADR-023 (the owner approved it by issuing the rebuild prompt; ADR-021 is a different decision) and merged into docs/17 section 11. Where this delta and docs/17 v1 differ, this delta wins. Anything not mentioned stays as in v1.
 
 A1. Channel must match. `message.received.channel` MUST equal the connection's channel. Otherwise the SaaS returns `422` (signed, malformed; Many must not retry).
 
@@ -31,16 +31,16 @@ A12. Rotation (clarification). During the 24 h grace window each side accepts ei
 
 A13. Delegation off. Turning delegation off in Many returns the channel to today's behaviour immediately. Messages already queued for forwarding are dropped after the switch (logged), never sent to the SaaS afterwards.
 
-A14. SaaS-side behaviour Many must respect (already built on the SaaS side).
-- Retention: channel event payloads are purged at the tenant's retention cutoff; the dedupe record (connection_id, event_id) is kept 30 days.
-- Origin caps (A11) are enforced by the SaaS: `campaign_name` <= 120, `opening_message_text` <= 2000, `campaign_ref` <= 128, all of them strings; anything else is a signed `422` (Many must not retry). The SaaS fences the opening message, caps it at 500 characters and gives it to the bot as untrusted context only.
-- The SaaS sends `Accept-Encoding: identity`: Many must not compress the `202` body. A `Retry-After` from Many is honoured by the SaaS up to 300 s.
-- The health response (section 5.2) is capped at 64 KB by the SaaS.
-- A pushed `channel.status` with an `occurred_at` in the future counts as now.
-- SaaS-local delivery codes outside Many's `error_code` enum (A3): `connection_paused`, `connection_revoked`, `secret_unavailable`, `many_unreachable`, `invalid_many_target`, and `many_auth_rejected` (A15). Many never sends these.
-- A second secret rotation inside 24 h keeps only the newest and the immediately previous secret.
+A14. Review fixes (2026-10-27, batches 2-5; additions, nothing above is relaxed).
+- Retention: `channel_events.payload` is purged (set to NULL) at the tenant's message-retention cutoff; the dedupe record (connection_id, event_id) is deleted once it is older than that cutoff and 30 days. A duplicate `event_id` inside the 30 days is still answered `202 duplicate`.
+- Origin caps are enforced: `campaign_name` <= 120, `opening_message_text` <= 2000, `campaign_ref` <= 128, all strings; otherwise a signed `422`. Only these fields (and `type`) are stored. The opening message reaches the bot as untrusted, fenced context (<= 500 characters) and cannot override the system prompt.
+- Many must not compress the `202` body (the SaaS sends `Accept-Encoding: identity`; a compressed body is still decoded, capped at 64 KB). Many's `Retry-After` is honoured up to 300 s. The health response is capped at 64 KB.
+- A pushed `channel.status` with `occurred_at` in the future counts as "now" (like a pull with a future `checked_at`), so it cannot shadow later signals. `received_at` stays clamped to `[now-24h, now+5min]`.
+- SaaS-local delivery errors outside the Many enum: `connection_paused` (resendable), `connection_revoked`, `secret_unavailable` (stored secret cannot be decrypted; operator action), `many_unreachable`, `many_auth_rejected` (A15), `invalid_many_target`.
+- Rotating the secret a second time inside the 24 h window keeps only the newest and the immediately previous secret: the original stops verifying at once (this is the emergency-rotation behaviour).
+- Known limitations: the unauthenticated events route does one connection lookup before any throttle; a failed rollback of migrations 0023/0024 is expected once channel data exists (the rollback plan is to pause the connection, docs/16).
 
-A15. A 401 from the receiver is retryable for the sender (owner-assumed default), because secret rotation makes the two sides disagree for a while.
-- Many -> SaaS: retry a `401` with the normal backoff inside the 24 h budget, mark the channel degraded with `saas_last_forward_status = auth_rejected`, and keep the payload. This amends section 6 of v1 ("do not retry other 4xx"); every other 4xx stays permanent.
-- SaaS -> Many: a `401` is retried inside the SaaS retry budget (about 9 minutes), then the message is failed with `many_auth_rejected`. All other 4xx stay permanent.
-- Rotation runbook: pause the SaaS connection, rotate the secret in the SaaS, enter the new secret in Many, resume the connection.
+A15. Retryable 401 and rotation runbook (2026-10-27, ADR-024, owner-assumed default). Secret rotation skews the two sides for a short time, so a `401` from the receiver is retryable for the sender.
+- SaaS to Many: HTTP `401` is a retryable failure inside the existing 6-attempt budget (same backoff, about 9 minutes in total). If every attempt is rejected the message fails with the SaaS-local code `many_auth_rejected` (not `many_unreachable`) and the connection health becomes degraded with that reason. The same label applies when the budget ends on a transient failure but any earlier attempt of that message saw a `401` (for example `401` then five timeouts, or five timeouts then `401`): a `401` is the actionable signal (the secrets differ) and a later timeout must not hide it. The sender remembers it in the send job and forgets it when the message is sent again. A budget with no `401` at all stays `many_unreachable`. All other `4xx` (403, 404, 422, ...) stay permanent (`many_http_NNN`, or the Many `error_code` when it is in the enum).
+- Many to SaaS: Many retries a `401` from the SaaS inside its 24 h budget (A7).
+- Rotation runbook: (1) pause the connection in the SaaS (inbound is still stored, nothing is sent); (2) rotate the secret in the SaaS; (3) enter the new secret in Many; (4) resume the connection. A send that still sees `401` while the two sides differ is retried for about 9 minutes; after that it fails with `many_auth_rejected` and can be sent again once both sides match.

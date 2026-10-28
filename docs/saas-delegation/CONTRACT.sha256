@@ -1,0 +1,4 @@
+source: SaaS repo, commit 5fa72f7
+2aeeb34feb481a9f5ed839da482243821086d52ee6a95e3bba98dc42caee7071  docs/saas-delegation/CONTRACT-V1.md
+f5df50cc3e51fbc007940ca3f913fb7b0b7cc9a72bfe240eb118e36925e6d0cb  docs/saas-delegation/CONTRACT-V1.1-DELTA.md
+9eee61ada41d580b6a1022dcc20f3e5b86abde7310876f60fc7f6ad4c0a73b10  backend/tests/fixtures/contract/signing_vectors.json
