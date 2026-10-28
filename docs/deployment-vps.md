@@ -245,3 +245,32 @@ scripts/restore_postgres.sh backups/postgres_instagram_automation_YYYYMMDDTHHMMS
 ```
 
 For production, copy backups off-server to S3, Backblaze B2, rsync storage, or another managed backup target. Test restore procedures before you need them.
+
+## 10. Production Preflight
+
+Before the first start and after every config change, check the env file. The script prints PASS/FAIL per check and never prints a value:
+
+```bash
+python3 scripts/preflight_prod.py .env.production
+```
+
+It checks required variables, `APP_ENV=production`, `DISABLE_DOCS=true`, `TRUST_PROXY_HEADERS=true` (without it every rate limit keys on the nginx IP), `META_MOCK_PRIVATE_REPLIES=false`, a valid Fernet `TOKEN_ENCRYPTION_KEY`, non-default `JWT_SECRET` / `APP_SECRET_KEY`, https `ALLOWED_ORIGINS`, and `OPENAI_API_KEY` while `AI_ENABLED_GLOBAL` is on.
+
+### Confirm the server runs the repo's code
+
+`.gitignore` lists `backend/app/workers/tasks.py.server`, a sign that the server copy of `tasks.py` has drifted before. The images are built from `./backend` and do not embed a git commit, so compare against the checkout the images were built from:
+
+```bash
+# Commit of the checkout on the server (and make sure it is clean)
+git rev-parse HEAD
+git status --short
+
+# When the running images were built
+docker compose --env-file .env.production -f docker-compose.prod.yml images
+
+# Diff the file inside the running worker against the repo
+docker compose --env-file .env.production -f docker-compose.prod.yml exec -T worker \
+  cat /app/app/workers/tasks.py | diff - backend/app/workers/tasks.py && echo "tasks.py matches"
+```
+
+Adjust `/app/app/workers/tasks.py` if the image's working directory differs (`docker compose ... exec worker pwd`). No diff output means the container matches the checkout; if it differs, or `git rev-parse HEAD` is not the commit you intended to deploy, rebuild with `up -d --build`. Repeat the diff for the `backend` and `beat` services if needed.

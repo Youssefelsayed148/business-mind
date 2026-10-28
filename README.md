@@ -700,7 +700,9 @@ backend/
     workers/
       celery_app.py          # Celery app configuration
       tasks.py               # Celery task implementations
-      beat_schedule.py       # Celery beat schedule
+      whatsapp_beat_schedule.py          # WhatsApp beat schedule
+      instagram_token_beat_schedule.py   # Daily Instagram token refresh schedule
+      instagram_token_tasks.py           # Instagram token refresh task
   tests/
     test_health.py           # Health endpoint tests
     test_meta_webhooks.py    # Webhook route & signature tests

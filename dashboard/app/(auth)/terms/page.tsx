@@ -2,6 +2,9 @@
 
 import Link from "next/link";
 
+// TODO(owner): unverified against the code -- there are no plan limits in the
+// application (see "Account Responsibilities"), no self-service account deletion
+// (see "Termination"), and the liability cap needs a legal check.
 const sections = [
   {
     title: "Acceptance of Terms",
@@ -35,7 +38,7 @@ const sections = [
       "You are responsible for maintaining the confidentiality of your login credentials.",
       "You must notify us immediately of any unauthorized access to your account.",
       "You are responsible for all activity that occurs under your account.",
-      "Each account may connect multiple Instagram, Facebook, and WhatsApp accounts subject to your plan's limits.",
+      "Each account may connect multiple Instagram, Facebook, and WhatsApp accounts.",
     ],
   },
   {
@@ -54,6 +57,13 @@ const sections = [
       "You retain ownership of all data you input into the platform, including campaign content and lead records.",
       "By connecting your Instagram, Facebook, or WhatsApp account, you grant us permission to access and use your data as described in our Privacy Policy.",
       "You may export or delete your data at any time as described in the Privacy Policy.",
+    ],
+  },
+  {
+    title: "AI-Generated Replies",
+    content: [
+      "AI replies are optional and are only used where you enable them for a connected account and campaign. Conversation text and your business profile are sent to our AI provider to write each reply, as described in the Privacy Policy.",
+      "AI-generated replies can be inaccurate or incomplete. You are responsible for the business profile and instructions you provide, for reviewing how replies perform, and for turning AI off where it is not appropriate.",
     ],
   },
   {
@@ -76,7 +86,7 @@ const sections = [
   {
     title: "Termination",
     content: [
-      "You may terminate your account at any time by contacting us or deleting your account from the platform.",
+      "You may terminate your account at any time by contacting us. You may disconnect any connected account yourself from the Accounts page.",
       "We may suspend or terminate your account for violation of these terms, Meta's policies, or for any other reason with reasonable notice.",
       "Upon termination, your access to the platform will cease and your data will be handled as described in the Privacy Policy.",
     ],
@@ -118,7 +128,7 @@ export default function TermsPage() {
         <div className="mx-auto max-w-4xl px-6 py-12">
           <div className="inline-flex items-center gap-2 rounded-full border border-emerald-200 bg-[#ECFDF5] px-3 py-1 text-xs font-medium text-emerald-700 mb-4">
             <span className="h-1.5 w-1.5 rounded-full bg-[#10B981]" />
-            Last updated: September 2026
+            Last updated: October 2026
           </div>
           <h1 className="text-3xl font-bold text-[#0F172A] mb-3">Terms of Service</h1>
           <p className="text-[#64748B] max-w-2xl leading-relaxed">

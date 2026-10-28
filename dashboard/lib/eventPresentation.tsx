@@ -54,6 +54,10 @@ const labelMap: Record<string, string> = {
   retry_enqueued: "Retry queued",
   triggered: "Campaign triggered",
   updated: "Campaign updated",
+  token_expired: "Token expired",
+  token_refresh_failed: "Token refresh failed",
+  token_refreshed: "Token refreshed",
+  webhook_event_failed: "Webhook processing failed",
   webhook_processed: "Webhook processed",
   webhook_received: "Webhook received",
 };
