@@ -832,3 +832,138 @@ This T4 entry appended using apply_patch. Final verification command to run afte
 Final verification outcome: aggregate exit 0, but git diff --check reported a new blank line at EOF; this was removed. Status matches the preserved pre-existing dirty tree. Additional source-reference command `rg -n 'event_id = f|ext_id =|for parsed in comment_events|for msg_evt in message_events' backend/app/services/saas_inbound.py backend/app/workers/tasks.py` succeeded; correction to answer 4: the event_id assignment is saas_inbound.py:190 (not :195). Final standalone `git diff --check` repeated after this correction; result recorded in the completion report.
 
 T4 complete. No commit made. STOP; wait for owner "continue". T6 and T5 not started.
+
+## T6 Staging canary runbook and offline readiness - 2026-10-28
+
+Completed T6 only, on `feature/saas-delegation`, HEAD `80ac7f3` (clean at session start; earlier tickets had been committed outside this session). Added `docs/saas-delegation/CANARY.md`, `scripts/canary_preflight.py` and `scripts/test_canary_preflight.py`; this progress entry is the only existing file changed. No application/non-delegated code changed; no SaaS repository edit. No commit, push, merge, deployment, Docker invocation, branch deletion, paid API or real Meta/OpenAI/SaaS request. No credential/environment files opened or printed. T5 not started.
+
+Runbook covers one free Meta WhatsApp TEST number with allow-listed recipients only; existing staging Many and frozen SaaS phase-6 deployment on public HTTPS; account setup in pause/create/copy/link/resume order; seven acceptance checks and sanitized evidence fields; A13 rollback (Many delegation off, queued unsent forwards dropped, SaaS paused); and Many environment variable names only. Actual staging migration case is explicitly **UNVERIFIED** until an operator runs `alembic current`. Existing 0022 schema is the supported upgrade case through 0027; empty DB hits pre-existing 0019 DuplicateColumn and must stop, with no pretend stamp/create_all workaround. No migration command was executed in T6.
+
+Important closed-window detail, derived from current code: `backend/app/services/saas_outbound.py:268-269` rejects locally as `window_closed` before the Meta send at line 271. The runbook therefore records **N/A — Many local window guard, no Meta call** for the normal >24 h rejection, with a field for an actual numeric Meta code/subcode only if naturally observed. It does not fabricate 131047 as a live result or instruct bypassing the guard. A free-entry-point window must also be closed. Real Meta error-code observation and all live canary checks remain **UNVERIFIED**.
+
+Preflight behavior:
+- Uses stdlib for source checks; DB check imports app models and the backend's existing SQLAlchemy/psycopg dependencies. No new packages, runtime settings/Celery app import, env-file load, HTTP, DNS, Redis or broker call.
+- Verifies one migration source head and 0023–0027 ancestry, then compares the actual DB version against that head.
+- Verifies exactly one source beat_schedule assignment and resolves its imported dictionary merge; all four SaaS tasks must appear exactly once. This is source verification, not proof of one running beat instance or a runtime override.
+- Verifies explicit gzip off in both /api/saas/ and /saas/ source locations; comments do not count. Not an nginx parser/runtime or ingress-compression proof.
+- Requires an explicitly named dedicated DB URL env variable (default CANARY_DATABASE_URL); DATABASE_URL fallback is refused. Only psycopg/local Unix sockets allowed; TCP/DNS and query overrides refused. APP_ENV=test permits only many_test. Connection/statement timeouts, read-only transaction, column-only selection of the chosen account's connection UUID. No token/secret columns selected and no values/exception tracebacks printed.
+- Requires canonical lowercase hyphenated UUID in DB. Exit 0 means all source and DB checks passed; exit 1 means failure; --static-only exits 2 with DB UNVERIFIED.
+
+### Results
+
+**16 tests passed**, 0 failures/errors/skips, 0.504 s, isolated WSL validation. Includes synthetic DB at head/lowercase UUID/full CLI; wrong DB revision; uppercase UUID; missing account; TCP rejection without marker disclosure; duplicate/missing tasks; multiple schedule assignments; missing/multiple-head migrations; gzip comments/missing alias; UUID spelling; refused DATABASE_URL fallback; and static-only exit semantics. The DB fixtures are synthetic two-column account/version tables: this tests the read-only checker, not an actual migration upgrade or full staging schema.
+
+Test environment: disposable existing cluster started in this session; **many_test only**, Unix socket host `/var/tmp/many-t0-20261028/socket`, port 55432, no TCP listener. `APP_ENV=test` and `TEST_DATABASE_URL` explicit; `DATABASE_URL` unreachable sentinel. Before the run, database identity and conftest DB selection were asserted; fresh private Redis FLUSHALL returned OK. Network namespace had loopback only; no real external calls possible. No pytest invoked; unittest DB fixtures refused pre-existing fixture tables and dropped only their own two synthetic tables. PostgreSQL shutdown and private Redis teardown succeeded. Logs in disposable `/var/tmp/many-t6-20261028/tests.log` and `static.log`; not committed.
+
+Static-only CLI on isolated source: three PASS lines, DB UNVERIFIED, verified **exit 2**. Final source/whitespace inspection passed with no backend/app diff; SaaS tree remained clean/pinned at 5fa72f7. Hosted staging deployment/migration state, nginx runtime, running beat/worker health, real HTTP callback/signature routing, bot/handoff/agent/delivery/health/window behavior, rollback execution, actual Meta numeric errors and repository-wide lint/type checks are **UNVERIFIED** (not run). No application change requiring the full backend regression suite.
+
+### Exact command ledger
+
+All PowerShell commands from Many root. New files and this entry written with apply_patch; one implementation typo corrected before the passing suite.
+
+1. Required docs/source/status inspection (exit 0; clean branch feature/saas-delegation, HEAD 80ac7f3):
+```powershell
+git status --short; git branch --show-current; git rev-parse --short HEAD; Get-Content CLAUDE.md; Get-Content docs/saas-delegation/TASK.md; Get-Content docs/saas-delegation/KNOWN-LIMITS.md; Get-Content docs/saas-delegation/PROGRESS.md | Select-Object -Last 25; Get-Content backend/app/workers/celery_app.py; Get-Content backend/app/workers/saas_beat_schedule.py; Get-Content backend/alembic/env.py; Get-Content backend/app/core/config.py | Select-Object -First 130; Get-Content nginx/default.conf
+```
+
+2. Models/migration/outbound/health/config inspection (aggregate exit 1: final Windows rg wildcard invalid; preceding reads succeeded; corrected directory rg in command 3):
+```powershell
+Get-Content backend/app/db/base.py; Get-Content backend/app/models/whatsapp_account.py | Select-Object -First 115; Get-Content backend/app/services/saas_outbound.py | Select-Object -First 210; Get-Content backend/app/services/saas_health.py | Select-Object -First 150; Get-Content backend/app/services/saas_delegation_service.py | Select-Object -First 150; Get-Content backend/alembic.ini | Select-Object -First 45; rg -n 'delegat|window_closed|template_required' backend/app/api/routes_conversations.py backend/app/services/saas_outbound.py; Get-Content backend/app/services/whatsapp_window_service.py | Select-Object -First 140; rg --files --hidden -g AGENTS.md -g '!.git' -g '!dashboard/node_modules'; rg -n '^revision|^down_revision' backend/alembic/versions/*.py
+```
+
+3. Model imports, migration chain, source guard/beat/env references and contract inspection (exit 0):
+```powershell
+Get-Content backend/app/models/__init__.py; rg -n 'app.core.config|app.services|app.db.session' backend/app/models -g '*.py'; rg -n '^revision|^down_revision' backend/alembic/versions -g '*.py'; Get-Content backend/app/services/saas_outbound.py | Select-Object -Skip 246 -First 45; rg -n 'MANAGED_BY_SAAS|@router|hand.off|take' backend/app/api/routes_conversations.py backend/app/services/saas_delegation_service.py; rg -n 'beat|celery|DATABASE_URL|REDIS_URL|APP_ENV|TOKEN_ENCRYPTION_KEY|META_WEBHOOK|FACEBOOK_APP|JWT_SECRET|APP_SECRET_KEY' docker-compose.yml docker-compose.traefik.yml; Get-Content scripts/test_check_contract_copies.py | Select-Object -First 60; Get-Content docs/saas-delegation/CONTRACT-V1.1-DELTA.md | Select-Object -First 100
+```
+
+4. Schedule/mixin/manifest and frozen SaaS revision inspection (aggregate exit 1: two guessed paths did not exist; schedules/mixin/manifest read and SaaS SHA 5fa72f7 confirmed; these missing-file reads were not treated as successful):
+```powershell
+Get-Content backend/app/workers/whatsapp_beat_schedule.py; Get-Content backend/app/workers/instagram_token_beat_schedule.py; Get-Content backend/app/workers/webhook_recovery_beat_schedule.py; Get-Content backend/app/models/saas_delegation.py | Select-Object -First 70; Get-Content docs/saas-delegation/CONTRACT.sha256; rg -n 'pause|health|handoff|waiting_human' '../SAAS-chats-ai-phase6/docs/17-manyosiris-channel-contract-v1.md' -g '*.md'; git -C '../SAAS-chats-ai-phase6' rev-parse --short HEAD; Get-Content backend/app/api/routes_saas.py | Select-Object -Last 85
+```
+
+5. Initial static CLI (PowerShell wrapper exit 1): Alembic/nginx passed; beat failed; DB unverified. No pass inferred:
+```powershell
+python scripts/canary_preflight.py --static-only
+```
+
+6. Source-only diagnostic (exit 1: TypeError, ast.Dict.values is a list):
+```powershell
+python -c "import sys; sys.path.insert(0, 'scripts'); import canary_preflight as p; p.check_beat(p.ROOT)"
+```
+Corrected `zip(config.keys, config.values())` to `zip(config.keys, config.values)` with apply_patch. Repeated `python scripts/canary_preflight.py --static-only`: three PASS lines and DB UNVERIFIED; Windows wrapper reports exit 1 for nonzero native exit, so exact Python exit was subsequently independently asserted in WSL as 2.
+
+7. Exact fresh snapshot/harness preparation (exit 0; system temp only, source files without env files):
+```powershell
+@'
+from pathlib import Path
+import subprocess, tempfile, zipfile
+root=Path.cwd()
+target=Path(tempfile.gettempdir())/"many-t6-review"
+target.mkdir(exist_ok=True)
+names=subprocess.check_output(["git","ls-files","-z","backend"]).decode().split("\0")
+names += ["scripts/canary_preflight.py","scripts/test_canary_preflight.py","nginx/default.conf"]
+with zipfile.ZipFile(target/"source.zip","w",zipfile.ZIP_DEFLATED) as archive:
+    for name in names:
+        p=Path(name)
+        if name and p.suffix in {".py",".json",".toml",".ini",".mako",".conf"} and not p.name.startswith(".env"):
+            archive.write(root/p,name)
+inner=Path("docs/saas-delegation/t2-evidence/test-inner.sh").read_text()
+inner=inner[:inner.index("python -m unittest")]
+inner=inner.replace('evidence="$repo/docs/saas-delegation/t2-evidence"', 'evidence=/var/tmp/many-t6-20261028')
+inner=inner.replace("target=/var/tmp/many-t2-20261028","target=/var/tmp/many-t6-20261028")
+inner += """APP_ENV=test TEST_DATABASE_URL="$TEST_DATABASE_URL" python -m unittest discover -s scripts -p test_canary_preflight.py -v >"$evidence/tests.log" 2>&1
+cat "$evidence/tests.log"
+set +e
+APP_ENV=test TEST_DATABASE_URL="$TEST_DATABASE_URL" python scripts/canary_preflight.py --static-only >"$evidence/static.log" 2>&1
+status=$?
+set -e
+cat "$evidence/static.log"
+test "$status" = 2
+printf 'STATIC_ONLY_EXIT=%s\\n' "$status"
+"""
+(target/"test-inner.sh").write_text(inner,newline="\n")
+outer=Path(tempfile.gettempdir())/"many-t4-review"/"run-tests.sh"
+source=outer.read_text().replace("target=/var/tmp/many-t4-20261028","target=/var/tmp/many-t6-20261028")
+(target/"run-tests.sh").write_text(source,newline="\n")
+print("Fresh source snapshot and isolated T6 harness prepared in system temp; no env files.")
+'@ | python -
+```
+Harness reuses T4's outer script in system temp (documented verbatim by T4 preparation above), changes the isolated extraction target to `/var/tmp/many-t6-20261028`, and inherits the offline environment/preflight prefix from the tracked `docs/saas-delegation/t2-evidence/test-inner.sh` before its unittest command. Explicit test invocation:
+```sh
+APP_ENV=test TEST_DATABASE_URL="$TEST_DATABASE_URL" python -m unittest discover -s scripts -p test_canary_preflight.py -v >"$evidence/tests.log" 2>&1
+```
+Exact static invocation and exit assertion are in preparation command 7. No real connection setting values are in the snapshot or ledger.
+
+8. Isolated test run with sandbox escalation (exit 0 after write_stdin completion; 16 tests passed, static-only exit 2 asserted; teardown succeeded):
+```powershell
+wsl -d Ubuntu -u root -- bash /mnt/c/Users/Youssef/AppData/Local/Temp/many-t6-review/run-tests.sh
+```
+Routine write_stdin polling fetched completion from that session; no additional test run.
+
+9. Review/whitespace/reference command (exit 0; only the three new T6 files untracked at this point, app diff empty, frozen SaaS tree clean):
+```powershell
+git diff --check; git status --short; rg -n '^def |^class |^## |Current Many limitation|saas_outbound.py' scripts/canary_preflight.py scripts/test_canary_preflight.py docs/saas-delegation/CANARY.md; git diff --name-only -- backend/app; git -C '../SAAS-chats-ai-phase6' status --short
+```
+
+Final verification after appending this log: `git diff --check; git status --short; rg -n '^## T6|^## |^def |^class ' docs/saas-delegation/CANARY.md scripts/canary_preflight.py scripts/test_canary_preflight.py docs/saas-delegation/PROGRESS.md`. Outcome reported below after execution.
+
+Final verification outcome: exit 0; whitespace check passed with no output. Status contains exactly CANARY.md, canary_preflight.py, test_canary_preflight.py and this PROGRESS.md update. T6 starts at line 836. No implementation changed after the passing tests; this outcome sentence was appended after verification.
+
+T6 complete. No commit made. STOP; wait for owner "continue" before T5.
+
+## T5 Untrack dashboard environment file - 2026-10-28
+
+Completed T5 only on feature/saas-delegation, HEAD 80ac7f3. Removed dashboard/.env.local from the Git index using git rm --cached; the working file still exists. Added the exact dashboard/.env.local entry at .gitignore:3. This progress entry records the required command outcomes. Preserved pending T6 files/edits. No file contents opened, printed, hashed or copied; no history rewrite, commit, push, merge, deployment, Docker, database/Redis access or network call.
+
+Anything dashboard/.env.local contained must be treated as exposed in Git history. Untracking does not remove historical copies; credential values were not inspected and no credential rotation was performed.
+
+Exact commands (PowerShell, Many root):
+
+1. `git branch --show-current; git rev-parse --short HEAD; git status --short; Get-Content .gitignore; git ls-files -- dashboard/.env.local; Test-Path -LiteralPath dashboard/.env.local -PathType Leaf; Get-Content docs/saas-delegation/PROGRESS.md | Select-Object -Last 8` -> exit 0. Correct branch/HEAD; pending T6 work identified; target was tracked and working file existed. Only .gitignore and progress text were read, never the target file.
+2. `git rm --cached -- dashboard/.env.local` -> exit 1: sandbox denied creation of .git/index.lock. No index change from that attempt. Added the ignore entry using apply_patch.
+3. Same exact `git rm --cached -- dashboard/.env.local` with sandbox escalation -> exit 0, index removal confirmed. Working file not deleted.
+4. `git ls-files -- dashboard/.env.local; Test-Path -LiteralPath dashboard/.env.local -PathType Leaf; git check-ignore -v -- dashboard/.env.local; git diff --check; git diff --cached --name-status; git status --short; rg -n '^dashboard/\.env\.local$' .gitignore` -> aggregate exit 1 because the final anchored rg did not match the CRLF line ending. Earlier checks: git ls-files returned no path; Test-Path returned True; check-ignore matched .gitignore:3; whitespace check had no output; cached name/status showed only D dashboard/.env.local. No staged diff contents requested. Final fixed-string verification below avoids that line-ending mismatch.
+
+Tests: no application tests needed for this index/ignore-only change; database/Redis and runtime checks NOT RUN. Verification checks above passed except the noted final rg; no application behavior changed. Final command after this entry: `git ls-files -- dashboard/.env.local; git check-ignore -v -- dashboard/.env.local; Test-Path -LiteralPath dashboard/.env.local -PathType Leaf; rg -n -F 'dashboard/.env.local' .gitignore; git diff --check; git status --short`. Result reported in the completion message.
+
+T5 complete. No commit made. STOP; wait for owner instructions.
