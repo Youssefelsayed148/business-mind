@@ -1253,3 +1253,11 @@ be persisted to another account. Affected identity + all three OAuth matrices:
 16 passed, 2.33 s, zero failures/errors/skips; fresh upgrade/drift pass. Evidence
 and exact command in R1-IMPLEMENTATION.md (many-r1-eXcWfH1t). No policy behavior,
 Instagram send/dispatch, live service or full-suite claim changed.
+
+
+## R1 callback matrix and phase-two rollback coverage - 2026-10-28
+
+Completed nine unproven/wrong-app callback replay cases across all three platforms
+and a phase-two caller rollback regression. 10 passed, 2.77 s, zero failures/errors/
+skips; fresh upgrade/drift pass in many-r1-pwM6hMIH. Exact selection and evidence
+in R1-IMPLEMENTATION.md. Tests/docs only; no application behavior or full-suite claim.

@@ -167,3 +167,17 @@ Evidence `/var/tmp/many-r1-eXcWfH1t/evidence`: 16 passed, zero failures/errors/s
 is separate from the prior 38-case run, not a new full-suite claim. Explicit
 follow-up files: the service, test_account_erasure.py, this report and the ticket
 PROGRESS entry. No generated artifacts or unrelated source is staged.
+
+
+## Callback matrix and phase-two transaction coverage
+
+Completed the explicit unresolved/business-system-user/wrong-app replay matrix
+for Facebook, WhatsApp and Instagram (nine cases), asserting one visible operator
+receipt and no disconnection for unproven mappings. Added a phase-two rollback
+case that restores account, authorization, job state and accepted event ledger
+when the caller fails before commit. Same private harness command; selected:
+`tests/test_account_erasure.py::test_callback_never_matches_unproven_namespaces tests/test_account_erasure.py::test_phase_two_rollback_preserves_account_grant_and_acceptance_ledger`.
+Evidence `/var/tmp/many-r1-pwM6hMIH/evidence`: 10 passed, zero failures/errors/skips,
+2.77 s, exit 0, with fresh upgrade/drift pass. No application code changed in
+this coverage follow-up. Explicit files: test_account_erasure.py, this report
+and the ticket-only PROGRESS entry.

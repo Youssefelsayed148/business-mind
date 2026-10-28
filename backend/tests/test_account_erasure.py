@@ -122,20 +122,30 @@ def test_stale_job_never_deletes_a_new_grant(db_session, world):
     assert db_session.get(type(channel), channel.id) is not None
 
 
-@pytest.mark.parametrize("namespace", ["unresolved", "business_system_user"])
-def test_callback_never_matches_unproven_namespaces(client, db_session, world, monkeypatch, namespace):
+@pytest.mark.parametrize("platform", ["facebook", "whatsapp", "instagram"])
+@pytest.mark.parametrize("namespace", ["unresolved", "business_system_user", "app_user_wrong_app"])
+def test_callback_never_matches_unproven_namespaces(client, db_session, world, monkeypatch, namespace, platform):
     from app.services.meta_compliance import subject_digest
+    from app.models.data_deletion_request import DataDeletionRequest
     monkeypatch.setattr(settings, "FACEBOOK_APP_ID", "facebook-app")
     monkeypatch.setattr(settings, "FACEBOOK_APP_SECRET", "test-facebook-secret")
-    channel = world.channels[("a", "facebook")]
+    monkeypatch.setattr(settings, "META_APP_ID", "instagram-app")
+    monkeypatch.setattr(settings, "META_APP_SECRET", "test-instagram-secret")
+    app = "instagram" if platform == "instagram" else "facebook"
+    app_id = settings.META_APP_ID if app == "instagram" else settings.facebook_app_id
+    mapping_app = "another-app" if namespace == "app_user_wrong_app" else app_id
+    channel = world.channels[("a", platform)]
     channel.status = "connected"
-    db_session.add(MetaAuthorization(app_id=settings.facebook_app_id, subject_digest=subject_digest(settings.facebook_app_id, "12345"),
-        subject_namespace=namespace, workspace_id=channel.workspace_id, platform="facebook", channel_id=channel.id,
+    db_session.add(MetaAuthorization(app_id=mapping_app, subject_digest=subject_digest(app_id, "12345"),
+        subject_namespace="app_user" if namespace == "app_user_wrong_app" else namespace,
+        workspace_id=channel.workspace_id, platform=platform, channel_id=channel.id,
         verification_source="synthetic"))
     db_session.commit()
-    assert client.post("/meta/compliance/facebook/deauthorize", data={"signed_request": _signed()}).status_code == 200
+    for _ in range(2):
+        assert client.post(f"/meta/compliance/{app}/deauthorize", data={"signed_request": _signed(app=app)}).status_code == 200
     db_session.refresh(channel)
     assert channel.status == "connected"
+    assert db_session.query(DataDeletionRequest).one().status == "operator_action"
 
 
 @pytest.mark.parametrize("debug", [{}, {"is_valid": False}, {"is_valid": True, "app_id": "other", "user_id": "123"},
@@ -286,3 +296,26 @@ def test_a16_only_202_counts_as_acceptance(db_session, world):
     with httpx.Client(transport=httpx.MockTransport(lambda _: httpx.Response(200))) as client:
         assert _attempt(db_session, event, channel, client, datetime.now(timezone.utc), None) == "failed"
     assert event.status == "failed" and service.advance_erasure(db_session, job.id).state == "operator_action"
+
+
+def test_phase_two_rollback_preserves_account_grant_and_acceptance_ledger(db_session, world):
+    channel = world.channels[("a", "whatsapp")]
+    seed(db_session, channel, "whatsapp")
+    mapping = MetaAuthorization(app_id="synthetic-app", subject_digest="d" * 64,
+        workspace_id=channel.workspace_id, platform="whatsapp", channel_id=channel.id,
+        subject_namespace="unresolved", verification_source="synthetic")
+    db_session.add(mapping); db_session.flush()
+    mapping_id, channel_id = mapping.id, channel.id
+    job = service.begin_erasure(db_session, workspace_id=channel.workspace_id, platform="whatsapp", channel_id=channel_id)
+    for event in db_session.query(SaasForwardEvent).filter(SaasForwardEvent.id.in_(job.event_ids)).all():
+        event.status, event.payload = "sent", {}
+    db_session.flush()
+    event_ids, job_id = list(job.event_ids), job.id
+    with pytest.raises(RuntimeError), db_session.begin_nested():
+        assert service.advance_erasure(db_session, job_id).state == "local_erased"
+        raise RuntimeError("synthetic failure before caller commit")
+    db_session.expire_all()
+    assert db_session.get(type(channel), channel_id) is not None
+    assert db_session.get(MetaAuthorization, mapping_id) is not None
+    assert db_session.get(AccountErasureJob, job_id).state == "waiting_remote_acceptance"
+    assert db_session.query(SaasForwardEvent).filter(SaasForwardEvent.id.in_(event_ids)).count() == len(event_ids)
