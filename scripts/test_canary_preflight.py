@@ -41,12 +41,21 @@ class SourceChecks(unittest.TestCase):
         path.write_text(source.replace(before, after))
 
     def test_real_source_passes_but_static_only_is_not_ready(self):
-        self.assertEqual(preflight.migration_head(self.root), preflight.REQUIRED_REVISIONS[-1])
+        # Required revisions are ancestry requirements, not a permanently pinned
+        # source head: later reviewed migrations must remain supported.
+        preflight.migration_head(self.root)
         preflight.check_beat(self.root)
         preflight.check_nginx(self.root / "nginx/default.conf")
         with redirect_stdout(io.StringIO()) as output:
             self.assertEqual(preflight.main(["--root", str(self.root), "--static-only"]), 2)
         self.assertIn("UNVERIFIED", output.getvalue())
+
+    def test_additional_descendant_migration_is_accepted(self):
+        current_head = preflight.migration_head(self.root)
+        (self.root / "backend/alembic/versions/future.py").write_text(
+            f"revision='future'\ndown_revision={current_head!r}\n"
+        )
+        self.assertEqual(preflight.migration_head(self.root), "future")
 
     def test_multiple_migration_heads_fail(self):
         (self.root / "backend/alembic/versions/extra.py").write_text(

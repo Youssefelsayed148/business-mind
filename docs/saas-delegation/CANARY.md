@@ -43,14 +43,15 @@ Record which case applies **before** upgrading:
 | --- | --- |
 | `0022_whatsapp_opt_in` on the existing staging schema | Supported canary starting point. With migration approval, `alembic upgrade head` applies 0023–0027; `alembic current` must then report `0027_saas_conn_id_lowercase (head)` at this source revision. |
 | Already `0027_saas_conn_id_lowercase (head)` | No upgrade needed. Confirm the source has one head and 0023–0027 are ancestors; preflight checks both. |
-| No revision / truly empty DB | **Stop.** `alembic upgrade head` fails at `0019_whatsapp_outreach_settings` (`DuplicateColumn ctwa_counts_as_consent`). This is pre-existing: 0001 creates from current models, then later migrations re-add columns. Do not stamp head or use `create_all` to pretend migrations ran. Obtain an approved schema/bootstrap recovery plan first. |
+| No revision / truly empty disposable DB | A2 repaired migration 0019 and rehearsed empty?head, 0022?head and downgrade/upgrade. Use Alembic only; no stamp/create_all shortcut. Production bootstrap and schema state still require separate approval and inspection. |
 | Other revision, multiple heads, missing tables, or drift | Stop and investigate; a version marker alone does not prove schema integrity. |
 
 T6 inspected source only; no staging DB was accessed. **Applicable staging case:
 UNVERIFIED — operator must select and record the actual `alembic current`
-result.** Earlier disposable verification showed an existing 0022 schema
-upgrades through 0027, while a truly empty DB hits 0019; it is not evidence of
-the staging schema. If a newer source adds migrations, use that source's single
+result.** A2 disposable tests now prove empty?head and 0022?head after the 0019 repair
+(see `a2-a4-evidence/WORKER-REPORT.md`); they are not evidence of the staging
+schema. Earlier T6 evidence of an empty-DB 0019 failure is historical and was
+resolved locally by A2. If a newer source adds migrations, use that source's single
 head and retain 0023–0027 in its ancestry.
 
 ## Setup order
@@ -95,18 +96,25 @@ and optional `port`; it refuses TCP/DNS targets and never falls back to
 packages. Supply the **Many WhatsApp account UUID**, not the SaaS connection id:
 
 ```sh
-python scripts/canary_preflight.py --account-id <MANY_WHATSAPP_ACCOUNT_UUID>
+python scripts/canary_preflight.py --account-id <MANY_WHATSAPP_ACCOUNT_UUID> --beat-process-count 1
 ```
 
-Expected: all four PASS lines, **exit 0**. Any failure exits **1**, without
+Supply `--beat-process-count 1` only after independently observing exactly one
+running beat process across the deployment. This is operator evidence, not a
+process discovered by the script. Missing, zero or multiple beats fail readiness.
+
+Expected: all five PASS lines, **exit 0**. Any failure exits **1**, without
 printing a DB URL, exception traceback, stored UUID or secret. The DB transaction
-is read-only, with connect/statement timeouts. It selects only the Alembic
-version and the chosen account's connection UUID; it does not fetch tokens or
-secret columns. In `APP_ENV=test`, only database `many_test` is permitted. For
+is read-only, with connect/statement timeouts. It selects the Alembic version and the chosen account's connection UUID,
+delegation-enabled flag and base URL, plus a database-computed Boolean for
+secret presence. It never fetches token or secret ciphertext. It requires enabled
+delegation, a public HTTPS URL by syntax (DNS remains unverified), and a stored
+secret. In `APP_ENV=test`, only `many_test` or `many_test_<worker>` names are
+permitted. For
 local validation explicitly set `TEST_DATABASE_URL` and use:
 
 ```sh
-python scripts/canary_preflight.py --database-url-env TEST_DATABASE_URL --account-id <DISPOSABLE_ACCOUNT_UUID>
+python scripts/canary_preflight.py --database-url-env TEST_DATABASE_URL --account-id <DISPOSABLE_ACCOUNT_UUID> --beat-process-count 1
 ```
 
 `--nginx-config <PATH>` can inspect the deployed standalone nginx config instead
