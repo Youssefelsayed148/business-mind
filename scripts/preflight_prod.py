@@ -8,6 +8,7 @@ Exit code is 1 if any check fails. Standard library only.
 """
 import base64
 import binascii
+import ipaddress
 import sys
 from pathlib import Path
 from urllib.parse import urlparse
@@ -76,13 +77,24 @@ def https_origins(value: str | None) -> bool:
     return bool(origins) and all(urlparse(item).scheme == "https" for item in origins)
 
 
+def specific_proxy_peers(value: str | None) -> bool:
+    """Require explicit IP/CIDR peers; broad wildcard trust is never safe."""
+    peers = [peer.strip() for peer in (value or "").split(",")]
+    if not all(peers):
+        return False
+    try:
+        return all(ipaddress.ip_network(peer, strict=False).prefixlen > 0 for peer in peers)
+    except ValueError:
+        return False
+
+
 def run_checks(env: dict[str, str]) -> list[tuple[str, bool]]:
     missing = [name for name in REQUIRED if not is_set(env.get(name))]
     checks = [
         (f"required vars present ({len(missing)} missing: {', '.join(missing) or 'none'})", not missing),
         ("APP_ENV=production", env.get("APP_ENV", "").lower() == "production"),
         ("DISABLE_DOCS=true", is_true(env.get("DISABLE_DOCS"))),
-        ("TRUST_PROXY_HEADERS=true", is_true(env.get("TRUST_PROXY_HEADERS"))),
+        ("FORWARDED_ALLOW_IPS names explicit proxy IPs/CIDRs", specific_proxy_peers(env.get("FORWARDED_ALLOW_IPS"))),
         ("META_MOCK_PRIVATE_REPLIES=false", is_false(env.get("META_MOCK_PRIVATE_REPLIES"))),
         (
             "TOKEN_ENCRYPTION_KEY is a valid Fernet key",

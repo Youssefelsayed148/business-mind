@@ -1,4 +1,5 @@
 import logging
+import secrets
 
 from fastapi import APIRouter, Depends, Query, Request, Response
 from fastapi.responses import PlainTextResponse
@@ -27,7 +28,9 @@ async def meta_webhook_get(
     hub_verify_token: str = Query(alias="hub.verify_token"),
     hub_challenge: str = Query(alias="hub.challenge"),
 ):
-    if hub_mode == "subscribe" and hub_verify_token == settings.META_WEBHOOK_VERIFY_TOKEN:
+    if hub_mode == "subscribe" and secrets.compare_digest(
+        hub_verify_token.encode("utf-8"), settings.META_WEBHOOK_VERIFY_TOKEN.encode("utf-8")
+    ):
         return PlainTextResponse(content=hub_challenge, status_code=200)
     return Response(status_code=403)
 

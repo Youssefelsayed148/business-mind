@@ -91,6 +91,7 @@ class Settings(BaseSettings):
     TEST_DATABASE_URL: str | None = None
     REDIS_URL: str = "redis://redis:6379/0"
     RATE_LIMIT_ENABLED: bool = True
+    # Legacy compatibility only; client IP is derived by Uvicorn after peer validation.
     TRUST_PROXY_HEADERS: bool = False
     LOGIN_EMAIL_IP_LIMIT: int = 5
     LOGIN_EMAIL_IP_WINDOW_SECONDS: int = 60
