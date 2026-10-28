@@ -368,3 +368,67 @@ def test_retry_after_parsing():
     assert fwd._retry_after(_resp(429, {"Retry-After": "30"}), T0) == 30
     assert fwd._retry_after(_resp(429, {"Retry-After": "garbage"}), T0) is None
     assert fwd._retry_after(_resp(429), T0) is None
+
+
+# A16 privacy forwards are durable independently of the delegated chat switch.
+def _enqueue_erasure(db, account, event_id="erasure-test", now=T0):
+    fwd.enqueue_event(
+        db, platform="whatsapp", channel=account, ordering_key="privacy-request",
+        event_id=event_id, event_type="contact.erasure",
+        payload={"version": 1, "event_id": event_id, "event_type": "contact.erasure",
+                 "connection_id": account.saas_connection_id, "external_contact_id": "test-contact",
+                 "occurred_at": now.isoformat()}, now=now,
+    )
+    db.commit()
+
+
+def test_a16_disable_drops_ordinary_forward_but_preserves_and_sends_erasure(db_session, account):
+    _enqueue(db_session, account, "ordinary")
+    _enqueue_erasure(db_session, account)
+    account.saas_delegation_enabled = False
+    db_session.commit()
+    assert fwd.drop_pending(db_session, platform="whatsapp", channel_id=account.id) == 1
+    db_session.commit()
+    assert _row(db_session, "ordinary").status == "dropped"
+    assert _row(db_session, "erasure-test").status == "pending"
+    server = FakeSaas(_resp(202))
+    result = fwd.process_ordering_key(db_session, "privacy-request", client=server.client(), now=T0)
+    assert result.sent == 1 and len(server.requests) == 1
+    request = server.requests[0]
+    body = json.loads(request.content)
+    assert body["event_type"] == "contact.erasure"
+    assert verify_signature([SECRET], request.headers["x-osiris-timestamp"], request.headers["x-osiris-signature"], request.content)
+    assert _row(db_session, "erasure-test").payload == {}
+
+
+@pytest.mark.parametrize("failure", ["missing_channel", "missing_secret", "changed_connection"])
+def test_a16_missing_or_changed_signing_config_fails_without_sending(db_session, account, failure):
+    _enqueue_erasure(db_session, account)
+    if failure == "missing_channel":
+        db_session.delete(account)
+    elif failure == "missing_secret":
+        account.saas_secret_encrypted = None
+    else:
+        account.saas_connection_id = str(uuid4())
+    db_session.commit()
+    server = FakeSaas(_resp(202))
+    result = fwd.process_ordering_key(db_session, "privacy-request", client=server.client(), now=T0)
+    assert result.failed == 1 and not server.requests
+    row = _row(db_session, "erasure-test")
+    assert row.status == "failed" and "erasure_operator_action_required" in row.last_error
+    assert row.payload["external_contact_id"] == "test-contact"
+
+
+def test_a16_revoked_401_retries_then_expiry_remains_operator_failure(db_session, account):
+    _enqueue_erasure(db_session, account)
+    row = _row(db_session, "erasure-test")
+    row.created_at = T0
+    account.saas_delegation_enabled = False
+    db_session.commit()
+    server = FakeSaas(_resp(401))
+    result = fwd.process_ordering_key(db_session, "privacy-request", client=server.client(), now=T0)
+    assert result.retry_in and _row(db_session, "erasure-test").status == "pending"
+    expired = fwd.process_ordering_key(db_session, "privacy-request", client=server.client(), now=T0+timedelta(hours=24))
+    assert expired.failed == 1 and len(server.requests) == 1
+    assert _row(db_session, "erasure-test").status == "failed"
+    assert "retry_budget_exhausted" in _row(db_session, "erasure-test").last_error
