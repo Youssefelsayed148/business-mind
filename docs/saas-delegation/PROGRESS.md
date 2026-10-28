@@ -1213,3 +1213,19 @@ worker teardown; tooling/worktrees/evidence retained.
 New-session prompt: **TESTING-HANDOFF.md**. It identifies exact worktrees, cached
 Linux Python/Node/browser paths, fresh-cluster/socket safety, source-snapshot
 secret exclusions, full-suite commands, evidence rules and unresolved gates.
+
+
+## R1 owner-approved implementation - 2026-10-28
+
+Implemented typed encrypted provider grant proof, transactional OAuth/reconnect,
+namespace-safe callbacks, migration 0030 and durable two-phase Facebook/WhatsApp
+account erasure. Unknown identities/scope remain operator cases; HTTP 202 is
+acceptance only. Exact commands, files/scope, initial failures and corrected
+outcomes: R1-IMPLEMENTATION.md. Latest R1-only run: 38 passed (4.75 s); related
+reconnect/delegation/retention: 62 passed (7.13 s). Both real migration scenarios
+passed in the earlier 149-pass run; each later fresh head/drift check passed.
+Dashboard tsc and changed API-client lint passed. These are targeted iterative
+checks, not a full suite or clean-head integration claim. Pre-existing Batch T/A5
+working-tree edits were preserved separately. Instagram dispatch/send handlers
+and 59d3442 unchanged; the legacy Instagram immediate hard-delete route remains
+subject to coordinated remote cleanup. No push/merge/deploy/live/paid calls.

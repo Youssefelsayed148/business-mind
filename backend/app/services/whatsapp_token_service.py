@@ -14,6 +14,7 @@ def store_encrypted_token(
     whatsapp_account_id,
     access_token: str,
     expires_at: datetime | None = None,
+    *, commit: bool = True,
 ) -> WhatsappToken:
     encrypted = encrypt_text(access_token)
     token = WhatsappToken(
@@ -23,9 +24,12 @@ def store_encrypted_token(
         status="active",
         expires_at=expires_at,
     )
+    db.query(WhatsappToken).filter(WhatsappToken.whatsapp_account_id == whatsapp_account_id).delete(synchronize_session=False)
     db.add(token)
-    db.commit()
-    db.refresh(token)
+    db.flush()
+    if commit:
+        db.commit()
+        db.refresh(token)
     logger.info("Stored encrypted WhatsApp token", extra={"token_id": str(token.id)})
     return token
 

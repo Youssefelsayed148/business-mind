@@ -1,4 +1,5 @@
 import logging
+import json
 import uuid
 from datetime import datetime, timedelta
 
@@ -9,7 +10,7 @@ from redis.exceptions import RedisError
 from sqlalchemy.orm import Session
 
 from app.api.routes_auth import get_current_user
-from app.authz import require_permission
+from app.authz import WorkspaceContext, require_workspace_permission, require_permission
 from app.core.config import settings
 from app.db.session import get_db
 from app.integrations.meta.accounts import fetch_instagram_account_metadata
@@ -21,6 +22,7 @@ from app.models.user import User
 from app.models.workspace import Workspace
 from app.schemas.auth import MeResponse
 from app.services.token_service import store_encrypted_token
+from app.services.meta_grant_identity import MetaGrantIdentity, save_grant
 from app.services.audit_service import write_audit_log
 from app.services.rate_limit_service import enforce_user_rate_limit
 from app.utils.crypto import encrypt_text
@@ -51,13 +53,13 @@ def _limit_account_mutation(current_user: User) -> None:
 
 @router.get("/meta/connect/start")
 async def meta_connect_start(
-    current_user: User = Depends(require_permission("manage_accounts")),
+    ctx: WorkspaceContext = Depends(require_workspace_permission("manage_accounts")),
 ):
-    _limit_account_mutation(current_user)
+    _limit_account_mutation(ctx.user)
     state = str(uuid.uuid4())
     try:
         # Value "1" = fresh connect (no existing account_id).
-        _redis().setex(f"oauth_state:{state}", 600, "1")
+        _redis().setex(f"oauth_state:{state}", 600, json.dumps({"workspace_id": str(ctx.workspace_id)}))
     except RedisError:
         logger.error("Failed to store OAuth state in Redis")
         raise HTTPException(status_code=503, detail="Authentication service temporarily unavailable")
@@ -99,10 +101,12 @@ async def meta_connect_callback(
         logger.error("Failed to validate OAuth state in Redis")
         return RedirectResponse(url=f"{settings.FRONTEND_URL}/accounts?error=oauth_failed")
 
-    # state_value == "1"  → fresh connect (no target account)
-    # state_value == "<uuid>"  → reconnect for a specific existing account
-    is_reconnect = state_value != "1"
-    reconnect_account_id = state_value if is_reconnect else None
+    try:
+        scope = json.loads(state_value)
+        workspace_id = uuid.UUID(scope["workspace_id"])
+        reconnect_account_id = scope.get("account_id")
+    except (ValueError, TypeError, KeyError):
+        return RedirectResponse(url=f"{settings.FRONTEND_URL}/accounts?error=oauth_failed")
 
     redirect_uri = f"{settings.APP_BASE_URL}/meta/connect/callback"
 
@@ -110,107 +114,44 @@ async def meta_connect_callback(
         short_lived = await exchange_code_for_short_lived_token(code, redirect_uri)
         long_lived = await exchange_for_long_lived_token(short_lived["access_token"])
         metadata = await fetch_instagram_account_metadata(long_lived["access_token"])
-    except MetaAPIError as exc:
-        logger.error("Meta OAuth error during account connection", extra={"error": str(exc)})
+        identity = MetaGrantIdentity.instagram(short_lived, metadata)
+    except (MetaAPIError, ValueError):
+        logger.error("Provider OAuth grant verification failed")
         return RedirectResponse(url=f"{settings.FRONTEND_URL}/accounts?error=oauth_failed")
 
     expires_at = datetime.utcnow() + timedelta(seconds=long_lived.get("expires_in", 5184000))
 
-    workspace = db.query(Workspace).filter(Workspace.slug == "default").first()
+    workspace = db.query(Workspace).filter(Workspace.id == workspace_id).first()
     if not workspace:
-        raise HTTPException(status_code=404, detail="Default workspace not found")
-
-    if is_reconnect and reconnect_account_id:
-        # Reconnect: find the specific account by its DB id, update it in place.
-        # If the returned ig_user_id differs from what's stored (user authed wrong account),
-        # we fall through to the normal upsert-by-ig_user_id path so we don't corrupt data.
-        import uuid as _uuid
-        try:
-            target_id = _uuid.UUID(reconnect_account_id)
-            account = db.query(InstagramAccount).filter(InstagramAccount.id == target_id).first()
-            if account and account.ig_user_id == metadata["ig_user_id"]:
-                account.ig_username = metadata["username"]
-                account.status = "connected"
-                db.commit()
-                db.refresh(account)
-                store_encrypted_token(
-                    db=db,
-                    workspace_id=workspace.id,
-                    instagram_account_id=account.id,
-                    access_token=long_lived["access_token"],
-                    expires_at=expires_at,
-                )
-                write_audit_log(
-                    db,
-                    "account_reconnected",
-                    f"OAuth reconnected account {account.ig_username or account.ig_user_id}",
-                    actor=None,
-                    entity_type="account",
-                    entity_id=account.id,
-                    entity_name=account.ig_username or account.ig_user_id,
-                    metadata={"ig_user_id": account.ig_user_id, "mock": False},
-                )
-                logger.info(
-                    "Meta account reconnected via OAuth",
-                    extra={"ig_user_id": metadata["ig_user_id"], "username": metadata["username"]},
-                )
-                return RedirectResponse(url=f"{settings.FRONTEND_URL}/accounts?reconnected=true")
-            else:
-                logger.warning(
-                    "Reconnect ig_user_id mismatch — falling through to upsert",
-                    extra={
-                        "expected": account.ig_user_id if account else "not_found",
-                        "received": metadata["ig_user_id"],
-                    },
-                )
-        except (ValueError, AttributeError):
-            logger.error("Invalid reconnect_account_id in Redis state", extra={"value": reconnect_account_id})
-
-    # Normal connect flow: upsert by ig_user_id.
-    existing = (
-        db.query(InstagramAccount)
-        .filter(InstagramAccount.ig_user_id == metadata["ig_user_id"])
-        .first()
-    )
-    if existing:
-        account = existing
+        raise HTTPException(status_code=404, detail="Workspace not found")
+    account = db.query(InstagramAccount).filter(
+        InstagramAccount.ig_user_id == metadata["ig_user_id"]
+    ).with_for_update().first()
+    if account and account.workspace_id != workspace_id:
+        raise HTTPException(status_code=409, detail="Account already connected")
+    if reconnect_account_id and (not account or str(account.id) != reconnect_account_id):
+        raise HTTPException(status_code=409, detail="Reconnect grant mismatch")
+    if account and account.status == "erasure_pending":
+        raise HTTPException(status_code=409, detail="Account erasure pending")
+    try:
+        if account is None:
+            account = InstagramAccount(id=uuid.uuid4(), workspace_id=workspace.id,
+                                       ig_user_id=metadata["ig_user_id"])
+            db.add(account)
         account.ig_username = metadata["username"]
         account.status = "connected"
-    else:
-        account = InstagramAccount(
-            workspace_id=workspace.id,
-            ig_user_id=metadata["ig_user_id"],
-            ig_username=metadata["username"],
-            status="connected",
-        )
-        db.add(account)
-
-    db.commit()
-    db.refresh(account)
-
-    store_encrypted_token(
-        db=db,
-        workspace_id=workspace.id,
-        instagram_account_id=account.id,
-        access_token=long_lived["access_token"],
-        expires_at=expires_at,
-    )
-    write_audit_log(
-        db,
-        "account_connected",
-        f"OAuth connected account {account.ig_username or account.ig_user_id}",
-        actor=None,
-        entity_type="account",
-        entity_id=account.id,
-        entity_name=account.ig_username or account.ig_user_id,
-        metadata={"ig_user_id": account.ig_user_id, "mock": False},
-    )
-
-    logger.info(
-        "Meta account connected via OAuth",
-        extra={"ig_user_id": metadata["ig_user_id"], "username": metadata["username"]},
-    )
-    return RedirectResponse(url=f"{settings.FRONTEND_URL}/accounts?connected=true")
+        db.flush()
+        store_encrypted_token(db, workspace.id, account.id, long_lived["access_token"],
+                              expires_at=expires_at, commit=False)
+        save_grant(db, identity, account, metadata["ig_user_id"])
+        write_audit_log(db, "account_connected", "Provider grant connected", actor=None,
+                        entity_type="account", entity_id=account.id, commit=False)
+        db.commit()
+    except Exception:
+        db.rollback()
+        raise
+    result = "reconnected" if reconnect_account_id else "connected"
+    return RedirectResponse(url=f"{settings.FRONTEND_URL}/accounts?{result}=true")
 
 
 class MockConnectRequest:

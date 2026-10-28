@@ -27,6 +27,7 @@ CONN = "123e4567-e89b-12d3-a456-426614174000"
 
 def _channel():
     return SimpleNamespace(
+        status="connected",
         saas_delegation_enabled=False,
         saas_connection_id=None,
         saas_base_url=None,

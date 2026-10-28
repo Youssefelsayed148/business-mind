@@ -64,3 +64,4 @@ from app.models.saas_outbound_message import SaasOutboundMessage
 
 from app.models.meta_authorization import MetaAuthorization
 from app.models.data_deletion_request import DataDeletionRequest
+from app.models.account_erasure_job import AccountErasureJob

@@ -141,6 +141,8 @@ def get_secrets(channel, *, now: datetime | None = None) -> tuple[str | None, st
 def apply_config(channel, data: dict, *, now: datetime | None = None) -> None:
     """Apply a validated partial update. `data` holds only fields the caller
     sent. Enabling requires a connection id, base URL and secret."""
+    if channel.status == "erasure_pending" and data.get("saas_delegation_enabled"):
+        raise DelegationConfigError("Account erasure pending")
     now = now or datetime.now(timezone.utc)
     if "saas_connection_id" in data:
         channel.saas_connection_id = normalize_connection_id(data["saas_connection_id"])

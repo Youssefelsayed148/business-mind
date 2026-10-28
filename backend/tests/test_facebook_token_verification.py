@@ -54,7 +54,7 @@ def _verify(token="user_token"):
 
 def test_verify_accepts_valid_token_for_our_app(mock_graph):
     seen = mock_graph(200, {"data": {"is_valid": True, "app_id": APP_ID}})
-    assert _verify("user_token") is None
+    assert _verify("user_token") == {"is_valid": True, "app_id": APP_ID}
     assert len(seen) == 1
     assert seen[0].url.path.endswith("/debug_token")
     assert seen[0].url.params["input_token"] == "user_token"

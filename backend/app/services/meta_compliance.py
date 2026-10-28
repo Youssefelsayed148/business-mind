@@ -32,6 +32,7 @@ from app.models.facebook_token import FacebookToken
 from app.models.whatsapp_token import WhatsappToken
 from app.models.saas_forward_event import SaasForwardEvent
 from app.services.audit_service import write_audit_log
+from app.utils.crypto import encrypt_text
 
 MAX_SIGNED_REQUEST = 16_384
 CHANNELS = {
@@ -123,12 +124,15 @@ def record_authorization(db: Session, *, app: str, subject: str, workspace_id: U
     # The current grant/token belongs to one connecting subject. Replace on re-verification.
     stmt = insert(MetaAuthorization).values(
         app_id=app_id, subject_digest=subject_digest(app_id, subject), workspace_id=workspace_id,
+        subject_namespace="app_user",
+        subject_encrypted=encrypt_text(subject),
+        provider_context_encrypted=encrypt_text(json.dumps({"source": "operator_verified_provider_grant", "subject_namespace": "app_user"})),
         platform=platform, channel_id=channel_id, verification_source="operator_verified_provider_grant",
     )
     db.execute(stmt.on_conflict_do_update(
         constraint="uq_meta_authorization_channel",
         set_={key: getattr(stmt.excluded, key) for key in
-              ("app_id", "subject_digest", "workspace_id", "verification_source", "verified_at")},
+              ("app_id", "subject_digest", "subject_namespace", "subject_encrypted", "provider_context_encrypted", "workspace_id", "verification_source", "verified_at")},
     ))
     write_audit_log(db, "meta_authorization_mapping_verified", "Operator verified a Meta authorization mapping",
                     entity_type="meta_authorization", metadata={"platform": platform}, commit=False)
@@ -143,6 +147,7 @@ def record_authorization(db: Session, *, app: str, subject: str, workspace_id: U
 def _disconnect_known_grants(db: Session, app_id: str, digest: str) -> int:
     mappings = db.query(MetaAuthorization).filter(
         MetaAuthorization.app_id == app_id, MetaAuthorization.subject_digest == digest,
+        MetaAuthorization.subject_namespace == "app_user",
     ).all()
     count = 0
     for mapping in mappings:
@@ -154,7 +159,8 @@ def _disconnect_known_grants(db: Session, app_id: str, digest: str) -> int:
         ).with_for_update().one_or_none()
         if account is None:
             continue
-        account.status = "disconnected"
+        if account.status != "erasure_pending":
+            account.status = "disconnected"
         account.saas_delegation_enabled = False
         account.ai_enabled = False
         db.query(token).filter(getattr(token, fk) == account.id).delete(synchronize_session=False)
@@ -203,6 +209,7 @@ def complete_request(db: Session, request_id: UUID, *, many_erasure_confirmed: b
         request.status = "completed"
         request.completed_at = datetime.now(timezone.utc)
         db.query(MetaAuthorization).filter(MetaAuthorization.app_id == request.app_id,
+            MetaAuthorization.subject_namespace == "app_user",
             MetaAuthorization.subject_digest == request.subject_digest).delete(synchronize_session=False)
         write_audit_log(db, "meta_compliance_request_completed", "Operator confirmed erasure in both applications",
                         entity_type="data_deletion_request", entity_id=request.id, commit=False)
@@ -210,7 +217,8 @@ def complete_request(db: Session, request_id: UUID, *, many_erasure_confirmed: b
 
 def main(argv=None) -> int:
     parser = argparse.ArgumentParser(description="Authorized local operator workflow; no provider calls; dry-run by default")
-    parser.add_argument("action", choices=("map", "complete", "list-pending"))
+    parser.add_argument("action", choices=("map", "complete", "list-pending", "verify-account-erasure"))
+    parser.add_argument("--job-id", type=UUID)
     parser.add_argument("--database-url-env", default="META_COMPLIANCE_DATABASE_URL")
     parser.add_argument("--apply", action="store_true")
     parser.add_argument("--app", choices=("instagram", "facebook"))
@@ -244,7 +252,21 @@ def main(argv=None) -> int:
             elif args.action == "complete":
                 complete_request(db, args.request_id, many_erasure_confirmed=args.many_erasure_confirmed,
                                  saas_erasure_confirmed=args.saas_erasure_confirmed)
+            elif args.action == "verify-account-erasure":
+                if not args.job_id or not args.saas_erasure_confirmed or not args.many_erasure_confirmed:
+                    raise ValueError("independently verified SaaS cleanup and job required")
+                from app.services.account_erasure import advance_erasure
+                advance_erasure(db, args.job_id, remote_cleanup_verified=True, local_scope_verified=True)
+                write_audit_log(db, "account_erasure_remote_verified", "Operator verified SaaS cleanup",
+                                entity_type="account_erasure_job", entity_id=args.job_id, commit=False)
             else:
+                from app.models.account_erasure_job import AccountErasureJob
+                for grant in db.query(MetaAuthorization).filter(MetaAuthorization.subject_namespace == "unresolved").all():
+                    print(f"grant={grant.id} platform={grant.platform} namespace=unresolved")
+                for job in db.query(AccountErasureJob).filter(
+                    (AccountErasureJob.state != "local_erased") | AccountErasureJob.remote_verified_at.is_(None)
+                ).all():
+                    print(f"job={job.id} state={job.state} error={job.error_code or 'none'}")
                 query = db.query(DataDeletionRequest).filter(DataDeletionRequest.status != "completed")
                 if args.subject_stdin:
                     if not args.app or not args.verified_provider_identity:

@@ -1,3 +1,4 @@
+import json
 import logging
 import uuid
 from datetime import datetime, timezone
@@ -169,7 +170,7 @@ async def update_ai_settings(
 async def reconnect_account(
     account_id: UUID,
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_permission("manage_accounts")),
+    ctx: WorkspaceContext = Depends(require_workspace_permission("manage_accounts")),
 ):
     """
     Initiate OAuth reconnect for an existing account.
@@ -180,17 +181,20 @@ async def reconnect_account(
     We store the account_id in Redis alongside the state so the callback
     can mark this as a reconnect rather than a new connection.
     """
+    current_user = ctx.user
     _limit_account_mutation(current_user)
-    account = db.query(InstagramAccount).filter(InstagramAccount.id == account_id).first()
+    account = db.query(InstagramAccount).filter(InstagramAccount.id == account_id, InstagramAccount.workspace_id == ctx.workspace_id).first()
     if not account:
         raise HTTPException(status_code=404, detail="Account not found")
 
+    if account.status == "erasure_pending":
+        raise HTTPException(status_code=409, detail="Account erasure pending")
     state = str(uuid.uuid4())
     try:
         _r = _redis()
         # Store state with the account_id so the callback knows which account to refresh.
         # TTL 10 minutes — same as the connect flow.
-        _r.setex(f"oauth_state:{state}", 600, str(account_id))
+        _r.setex(f"oauth_state:{state}", 600, json.dumps({"workspace_id": str(ctx.workspace_id), "account_id": str(account_id)}))
     except RedisError:
         logger.error("Failed to store OAuth reconnect state in Redis")
         raise HTTPException(status_code=503, detail="Authentication service temporarily unavailable")

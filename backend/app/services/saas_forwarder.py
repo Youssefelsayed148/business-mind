@@ -164,6 +164,7 @@ def requeue_failed(db: Session, *, platform: str, channel_id, now: datetime | No
             SaasForwardEvent.platform == platform,
             SaasForwardEvent.channel_id == channel_id,
             SaasForwardEvent.status == "failed",
+            SaasForwardEvent.event_type != "contact.erasure",
             SaasForwardEvent.payload != {},
         )
         .all()
@@ -199,6 +200,7 @@ def purge_expired(db: Session, *, now: datetime | None = None) -> PurgeResult:
         db.query(SaasForwardEvent)
         .filter(
             SaasForwardEvent.status == "failed",
+            SaasForwardEvent.event_type != "contact.erasure",
             SaasForwardEvent.completed_at < now - FAILED_PAYLOAD_RETENTION,
             SaasForwardEvent.payload != {},
         )
@@ -208,6 +210,7 @@ def purge_expired(db: Session, *, now: datetime | None = None) -> PurgeResult:
         db.query(SaasForwardEvent)
         .filter(
             SaasForwardEvent.status.in_(("sent", "dropped", "failed")),
+            SaasForwardEvent.event_type != "contact.erasure",
             SaasForwardEvent.completed_at < now - TERMINAL_ROW_RETENTION,
         )
         .delete(synchronize_session=False)
@@ -369,7 +372,7 @@ def _attempt(db, row: SaasForwardEvent, channel, client, current: datetime, rng)
         error = f"network_error: {type(exc).__name__}"
     else:
         code = response.status_code
-        if 200 <= code < 300:
+        if (code == 202 if row.event_type == "contact.erasure" else 200 <= code < 300):
             _finish(row, "sent", None, current)
             _record(channel, f"sent_{code}", degraded=False, now=current)
             return "sent"

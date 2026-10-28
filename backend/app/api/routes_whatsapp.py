@@ -28,6 +28,9 @@ from app.models.workspace import Workspace
 from app.services.audit_service import write_audit_log
 from app.services.rate_limit_service import enforce_user_rate_limit
 from app.services.whatsapp_token_service import store_encrypted_token
+from app.integrations.meta.facebook_oauth import verify_user_access_token
+from app.integrations.meta.whatsapp_oauth import fetch_waba_grant
+from app.services.meta_grant_identity import MetaGrantIdentity, save_grant
 
 logger = logging.getLogger(__name__)
 
@@ -138,8 +141,17 @@ async def whatsapp_connect_callback(
     try:
         short_lived = await exchange_code_for_token(payload.code)
         long_lived = await exchange_for_long_lived_token(short_lived["access_token"])
+        debug = await verify_user_access_token(long_lived["access_token"])
+        waba, numbers = await fetch_waba_grant(long_lived["access_token"], payload.waba_id)
+        identity = MetaGrantIdentity.whatsapp(debug, waba, numbers, payload.phone_number_id)
+        if dict(identity.provider_context)["waba_id"] != payload.waba_id:
+            raise ValueError("WABA grant mismatch")
         await subscribe_app_to_waba(long_lived["access_token"], payload.waba_id)
         metadata = await fetch_phone_number_metadata(long_lived["access_token"], payload.phone_number_id)
+        if str(metadata.get("id")) != payload.phone_number_id:
+            raise ValueError("phone grant mismatch")
+    except ValueError:
+        raise HTTPException(status_code=502, detail="Provider grant could not be verified") from None
     except MetaAPIError as exc:
         logger.error("WhatsApp Embedded Signup error", extra={"error": str(exc)})
         raise HTTPException(status_code=502, detail=f"WhatsApp connect failed: {exc}")
@@ -153,6 +165,7 @@ async def whatsapp_connect_callback(
     account = (
         db.query(WhatsappAccount)
         .filter(WhatsappAccount.phone_number_id == payload.phone_number_id)
+        .with_for_update()
         .first()
     )
     # phone_number_id is globally unique in Meta — if the number is already
@@ -165,6 +178,8 @@ async def whatsapp_connect_callback(
             detail="This WhatsApp number is already connected to a different workspace.",
         )
     is_new = account is None
+    if account is not None and account.status == "erasure_pending":
+        raise HTTPException(status_code=409, detail="Account erasure pending")
     if account is None:
         account = WhatsappAccount(
             id=uuid.uuid4(),
@@ -176,10 +191,10 @@ async def whatsapp_connect_callback(
     account.whatsapp_business_account_id = payload.waba_id
     account.display_phone_number = metadata.get("display_phone_number")
     account.status = "connected"
-    db.commit()
-    db.refresh(account)
+    db.flush()
 
-    store_encrypted_token(db, account.id, long_lived["access_token"], expires_at=expires_at)
+    store_encrypted_token(db, account.id, long_lived["access_token"], expires_at=expires_at, commit=False)
+    save_grant(db, identity, account, payload.phone_number_id)
 
     write_audit_log(
         db,
@@ -190,8 +205,10 @@ async def whatsapp_connect_callback(
         entity_id=account.id,
         entity_name=account.display_phone_number or account.phone_number_id,
         metadata={"phone_number_id": account.phone_number_id, "waba_id": payload.waba_id},
+        commit=False,
     )
 
+    db.commit()
     return _account_response(account)
 
 
@@ -206,6 +223,20 @@ async def list_whatsapp_accounts(
         .all()
     )
     return [_account_response(account) for account in accounts]
+
+
+@router.delete("/accounts/{account_id}/hard", status_code=202)
+async def hard_delete_whatsapp_account(
+    account_id: UUID,
+    db: Session = Depends(get_db),
+    ctx: WorkspaceContext = Depends(require_workspace_permission("delete_accounts")),
+):
+    from app.services.account_erasure import begin_erasure
+    job = begin_erasure(db, workspace_id=ctx.workspace_id, platform="whatsapp", channel_id=account_id)
+    if job is None:
+        raise HTTPException(status_code=404, detail="Account not found")
+    db.commit()
+    return {"job_id": str(job.id), "status": job.state}
 
 
 @router.get("/accounts/{account_id}")
@@ -294,6 +325,8 @@ async def disconnect_whatsapp_account(
     if not account:
         raise HTTPException(status_code=404, detail="Account not found")
 
+    if account.status == "erasure_pending":
+        raise HTTPException(status_code=409, detail="Account erasure pending")
     account.status = "disconnected"
     db.commit()
 

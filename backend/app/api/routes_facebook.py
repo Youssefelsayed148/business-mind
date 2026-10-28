@@ -29,6 +29,7 @@ from app.models.user import User
 from app.models.workspace import Workspace
 from app.services.audit_service import write_audit_log
 from app.services.facebook_token_service import store_encrypted_token
+from app.services.meta_grant_identity import MetaGrantIdentity, save_grant
 from app.services.rate_limit_service import enforce_user_rate_limit
 
 logger = logging.getLogger(__name__)
@@ -129,9 +130,12 @@ async def facebook_connect_callback(
         raise HTTPException(status_code=503, detail="Could not verify Facebook connect session")
 
     try:
-        await verify_user_access_token(payload.access_token)
+        debug = await verify_user_access_token(payload.access_token)
         long_lived = await exchange_for_long_lived_token(payload.access_token)
         granted_pages = await list_granted_pages(long_lived["access_token"])
+        identity = MetaGrantIdentity.facebook(debug, granted_pages)
+    except ValueError:
+        raise HTTPException(status_code=502, detail="Provider grant could not be verified") from None
     except MetaAPIError as exc:
         logger.error("Facebook Login for Business error", extra={"error": str(exc)})
         raise HTTPException(status_code=502, detail=f"Facebook connect failed: {exc}")
@@ -155,7 +159,7 @@ async def facebook_connect_callback(
         # connected to a different workspace, don't silently re-point the
         # row (and don't even subscribe our app to it). Collect it as a
         # conflict and keep connecting the rest of the batch.
-        page = db.query(FacebookPage).filter(FacebookPage.page_id == page_id).first()
+        page = db.query(FacebookPage).filter(FacebookPage.page_id == page_id).with_for_update().first()
         if page is not None and page.workspace_id != ctx.workspace_id:
             conflicts.append(
                 {
@@ -165,6 +169,9 @@ async def facebook_connect_callback(
                 }
             )
             continue
+
+        if page is not None and page.status == "erasure_pending":
+            raise HTTPException(status_code=409, detail="Account erasure pending")
 
         try:
             await subscribe_app_to_page(page_access_token, page_id)
@@ -179,14 +186,14 @@ async def facebook_connect_callback(
 
         page.page_name = page_data.get("name")
         page.status = "connected"
-        db.commit()
-        db.refresh(page)
+        db.flush()
 
         # Page Access Tokens from Facebook Login for Business don't expire
         # the way user tokens do as long as the user token backing them stays
         # valid — no expires_at tracked here (mirrors how granted Pages don't
         # come back with an expires_in field).
-        store_encrypted_token(db, page.id, page_access_token)
+        store_encrypted_token(db, page.id, page_access_token, commit=False)
+        save_grant(db, identity, page, page_id)
 
         write_audit_log(
             db,
@@ -197,13 +204,29 @@ async def facebook_connect_callback(
             entity_id=page.id,
             entity_name=page.page_name or page.page_id,
             metadata={"page_id": page.page_id},
+            commit=False,
         )
         connected.append(_page_response(page))
 
+    db.commit()
     return {"connected": connected, "conflicts": conflicts}
 
 
 # --- Accounts ---------------------------------------------------------------
+
+
+@router.delete("/accounts/{page_id}/hard", status_code=202)
+async def hard_delete_facebook_page(
+    page_id: UUID,
+    db: Session = Depends(get_db),
+    ctx: WorkspaceContext = Depends(require_workspace_permission("delete_accounts")),
+):
+    from app.services.account_erasure import begin_erasure
+    job = begin_erasure(db, workspace_id=ctx.workspace_id, platform="facebook", channel_id=page_id)
+    if job is None:
+        raise HTTPException(status_code=404, detail="Account not found")
+    db.commit()
+    return {"job_id": str(job.id), "status": job.state}
 
 
 @router.get("/accounts")
@@ -298,6 +321,8 @@ async def disconnect_facebook_page(
     if not page:
         raise HTTPException(status_code=404, detail="Page not found")
 
+    if page.status == "erasure_pending":
+        raise HTTPException(status_code=409, detail="Account erasure pending")
     page.status = "disconnected"
     db.commit()
 

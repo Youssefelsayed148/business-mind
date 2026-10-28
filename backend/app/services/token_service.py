@@ -23,6 +23,7 @@ def store_encrypted_token(
     access_token: str,
     scopes: list[str] | None = None,
     expires_at: datetime | None = None,
+    *, commit: bool = True,
 ) -> MetaToken:
     encrypted = encrypt_text(access_token)
     token = MetaToken(
@@ -31,12 +32,14 @@ def store_encrypted_token(
         token_type="long_lived",
         status="active",
     )
+    db.query(MetaToken).filter(MetaToken.instagram_account_id == instagram_account_id).delete(synchronize_session=False)
     db.add(token)
-    db.commit()
-    db.refresh(token)
     if expires_at is not None and hasattr(token, "expires_at"):
         token.expires_at = expires_at
+    db.flush()
+    if commit:
         db.commit()
+        db.refresh(token)
     logger.info("Stored encrypted token", extra={"token_id": str(token.id)})
     return token
 

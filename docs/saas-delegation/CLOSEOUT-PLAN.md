@@ -44,7 +44,7 @@ Recommendation
 
 | ID | Pri | Item | Repo | Batch |
 |---|---|---|---|---|
-| R1 | P0 | PARTIAL: signed callbacks, durable operator ledger/status, verified mapped token revocation; automatic OAuth subject mapping and full FB/WA admin erasure unresolved | Many | B |
+| R1 | P0 | [x] Local owner-approved identity policy/schema and two-phase FB/WA erasure implemented; typed unresolved provider context, scoped callbacks and migration 0030. R1-IMPLEMENTATION.md records 38 final R1-only passes, 62 related passes, migration/drift evidence and limits. Full clean-head integration, staging and unresolved-identity operator remediation remain UNVERIFIED | Many | B |
 | R2 | P0 | IMPLEMENTED: A16 producer/receiver, hashed dedupe, runbooks; Many 87 / SaaS 78 distinct latest targeted passes. Full integrated/live verification pending; Many in-flight quiescence remains operational requirement | Many + SaaS | B, C |
 | R3 | P0 | Draft policies implemented in both apps with processor/retention/erasure wording; targeted type/browser checks pass. Owner publication review pending | Many + SaaS | B, C |
 | R4 | P0 | [x] Key template + API/worker Compose passthrough, fail-closed backup, actual DOMAIN public URL and worker wiring documented;6 source checks pass. Runtime rebuild UNVERIFIED | SaaS | C |
