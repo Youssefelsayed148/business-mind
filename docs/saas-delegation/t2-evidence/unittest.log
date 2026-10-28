@@ -1,0 +1,13 @@
+test_crlf_checkout_passes (test_check_contract_copies.ContractCopiesTest.test_crlf_checkout_passes) ... ok
+test_each_changed_file_fails_with_filename (test_check_contract_copies.ContractCopiesTest.test_each_changed_file_fails_with_filename) ... ok
+test_invalid_manifest_entries_fail_closed (test_check_contract_copies.ContractCopiesTest.test_invalid_manifest_entries_fail_closed) ... ok
+test_lone_cr_is_real_drift (test_check_contract_copies.ContractCopiesTest.test_lone_cr_is_real_drift) ... ok
+test_matching_hashes_pass (test_check_contract_copies.ContractCopiesTest.test_matching_hashes_pass) ... ok
+test_missing_entry_fails_closed (test_check_contract_copies.ContractCopiesTest.test_missing_entry_fails_closed) ... ok
+test_missing_file_fails_with_filename (test_check_contract_copies.ContractCopiesTest.test_missing_file_fails_with_filename) ... ok
+test_missing_manifest_fails (test_check_contract_copies.ContractCopiesTest.test_missing_manifest_fails) ... ok
+
+----------------------------------------------------------------------
+Ran 8 tests in 0.118s
+
+OK
