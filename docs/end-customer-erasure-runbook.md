@@ -27,7 +27,10 @@ high-assurance erase, and check for new rows before resuming.
 ## Many admin operation
 
 Use an authenticated admin API client; there is no new dashboard button in this
-change. Send `POST /privacy/contact-erasure/{platform}/{channel_id}` with the
+change. Routes below are backend paths. The checked-in ingress exposes them
+under `/api/privacy/contact-erasure/...` and strips `/api` before proxying;
+the public `/privacy` page is the dashboard policy, not this API.
+Send `POST /privacy/contact-erasure/{platform}/{channel_id}` with the
 selected `X-Workspace-Id` header and JSON containing `request_id` (a fresh UUID)
 and `external_contact_id`. Reuse that request UUID and identity if the same
 request fails in transport. Do not log request bodies. Workspace owner/admin

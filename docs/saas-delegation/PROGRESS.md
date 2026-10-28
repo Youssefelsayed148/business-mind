@@ -1022,3 +1022,194 @@ Both existing plan copies verified SHA256
 `D005F8B2DD9D9BE974F6E9097EFF1DDEED9DE020AC63D51BC8BC173E584B871B`.
 The SaaS plan is in `../SAAS-chats-ai/implementation/CLOSEOUT-PLAN.md`;
 `../SAAS-chats-ai-phase6/implementation/CLOSEOUT-PLAN.md` does not exist.
+
+
+### A1 local evidence commit and A16 adoption
+
+A1 evidence committed locally as `d3d0303` (no push). Added `.closeout-worktrees/`
+to .gitignore to prevent isolated worktrees being staged into the parent repo.
+Exact command: `git add -- .gitignore docs/saas-delegation/a1-evidence docs/saas-delegation/PROGRESS.md; git commit -m "A1: verify committed T1 fixes in disposable harness"` (sandbox escalation), exit 0.
+
+Owner approved A16 text in `A16-PROPOSED.md` (file name retained; status now
+ADOPTED). New SaaS integration worktree `.closeout-worktrees/batch-c`, branch
+`closeout/batch-c`, created from 5fa72f7 with `git -C ../SAAS-chats-ai-phase6 worktree add <absolute-worktree-path> -b closeout/batch-c 5fa72f7`, exit 0.
+Adoption appended exactly the agreed clauses to docs/17 and delta copies,
+copied docs/17 byte-for-byte to many-pack and Many v1, copied the delta into
+Many, verified signing vectors unchanged, and regenerated LF SHA256 manifests.
+SaaS manifest added at implementation/PHASE-06-V2/CONTRACT.sha256 with actual
+SaaS paths; Many retains docs/saas-delegation/CONTRACT.sha256.
+
+`python scripts/check_contract_copies.py` and
+`python .closeout-worktrees/batch-c/scripts/check_contract_copies.py` both
+exited 0. Both copies and all three hashes independently compared in the
+adoption script; no application code or provider call in this step.
+Many contract commit `bfb1cc8`; SaaS local batch-c contract commit `205bdab`.
+No B2/C2 runtime result claimed.
+
+Public documentation lookup for A5 was authorized by the owner. Group 2
+reported official Meta documentation 429/inaccessible, no primary evidence
+confirming a version bump: A5/R8 remains OPEN. D5 explicitly deferred by owner.
+Groups 1/2/6 and their independent read-only reviewer retain exact evidence
+in their isolated worktrees; integration and final suites still pending.
+
+
+### Initial A / C-partial review and local integration
+
+Read-only reviewer `/root/review_initial_ac` independently verified retained
+JUnit/log evidence and code. One medium SQL-literal-normalization finding was
+fixed and regression-tested; final review reported no remaining blocking/high/
+medium findings in A2?A4/A6?A7/C1/C3. See INITIAL-AC-REVIEW.md.
+
+Local worker commits: `afb604f` A2/A3/A4, `6e80eaa` A6/A7, SaaS `3347a02` C1/C3.
+Lead created `closeout/batch-a` from feature/saas-delegation and merged reviewed
+worker branches with `git merge --no-ff`; head `0ca1c67`. Reviewed C1/C3 merged
+with --no-ff into isolated SaaS `closeout/batch-c`, head `216a4f0`. All commands
+exit 0, no conflicts; no main merge or push. No full suite rerun after these
+disjoint integrations per revised owner instruction; final suites pending.
+
+Many gained .gitattributes with shell LF endings (51c0d62), preventing WSL
+runner breakage on core.autocrlf=true. An initial SaaS attributes edit
+inadvertently removed two existing rules; lead inspected prior blob and restored
+them immediately (c516cfa then a0c3870). Final SaaS attributes equal the original;
+no application behavior changed by those two corrective local commits.
+
+CANARY.md updated in batch-a for --beat-process-count 1, five PASS lines,
+selected delegation configuration and Boolean-only secret-presence query,
+and A2 empty-DB migration repair. Hosted observations remain UNVERIFIED.
+RELEASE-GATES.md records unexecuted D/E/F work; it is not live evidence.
+
+### Disposable SaaS test tooling preparation
+
+Existing Windows SaaS Python3.12.10 and pinned dependencies/cache were inspected
+without loading env files. No pgvector files existed in Windows17 or WSL18,
+and no Linux Node/Chromium was cached. Only disposable tooling provisioned:
+
+- `wsl -d Ubuntu -u root -- bash -c 'DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends postgresql-18-pgvector'`
+  exited 0; extension files pgvector0.8.1 installed, no DB connected/migrated.
+- `wsl -d Ubuntu -u root -- bash '<repo>/docs/saas-delegation/tooling-evidence/setup-saas.sh'`
+  exited 0; uv installed Python3.12.16 and pinned requirements-dev.lock into
+  `/var/tmp/saas-closeout-tools/venv`; no application imports/DB access.
+- `wsl -d Ubuntu -u root -- /var/tmp/saas-closeout-tools/venv/bin/python '<repo>/docs/saas-delegation/tooling-evidence/setup-node.py'`
+  exited 0; official Node24.22.1 Linux tarball validated against official
+  SHASUMS256 (6c172a9ab6718f7b801fb5a7bd486af2ee5e32758086a04b84fcce2aa77095e6).
+- C4/C5 isolated worktree created from batch-c216a4f0. First inline WSL npm
+  invocation failed shell quoting before npm started. Script-based retry
+  `wsl -d Ubuntu -u root -- bash '<repo>/docs/saas-delegation/tooling-evidence/setup-web.sh'`
+  exited 0: npm ci --ignore-scripts,418 packages,421 audited,0 vulnerabilities.
+  No package scripts or application tests run by this setup step.
+
+All scripts retained under tooling-evidence. Tooling downloads are not provider
+calls; no Meta/OpenAI/SaaS authenticated calls, paid API or cloud resource.
+No existing database/service was used for SaaS tests.
+
+
+### Second-wave review and explicit dedupe scope approval
+
+Owner approved hashed dedupe keys and migration, including the shared
+Instagram dedupe behavior change; no dispatch/send-handler refactor approved.
+Implementation and focused replay/privacy verification are pending. D5 remains
+separately OPEN.
+
+Independent reviewer found a HIGH C2 staff-merge/erasure race and a MEDIUM
+same-connection merged-identity sender query failure. C2 worker resumed to
+fix both, persist a conversation's authoritative channel recipient and test
+identity-lock boundaries. These findings are not marked resolved until review
+and targeted evidence. No affected C2 worker code integrated yet.
+
+B2 worker reports76distinct related cases passing in latest executions
+(including documented A3conftest source-snapshot overlay). B1 initial28,
+new focused3 and lead CLI regression1 passed separately; B1 remains PARTIAL.
+C4/C5 related API31passed and Alembic check reports no new operations on its
+disposable migrated schema. Initial affected Playwright subset13passed2failed;
+remaining tab-race/SSE-completion fixes and related rerun are in progress.
+None of these subset results is a green full-suite claim.
+
+
+## Final implementation handoff ? 2026-10-28
+
+Latest owner direction: complete the three remaining implementations and give
+a prompt to BEGIN FULL TESTING IN A NEW SESSION. Full integrated backend
+suites, full dashboard/frontend checks and full Playwright were deliberately
+NOT RUN in this final stage; all remain UNVERIFIED.
+
+### Implementations completed and locally integrated
+
+- Many `closeout/batch-b`, application integration commit `33bde97`: A2?A7,
+  B1/B3/B4 and B2/hash producer work. B2 worker `a7518ae`; B1 `58b7408`.
+- SaaS `closeout/batch-c`, application integration commit `1ee703e`: C1/C3,
+  C2 receiver and C4/C5. C2 `23fb2e8`, C4/C5 `f9aeba6`.
+- Only lead documentation/source-check updates follow these application bases.
+  Use `git rev-parse HEAD` in the actual integrated worktrees when testing.
+  Original feature/phase6 checkouts were not merged with application work.
+
+The final three requested implementations are complete: shared SHA256 dedupe
+storage with migration0029 and database privacy guards; staff-merge/erasure and
+recipient-identity fixes with SaaS0031; knowledge duplicate-upload handling and
+correct Playwright tab/render/stream-completion assertions. No Instagram
+dispatch/send-handler refactor was introduced by the approved shared-helper fix.
+
+Focused evidence (retained exact commands in worker reports):
+
+| Scope | Result and precise limit | Evidence |
+| --- | --- | --- |
+| A1 |418 passed in one SaaS-related run,92.99 s, before later batches | a1-evidence/tests.xml |
+| A2?A4 |66 distinct latest passing targeted cases across attempts | a2-a4-evidence/summary.json |
+| A6/A7 |25 focused pytest passes;20 canary unittest passes | a5-a7-evidence/REPORT.md |
+| B1/B3/B4 |32 distinct latest callback/security passes;5 standalone migration assertions;2 policy-page typecheck | b1-b4-evidence/REPORT.md |
+| B2 +hashed dedupe |87 distinct latest passing cases, including hash10 pass and finalreview3 pass runs; no single 87-case run | b2-evidence/WORKER-REPORT.md +summary.json |
+| C1/C3 |6 offline source checks and Bash syntax passed; runtime UNVERIFIED | SaaS implementation/c1-c3-evidence/REPORT.md |
+| C2 |78 distinct latest passing related cases; final32 focused passes14.53 s | SaaS implementation/c2-evidence/REPORT.md |
+| C4/C5 |31 API passes;17 distinct latest targeted Playwright passes across iterations; Next build/changed-file checks pass; not D1 | SaaS implementation/c4-c5-evidence/REPORT.md |
+
+Independent `/root/review_initial_ac` verified code/evidence and rechecked
+corrections. All reported blocking/high/medium findings in reviewed scope are
+resolved. See INITIAL-AC-REVIEW.md and FINAL-IMPLEMENTATION-REVIEW.md.
+Hash tests now accept validated named disposable DBs; matching SQL/model guards
+enforce opaque hashed keys, SQL NULL metadata and nine static event types.
+
+Exact final local integration commands used `git commit` on reviewed worker
+branches followed by `git merge --no-ff closeout/b1-b4`, `closeout/b2` into
+closeout/batch-b, and `git merge --no-ff closeout/c2`, `closeout/c4-c5` into
+closeout/batch-c. All exited 0; only main.py auto-merged, both router registrations
+verified retained. No main merge/push/deploy.
+
+### Lead integration source checks (no full suite)
+
+From Many root, a stdlib subprocess invoked
+`python scripts/canary_preflight.py --static-only` with cwd the integrated
+batch-b worktree and captured `integration-evidence/static-preflight.log`.
+Three source PASS lines, DB UNVERIFIED, exact exit 2 asserted as intended.
+Stdlib AST migration scan proved one head in each integrated source:
+Many `0029_hash_processed_event_keys`, SaaS `0031_contact_erasure`.
+Contract bytes matched after LF normalization; `python scripts/check_contract_copies.py`
+exited 0 in each integrated worktree. No app/environment file loaded or DB used.
+
+C3 source test had an obsolete 0030 head pin. Updated to require one source head
+with0031/0030/0022 ancestry; captured subprocess command, cwd SaaS batch-c:
+`python -m unittest discover -s scripts -p test_closeout_deploy_readiness.py -k release_chain -v`.
+One stdlib-only source test passed0.020 s, exit 0; no DB/app imports. Evidence:
+SaaS implementation/integration-evidence/head-source-check.log. C3 deploy docs
+now describe0031 and its replay-fence rollback limits; full 0022?0031 rehearsal
+is UNVERIFIED and belongs to the new session.
+
+### Remaining work / limitations
+
+D5 is still OPEN at owner request. A5 official Graph-version evidence remains
+OPEN (Meta public docs429). R1 remains PARTIAL: automatic verified Meta admin
+mapping and full Facebook/WhatsApp admin-account erasure are not implemented.
+Many in-flight worker memory requires documented quiescence/verification; no
+claim that deletion recalls already sent content. Legacy ambiguous SaaS
+recipients fail closed for operator repair. Hash downgrade cannot reconstruct
+erased raw data; pausing is required for a legacy-code rollback. Dropping0031
+removes erasure replay protection. Policy text is draft pending owner publication
+review. No actual credential/token/env file or expired token file was read.
+
+Full integrated tests, hosted CI, staging canary, Business Verification/Tech
+Provider/dashboard actions, main merge, rebuild/deployment, Meta submission and
+go-live remain UNVERIFIED/not authorized here. Full Playwright green remains
+required before SaaS main merge. All disposable test processes were stopped by
+worker teardown; tooling/worktrees/evidence retained.
+
+New-session prompt: **TESTING-HANDOFF.md**. It identifies exact worktrees, cached
+Linux Python/Node/browser paths, fresh-cluster/socket safety, source-snapshot
+secret exclusions, full-suite commands, evidence rules and unresolved gates.
