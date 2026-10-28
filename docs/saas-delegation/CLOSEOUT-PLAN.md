@@ -60,7 +60,7 @@ Recommendation
 | R14 | P1 | [x] UTF-8 byte compare_digest with rejection/call regression tests (A6 evidence) | Many | A |
 | R15 | P1 | [x] Read-only selected-channel HTTPS/secret-presence/enabled checks + independent beat observation (20 canary tests; A7 review) | Many | A |
 | R16 | P1 | Canary on staging with rotation drill, replay, 429, expiry, take-over, rollback | Both | D |
-| R17 | P1 | AI policy wording (business support only), 24 h window (no human-agent tag) in review text | Many/Meta | B, E |
+| R17 | P1 | [x] Local review/policy text states business-support AI disclosure, 24 h messaging rule, existing WA free-entry exception, no human-agent tag and local rejection outside the applicable window. R17-B4-IMPLEMENTATION.md: policy tsc/lint and nine UNVERIFIED D4 evidence rows. Owner publication/recordings pending | Many/Meta | B, E |
 | R18 | P1 | IMPLEMENTED repairs: 31 targeted API passes; 17 distinct latest Playwright passes include all 12 historical failures. Full suites/D1 gate deferred to new session | SaaS | C |
 | R19 | P2 | CSV phone guard `-1-1`; health-poll index; `alembic check` drift (`bots.uq_bots_widget_locator`, `provisioning_requests`); undefined S10; `webhook_unhealthy` provider-global; CI workflow never run | Both | A, C |
 
@@ -84,7 +84,7 @@ Gate A: full Many suite results listed (pass count, every remaining failure expl
 - B1 deauthorize + data-deletion callbacks, `signed_request` verification, status page, tests (R1).
 - B2 end-customer erasure service + admin route + `webhook_events` purge task; delegated channels queue `contact.erasure` (R2). Blocked on C2 for the receiver, but the Many half can be built against the fake SaaS.
 - B3 privacy and terms rewrite (SaaS processor, retention reality, deletion routes, 24 h window, AI disclosure) (R3, R17).
-- B4 update `docs/meta-app-review-submission.md` (remove unverified claims, delegation description, A16).
+- [x] B4 local review pack and policy consistency updated after R1 f3a7de0; source-backed delegation/A16/callback/retention text and nine UNVERIFIED permission evidence rows. Policy tsc/lint pass; R17-B4-IMPLEMENTATION.md. Owner publication and D4 recordings pending.
 Gate B: owner reads policy text; callback tests green; contract amendment text agreed.
 
 ### Batch C: SaaS readiness (SaaS repo)

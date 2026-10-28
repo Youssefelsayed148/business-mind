@@ -1229,3 +1229,17 @@ checks, not a full suite or clean-head integration claim. Pre-existing Batch T/A
 working-tree edits were preserved separately. Instagram dispatch/send handlers
 and 59d3442 unchanged; the legacy Instagram immediate hard-delete route remains
 subject to coordinated remote cleanup. No push/merge/deploy/live/paid calls.
+
+
+## R17 / B4 review and policy refresh - 2026-10-28
+
+Ran after R1 commit f3a7de0. Rewrote the submission pack against implemented
+behavior; aligned privacy/terms; nine per-permission native/delegated recording
+rows remain UNVERIFIED. AI support-only disclosure, no human-agent tag, local
+window rejection and the existing WhatsApp free-entry exception are explicit.
+Removed guessed contacts/effective dates in favor of marked owner inputs.
+Env-free snapshot dashboard tsc and changed-page lint both exit 0; source checks
+and diff whitespace check pass. No backend test rerun for docs-only changes.
+Exact commands, files, owner placeholders and remaining live gates:
+R17-B4-IMPLEMENTATION.md. Policy publication, D4 recordings and Meta activity
+remain owner/UNVERIFIED gates; no publish/push/merge/deploy/live/paid call.
