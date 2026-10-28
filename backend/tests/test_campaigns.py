@@ -295,9 +295,8 @@ def test_any_media_and_specific_media_matching(db_session: Session):
             target_media_label="May Discount Reel",
         ),
     )
-    waiting_campaign = create_campaign(
-        db_session,
-        ws.id,
+    # b5c0b54 requires a picker-resolved media id; a URL alone is rejected.
+    with pytest.raises(ValueError, match="Select a post or reel"):
         CampaignCreate(
             instagram_account_id=acc.id,
             name="Waiting Offer",
@@ -306,11 +305,9 @@ def test_any_media_and_specific_media_matching(db_session: Session):
             target_scope="specific_media",
             target_media_url="https://www.instagram.com/p/WAIT123/",
             target_media_type="post",
-        ),
-    )
+        )
     activate_campaign(db_session, any_campaign.id)
     activate_campaign(db_session, specific_campaign.id)
-    activate_campaign(db_session, waiting_campaign.id)
 
     matching = find_matching_campaigns(db_session, acc.id, "media_rehearsal_001", "offer please")
     assert {match.campaign_id for match in matching} == {any_campaign.id, specific_campaign.id}

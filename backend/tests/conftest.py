@@ -8,6 +8,22 @@ from app.core.config import settings
 from app.db.base import Base
 from app.db.session import get_db
 
+
+def pytest_configure(config):
+    config.addinivalue_line(
+        "markers", "rate_limit: enable the shared Redis rate limiter for this test"
+    )
+
+
+@pytest.fixture(autouse=True)
+def isolate_rate_limiter(request, monkeypatch):
+    # f92dcfc introduced shared Redis login counters; ordinary route tests
+    # must not consume one another's IP quota. Limiter tests explicitly opt in.
+    monkeypatch.setattr(
+        settings, "RATE_LIMIT_ENABLED", request.node.get_closest_marker("rate_limit") is not None
+    )
+
+
 # setup_db() below runs Base.metadata.drop_all() at the end of every pytest
 # session, so this must never resolve to a real database. In a production
 # environment (APP_ENV=production, set in .env.production) that is an

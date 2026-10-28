@@ -1,0 +1,28 @@
+FAILED tests/test_campaign_routes.py::test_simulate_returns_rendered_message
+FAILED tests/test_campaign_routes.py::test_simulate_no_match - KeyError: 'id'
+FAILED tests/test_campaigns.py::test_create_campaign_with_keywords - Assertio...
+FAILED tests/test_campaigns.py::test_any_media_and_specific_media_matching - ...
+FAILED tests/test_instagram_routes.py::test_disconnect_instagram_account - as...
+FAILED tests/test_instagram_routes.py::test_disconnect_instagram_account_is_idempotent
+FAILED tests/test_instagram_routes.py::test_disconnect_pauses_active_campaigns_and_overview_count
+FAILED tests/test_instagram_routes.py::test_reconnect_restores_account_and_token_without_reactivating_campaigns
+FAILED tests/test_message_retry.py::test_retry_endpoint_accepts_failed_message
+FAILED tests/test_message_retry.py::test_retry_endpoint_rejects_sent_message
+FAILED tests/test_message_retry.py::test_retry_endpoint_rejects_expired_message
+FAILED tests/test_meta_integration.py::test_mock_meta_connect_creates_account_and_encrypted_token
+FAILED tests/test_meta_integration.py::test_token_is_not_plaintext_in_db - At...
+FAILED tests/test_send_private_reply.py::test_send_private_reply_success - As...
+FAILED tests/test_send_private_reply.py::test_send_private_reply_expired_private_reply
+FAILED tests/test_send_private_reply.py::test_send_private_reply_token_error_no_retry
+FAILED tests/test_send_private_reply.py::test_send_private_reply_retryable_500
+FAILED tests/test_webhook_processing.py::test_duplicate_webhook_does_not_duplicate_message
+FAILED tests/test_webhook_processing.py::test_comment_creates_comment_row - a...
+FAILED tests/test_webhook_processing.py::test_matching_active_campaign_creates_queued_message
+FAILED tests/test_webhook_processing.py::test_duplicate_comment_does_not_duplicate_message
+FAILED tests/test_webhook_processing.py::test_lead_is_created_from_comment - ...
+FAILED tests/test_webhook_processing.py::test_cooldown_prevents_message_queue
+FAILED tests/test_whatsapp_tasks.py::test_beat_module_registers_exactly_four_whatsapp_entries_and_old_file_is_unchanged
+FAILED tests/test_workspace_scoping.py::test_default_workspace_member_keeps_access
+FAILED tests/test_workspace_scoping.py::test_cross_workspace_whatsapp_reconnect_returns_409_and_leaves_row_untouched
+FAILED tests/test_workspace_scoping.py::test_cross_workspace_facebook_reconnect_reports_conflict_and_leaves_row_untouched
+27 failed, 349 passed, 67 warnings in 16.70s

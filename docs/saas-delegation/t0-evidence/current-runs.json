@@ -1,0 +1,632 @@
+[
+  {
+    "kind": "module",
+    "item": "tests/test_campaign_routes.py",
+    "label": "current-module-00",
+    "command": [
+      "bash",
+      "/mnt/d/Projects/Work Projects/The Osiris Labs/ManyOsirisChat/.t0/run.sh",
+      "current",
+      "current-module-00",
+      "tests/test_campaign_routes.py",
+      "-q"
+    ],
+    "exit_code": 1
+  },
+  {
+    "kind": "module",
+    "item": "tests/test_campaigns.py",
+    "label": "current-module-01",
+    "command": [
+      "bash",
+      "/mnt/d/Projects/Work Projects/The Osiris Labs/ManyOsirisChat/.t0/run.sh",
+      "current",
+      "current-module-01",
+      "tests/test_campaigns.py",
+      "-q"
+    ],
+    "exit_code": 1
+  },
+  {
+    "kind": "module",
+    "item": "tests/test_instagram_routes.py",
+    "label": "current-module-02",
+    "command": [
+      "bash",
+      "/mnt/d/Projects/Work Projects/The Osiris Labs/ManyOsirisChat/.t0/run.sh",
+      "current",
+      "current-module-02",
+      "tests/test_instagram_routes.py",
+      "-q"
+    ],
+    "exit_code": 1
+  },
+  {
+    "kind": "module",
+    "item": "tests/test_instagram_token_refresh.py",
+    "label": "current-module-03",
+    "command": [
+      "bash",
+      "/mnt/d/Projects/Work Projects/The Osiris Labs/ManyOsirisChat/.t0/run.sh",
+      "current",
+      "current-module-03",
+      "tests/test_instagram_token_refresh.py",
+      "-q"
+    ],
+    "exit_code": 1
+  },
+  {
+    "kind": "module",
+    "item": "tests/test_message_retry.py",
+    "label": "current-module-04",
+    "command": [
+      "bash",
+      "/mnt/d/Projects/Work Projects/The Osiris Labs/ManyOsirisChat/.t0/run.sh",
+      "current",
+      "current-module-04",
+      "tests/test_message_retry.py",
+      "-q"
+    ],
+    "exit_code": 1
+  },
+  {
+    "kind": "module",
+    "item": "tests/test_meta_integration.py",
+    "label": "current-module-05",
+    "command": [
+      "bash",
+      "/mnt/d/Projects/Work Projects/The Osiris Labs/ManyOsirisChat/.t0/run.sh",
+      "current",
+      "current-module-05",
+      "tests/test_meta_integration.py",
+      "-q"
+    ],
+    "exit_code": 1
+  },
+  {
+    "kind": "module",
+    "item": "tests/test_send_private_reply.py",
+    "label": "current-module-06",
+    "command": [
+      "bash",
+      "/mnt/d/Projects/Work Projects/The Osiris Labs/ManyOsirisChat/.t0/run.sh",
+      "current",
+      "current-module-06",
+      "tests/test_send_private_reply.py",
+      "-q"
+    ],
+    "exit_code": 1
+  },
+  {
+    "kind": "module",
+    "item": "tests/test_webhook_processing.py",
+    "label": "current-module-07",
+    "command": [
+      "bash",
+      "/mnt/d/Projects/Work Projects/The Osiris Labs/ManyOsirisChat/.t0/run.sh",
+      "current",
+      "current-module-07",
+      "tests/test_webhook_processing.py",
+      "-q"
+    ],
+    "exit_code": 1
+  },
+  {
+    "kind": "module",
+    "item": "tests/test_whatsapp_outreach_settings_migration.py",
+    "label": "current-module-08",
+    "command": [
+      "bash",
+      "/mnt/d/Projects/Work Projects/The Osiris Labs/ManyOsirisChat/.t0/run.sh",
+      "current",
+      "current-module-08",
+      "tests/test_whatsapp_outreach_settings_migration.py",
+      "-q"
+    ],
+    "exit_code": 1
+  },
+  {
+    "kind": "module",
+    "item": "tests/test_workspace_scoping.py",
+    "label": "current-module-09",
+    "command": [
+      "bash",
+      "/mnt/d/Projects/Work Projects/The Osiris Labs/ManyOsirisChat/.t0/run.sh",
+      "current",
+      "current-module-09",
+      "tests/test_workspace_scoping.py",
+      "-q"
+    ],
+    "exit_code": 0
+  },
+  {
+    "kind": "single",
+    "item": "tests/test_campaign_routes.py::test_simulate_returns_rendered_message",
+    "label": "current-single-00",
+    "command": [
+      "bash",
+      "/mnt/d/Projects/Work Projects/The Osiris Labs/ManyOsirisChat/.t0/run.sh",
+      "current",
+      "current-single-00",
+      "tests/test_campaign_routes.py::test_simulate_returns_rendered_message",
+      "-q"
+    ],
+    "exit_code": 1
+  },
+  {
+    "kind": "single",
+    "item": "tests/test_campaign_routes.py::test_simulate_no_match",
+    "label": "current-single-01",
+    "command": [
+      "bash",
+      "/mnt/d/Projects/Work Projects/The Osiris Labs/ManyOsirisChat/.t0/run.sh",
+      "current",
+      "current-single-01",
+      "tests/test_campaign_routes.py::test_simulate_no_match",
+      "-q"
+    ],
+    "exit_code": 1
+  },
+  {
+    "kind": "single",
+    "item": "tests/test_campaigns.py::test_create_campaign_with_keywords",
+    "label": "current-single-02",
+    "command": [
+      "bash",
+      "/mnt/d/Projects/Work Projects/The Osiris Labs/ManyOsirisChat/.t0/run.sh",
+      "current",
+      "current-single-02",
+      "tests/test_campaigns.py::test_create_campaign_with_keywords",
+      "-q"
+    ],
+    "exit_code": 1
+  },
+  {
+    "kind": "single",
+    "item": "tests/test_campaigns.py::test_any_media_and_specific_media_matching",
+    "label": "current-single-03",
+    "command": [
+      "bash",
+      "/mnt/d/Projects/Work Projects/The Osiris Labs/ManyOsirisChat/.t0/run.sh",
+      "current",
+      "current-single-03",
+      "tests/test_campaigns.py::test_any_media_and_specific_media_matching",
+      "-q"
+    ],
+    "exit_code": 1
+  },
+  {
+    "kind": "single",
+    "item": "tests/test_instagram_routes.py::test_disconnect_instagram_account",
+    "label": "current-single-04",
+    "command": [
+      "bash",
+      "/mnt/d/Projects/Work Projects/The Osiris Labs/ManyOsirisChat/.t0/run.sh",
+      "current",
+      "current-single-04",
+      "tests/test_instagram_routes.py::test_disconnect_instagram_account",
+      "-q"
+    ],
+    "exit_code": 1
+  },
+  {
+    "kind": "single",
+    "item": "tests/test_instagram_routes.py::test_disconnect_instagram_account_is_idempotent",
+    "label": "current-single-05",
+    "command": [
+      "bash",
+      "/mnt/d/Projects/Work Projects/The Osiris Labs/ManyOsirisChat/.t0/run.sh",
+      "current",
+      "current-single-05",
+      "tests/test_instagram_routes.py::test_disconnect_instagram_account_is_idempotent",
+      "-q"
+    ],
+    "exit_code": 1
+  },
+  {
+    "kind": "single",
+    "item": "tests/test_instagram_routes.py::test_disconnect_pauses_active_campaigns_and_overview_count",
+    "label": "current-single-06",
+    "command": [
+      "bash",
+      "/mnt/d/Projects/Work Projects/The Osiris Labs/ManyOsirisChat/.t0/run.sh",
+      "current",
+      "current-single-06",
+      "tests/test_instagram_routes.py::test_disconnect_pauses_active_campaigns_and_overview_count",
+      "-q"
+    ],
+    "exit_code": 1
+  },
+  {
+    "kind": "single",
+    "item": "tests/test_instagram_routes.py::test_reconnect_restores_account_and_token_without_reactivating_campaigns",
+    "label": "current-single-07",
+    "command": [
+      "bash",
+      "/mnt/d/Projects/Work Projects/The Osiris Labs/ManyOsirisChat/.t0/run.sh",
+      "current",
+      "current-single-07",
+      "tests/test_instagram_routes.py::test_reconnect_restores_account_and_token_without_reactivating_campaigns",
+      "-q"
+    ],
+    "exit_code": 1
+  },
+  {
+    "kind": "single",
+    "item": "tests/test_instagram_token_refresh.py::test_refresh_token_success_stores_new_encrypted_token_and_expiry",
+    "label": "current-single-08",
+    "command": [
+      "bash",
+      "/mnt/d/Projects/Work Projects/The Osiris Labs/ManyOsirisChat/.t0/run.sh",
+      "current",
+      "current-single-08",
+      "tests/test_instagram_token_refresh.py::test_refresh_token_success_stores_new_encrypted_token_and_expiry",
+      "-q"
+    ],
+    "exit_code": 1
+  },
+  {
+    "kind": "single",
+    "item": "tests/test_instagram_token_refresh.py::test_refresh_token_failure_keeps_old_token_and_stays_active",
+    "label": "current-single-09",
+    "command": [
+      "bash",
+      "/mnt/d/Projects/Work Projects/The Osiris Labs/ManyOsirisChat/.t0/run.sh",
+      "current",
+      "current-single-09",
+      "tests/test_instagram_token_refresh.py::test_refresh_token_failure_keeps_old_token_and_stays_active",
+      "-q"
+    ],
+    "exit_code": 1
+  },
+  {
+    "kind": "single",
+    "item": "tests/test_instagram_token_refresh.py::test_refresh_token_too_young_is_not_sent_to_meta",
+    "label": "current-single-10",
+    "command": [
+      "bash",
+      "/mnt/d/Projects/Work Projects/The Osiris Labs/ManyOsirisChat/.t0/run.sh",
+      "current",
+      "current-single-10",
+      "tests/test_instagram_token_refresh.py::test_refresh_token_too_young_is_not_sent_to_meta",
+      "-q"
+    ],
+    "exit_code": 1
+  },
+  {
+    "kind": "single",
+    "item": "tests/test_instagram_token_refresh.py::test_refresh_token_already_expired_is_marked_expired_without_calling_meta",
+    "label": "current-single-11",
+    "command": [
+      "bash",
+      "/mnt/d/Projects/Work Projects/The Osiris Labs/ManyOsirisChat/.t0/run.sh",
+      "current",
+      "current-single-11",
+      "tests/test_instagram_token_refresh.py::test_refresh_token_already_expired_is_marked_expired_without_calling_meta",
+      "-q"
+    ],
+    "exit_code": 1
+  },
+  {
+    "kind": "single",
+    "item": "tests/test_instagram_token_refresh.py::test_get_tokens_expiring_within_filters",
+    "label": "current-single-12",
+    "command": [
+      "bash",
+      "/mnt/d/Projects/Work Projects/The Osiris Labs/ManyOsirisChat/.t0/run.sh",
+      "current",
+      "current-single-12",
+      "tests/test_instagram_token_refresh.py::test_get_tokens_expiring_within_filters",
+      "-q"
+    ],
+    "exit_code": 1
+  },
+  {
+    "kind": "single",
+    "item": "tests/test_instagram_token_refresh.py::test_task_refreshes_logs_and_never_logs_token",
+    "label": "current-single-13",
+    "command": [
+      "bash",
+      "/mnt/d/Projects/Work Projects/The Osiris Labs/ManyOsirisChat/.t0/run.sh",
+      "current",
+      "current-single-13",
+      "tests/test_instagram_token_refresh.py::test_task_refreshes_logs_and_never_logs_token",
+      "-q"
+    ],
+    "exit_code": 1
+  },
+  {
+    "kind": "single",
+    "item": "tests/test_instagram_token_refresh.py::test_task_logs_failure",
+    "label": "current-single-14",
+    "command": [
+      "bash",
+      "/mnt/d/Projects/Work Projects/The Osiris Labs/ManyOsirisChat/.t0/run.sh",
+      "current",
+      "current-single-14",
+      "tests/test_instagram_token_refresh.py::test_task_logs_failure",
+      "-q"
+    ],
+    "exit_code": 1
+  },
+  {
+    "kind": "single",
+    "item": "tests/test_instagram_token_refresh.py::test_account_response_includes_token_expiry",
+    "label": "current-single-15",
+    "command": [
+      "bash",
+      "/mnt/d/Projects/Work Projects/The Osiris Labs/ManyOsirisChat/.t0/run.sh",
+      "current",
+      "current-single-15",
+      "tests/test_instagram_token_refresh.py::test_account_response_includes_token_expiry",
+      "-q"
+    ],
+    "exit_code": 1
+  },
+  {
+    "kind": "single",
+    "item": "tests/test_message_retry.py::test_retry_endpoint_accepts_failed_message",
+    "label": "current-single-16",
+    "command": [
+      "bash",
+      "/mnt/d/Projects/Work Projects/The Osiris Labs/ManyOsirisChat/.t0/run.sh",
+      "current",
+      "current-single-16",
+      "tests/test_message_retry.py::test_retry_endpoint_accepts_failed_message",
+      "-q"
+    ],
+    "exit_code": 1
+  },
+  {
+    "kind": "single",
+    "item": "tests/test_message_retry.py::test_retry_endpoint_rejects_sent_message",
+    "label": "current-single-17",
+    "command": [
+      "bash",
+      "/mnt/d/Projects/Work Projects/The Osiris Labs/ManyOsirisChat/.t0/run.sh",
+      "current",
+      "current-single-17",
+      "tests/test_message_retry.py::test_retry_endpoint_rejects_sent_message",
+      "-q"
+    ],
+    "exit_code": 1
+  },
+  {
+    "kind": "single",
+    "item": "tests/test_message_retry.py::test_retry_endpoint_rejects_expired_message",
+    "label": "current-single-18",
+    "command": [
+      "bash",
+      "/mnt/d/Projects/Work Projects/The Osiris Labs/ManyOsirisChat/.t0/run.sh",
+      "current",
+      "current-single-18",
+      "tests/test_message_retry.py::test_retry_endpoint_rejects_expired_message",
+      "-q"
+    ],
+    "exit_code": 1
+  },
+  {
+    "kind": "single",
+    "item": "tests/test_meta_integration.py::test_mock_meta_connect_creates_account_and_encrypted_token",
+    "label": "current-single-19",
+    "command": [
+      "bash",
+      "/mnt/d/Projects/Work Projects/The Osiris Labs/ManyOsirisChat/.t0/run.sh",
+      "current",
+      "current-single-19",
+      "tests/test_meta_integration.py::test_mock_meta_connect_creates_account_and_encrypted_token",
+      "-q"
+    ],
+    "exit_code": 1
+  },
+  {
+    "kind": "single",
+    "item": "tests/test_meta_integration.py::test_token_is_not_plaintext_in_db",
+    "label": "current-single-20",
+    "command": [
+      "bash",
+      "/mnt/d/Projects/Work Projects/The Osiris Labs/ManyOsirisChat/.t0/run.sh",
+      "current",
+      "current-single-20",
+      "tests/test_meta_integration.py::test_token_is_not_plaintext_in_db",
+      "-q"
+    ],
+    "exit_code": 1
+  },
+  {
+    "kind": "single",
+    "item": "tests/test_send_private_reply.py::test_send_private_reply_success",
+    "label": "current-single-21",
+    "command": [
+      "bash",
+      "/mnt/d/Projects/Work Projects/The Osiris Labs/ManyOsirisChat/.t0/run.sh",
+      "current",
+      "current-single-21",
+      "tests/test_send_private_reply.py::test_send_private_reply_success",
+      "-q"
+    ],
+    "exit_code": 1
+  },
+  {
+    "kind": "single",
+    "item": "tests/test_send_private_reply.py::test_send_private_reply_expired_private_reply",
+    "label": "current-single-22",
+    "command": [
+      "bash",
+      "/mnt/d/Projects/Work Projects/The Osiris Labs/ManyOsirisChat/.t0/run.sh",
+      "current",
+      "current-single-22",
+      "tests/test_send_private_reply.py::test_send_private_reply_expired_private_reply",
+      "-q"
+    ],
+    "exit_code": 1
+  },
+  {
+    "kind": "single",
+    "item": "tests/test_send_private_reply.py::test_send_private_reply_token_error_no_retry",
+    "label": "current-single-23",
+    "command": [
+      "bash",
+      "/mnt/d/Projects/Work Projects/The Osiris Labs/ManyOsirisChat/.t0/run.sh",
+      "current",
+      "current-single-23",
+      "tests/test_send_private_reply.py::test_send_private_reply_token_error_no_retry",
+      "-q"
+    ],
+    "exit_code": 1
+  },
+  {
+    "kind": "single",
+    "item": "tests/test_send_private_reply.py::test_send_private_reply_retryable_500",
+    "label": "current-single-24",
+    "command": [
+      "bash",
+      "/mnt/d/Projects/Work Projects/The Osiris Labs/ManyOsirisChat/.t0/run.sh",
+      "current",
+      "current-single-24",
+      "tests/test_send_private_reply.py::test_send_private_reply_retryable_500",
+      "-q"
+    ],
+    "exit_code": 1
+  },
+  {
+    "kind": "single",
+    "item": "tests/test_webhook_processing.py::test_duplicate_webhook_does_not_duplicate_message",
+    "label": "current-single-25",
+    "command": [
+      "bash",
+      "/mnt/d/Projects/Work Projects/The Osiris Labs/ManyOsirisChat/.t0/run.sh",
+      "current",
+      "current-single-25",
+      "tests/test_webhook_processing.py::test_duplicate_webhook_does_not_duplicate_message",
+      "-q"
+    ],
+    "exit_code": 1
+  },
+  {
+    "kind": "single",
+    "item": "tests/test_webhook_processing.py::test_comment_creates_comment_row",
+    "label": "current-single-26",
+    "command": [
+      "bash",
+      "/mnt/d/Projects/Work Projects/The Osiris Labs/ManyOsirisChat/.t0/run.sh",
+      "current",
+      "current-single-26",
+      "tests/test_webhook_processing.py::test_comment_creates_comment_row",
+      "-q"
+    ],
+    "exit_code": 1
+  },
+  {
+    "kind": "single",
+    "item": "tests/test_webhook_processing.py::test_matching_active_campaign_creates_queued_message",
+    "label": "current-single-27",
+    "command": [
+      "bash",
+      "/mnt/d/Projects/Work Projects/The Osiris Labs/ManyOsirisChat/.t0/run.sh",
+      "current",
+      "current-single-27",
+      "tests/test_webhook_processing.py::test_matching_active_campaign_creates_queued_message",
+      "-q"
+    ],
+    "exit_code": 1
+  },
+  {
+    "kind": "single",
+    "item": "tests/test_webhook_processing.py::test_duplicate_comment_does_not_duplicate_message",
+    "label": "current-single-28",
+    "command": [
+      "bash",
+      "/mnt/d/Projects/Work Projects/The Osiris Labs/ManyOsirisChat/.t0/run.sh",
+      "current",
+      "current-single-28",
+      "tests/test_webhook_processing.py::test_duplicate_comment_does_not_duplicate_message",
+      "-q"
+    ],
+    "exit_code": 1
+  },
+  {
+    "kind": "single",
+    "item": "tests/test_webhook_processing.py::test_lead_is_created_from_comment",
+    "label": "current-single-29",
+    "command": [
+      "bash",
+      "/mnt/d/Projects/Work Projects/The Osiris Labs/ManyOsirisChat/.t0/run.sh",
+      "current",
+      "current-single-29",
+      "tests/test_webhook_processing.py::test_lead_is_created_from_comment",
+      "-q"
+    ],
+    "exit_code": 1
+  },
+  {
+    "kind": "single",
+    "item": "tests/test_webhook_processing.py::test_cooldown_prevents_message_queue",
+    "label": "current-single-30",
+    "command": [
+      "bash",
+      "/mnt/d/Projects/Work Projects/The Osiris Labs/ManyOsirisChat/.t0/run.sh",
+      "current",
+      "current-single-30",
+      "tests/test_webhook_processing.py::test_cooldown_prevents_message_queue",
+      "-q"
+    ],
+    "exit_code": 1
+  },
+  {
+    "kind": "single",
+    "item": "tests/test_whatsapp_outreach_settings_migration.py::test_0019_defaults_constraints_and_round_trip",
+    "label": "current-single-31",
+    "command": [
+      "bash",
+      "/mnt/d/Projects/Work Projects/The Osiris Labs/ManyOsirisChat/.t0/run.sh",
+      "current",
+      "current-single-31",
+      "tests/test_whatsapp_outreach_settings_migration.py::test_0019_defaults_constraints_and_round_trip",
+      "-q"
+    ],
+    "exit_code": 1
+  },
+  {
+    "kind": "single",
+    "item": "tests/test_workspace_scoping.py::test_default_workspace_member_keeps_access",
+    "label": "current-single-32",
+    "command": [
+      "bash",
+      "/mnt/d/Projects/Work Projects/The Osiris Labs/ManyOsirisChat/.t0/run.sh",
+      "current",
+      "current-single-32",
+      "tests/test_workspace_scoping.py::test_default_workspace_member_keeps_access",
+      "-q"
+    ],
+    "exit_code": 0
+  },
+  {
+    "kind": "single",
+    "item": "tests/test_workspace_scoping.py::test_cross_workspace_whatsapp_reconnect_returns_409_and_leaves_row_untouched",
+    "label": "current-single-33",
+    "command": [
+      "bash",
+      "/mnt/d/Projects/Work Projects/The Osiris Labs/ManyOsirisChat/.t0/run.sh",
+      "current",
+      "current-single-33",
+      "tests/test_workspace_scoping.py::test_cross_workspace_whatsapp_reconnect_returns_409_and_leaves_row_untouched",
+      "-q"
+    ],
+    "exit_code": 0
+  },
+  {
+    "kind": "single",
+    "item": "tests/test_workspace_scoping.py::test_cross_workspace_facebook_reconnect_reports_conflict_and_leaves_row_untouched",
+    "label": "current-single-34",
+    "command": [
+      "bash",
+      "/mnt/d/Projects/Work Projects/The Osiris Labs/ManyOsirisChat/.t0/run.sh",
+      "current",
+      "current-single-34",
+      "tests/test_workspace_scoping.py::test_cross_workspace_facebook_reconnect_reports_conflict_and_leaves_row_untouched",
+      "-q"
+    ],
+    "exit_code": 0
+  }
+]

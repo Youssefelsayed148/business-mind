@@ -134,10 +134,14 @@ def test_whatsapp_outreach_settings_model_defaults():
 def test_0019_defaults_constraints_and_round_trip(migration_database):
     database_url = migration_database["database_url"]
     dsn = migration_database["dsn"]
+    # 2ead0ea added revision 0027 after 0026; follow the actual migration head.
+    heads = _run_alembic(database_url, "heads").stdout.splitlines()
+    assert len(heads) == 1
+    expected_head = heads[0].split()[0]
 
     _run_alembic(database_url, "upgrade", "head")
     current = _run_alembic(database_url, "current")
-    assert "0026_saas_channel_health" in current.stdout
+    assert expected_head in current.stdout
 
     with psycopg.connect(dsn, autocommit=True) as conn:
         columns, constraints = _account_shape(conn)
@@ -196,7 +200,7 @@ def test_0019_defaults_constraints_and_round_trip(migration_database):
 
     _run_alembic(database_url, "upgrade", "head")
     current = _run_alembic(database_url, "current")
-    assert "0026_saas_channel_health" in current.stdout
+    assert expected_head in current.stdout
     with psycopg.connect(dsn) as conn:
         columns, constraints = _account_shape(conn)
         assert NEW_COLUMNS <= columns
