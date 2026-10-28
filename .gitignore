@@ -1,4 +1,5 @@
 .env
+.closeout-worktrees/
 .env.production
 dashboard/.env.local
 backups/

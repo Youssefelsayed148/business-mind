@@ -967,3 +967,58 @@ Exact commands (PowerShell, Many root):
 Tests: no application tests needed for this index/ignore-only change; database/Redis and runtime checks NOT RUN. Verification checks above passed except the noted final rg; no application behavior changed. Final command after this entry: `git ls-files -- dashboard/.env.local; git check-ignore -v -- dashboard/.env.local; Test-Path -LiteralPath dashboard/.env.local -PathType Leaf; rg -n -F 'dashboard/.env.local' .gitignore; git diff --check; git status --short`. Result reported in the completion message.
 
 T5 complete. No commit made. STOP; wait for owner instructions.
+
+
+## Close-out A1 verification ? 2026-10-28
+
+Starting state differs from the handoff: Many clean `feature/saas-delegation`
+at `13c7873`; T1 fixes already committed as `ed91c04`. SaaS clean
+`feature/phase-6-channels` at `5fa72f7`. Owner clarified T0?T6 are already
+committed and pushed. No duplicate T1 code commit created and nothing pushed.
+
+Inspection commands: `git status --short`, `git branch --show-current`,
+`git rev-parse --short HEAD` in both repos; `git log -6 --oneline`;
+`git show --stat ed91c04`; source inspection of saas_forwarder/saas_inbound
+and regression tests. All relevant inspection commands succeeded. One search
+used nonexistent test_saas_inbound.py (rg exit 2); actual origin test is in
+test_saas_delegation_dispatch.py. Windows rg wildcard path errors in exploratory
+searches were corrected with explicit paths; no test result inferred from them.
+
+Runner and snapshot prepared from the tracked-source T1 harness, excluding env
+and credential files; exact runners retained in `a1-evidence/`. Initial WSL
+invocation returned E_ACCESSDENIED before execution. Identical command with
+sandbox escalation executed successfully:
+
+```powershell
+wsl -d Ubuntu -u root -- bash '/mnt/d/Projects/Work Projects/The Osiris Labs/ManyOsirisChat/docs/saas-delegation/a1-evidence/run-tests.sh'
+```
+
+Nested command, from fresh `/var/tmp/many-a1-20261028/backend`:
+
+```sh
+APP_ENV=test TEST_DATABASE_URL="$TEST_DATABASE_URL" pytest tests/test_saas_*.py -q --junitxml="$evidence/tests.xml" >"$evidence/tests.log" 2>&1
+```
+
+**418 passed, zero failures/errors/skips, 2 dependency warnings, 92.99 seconds;
+exit 0.** JUnit counts independently asserted. Explicit TEST_DATABASE_URL
+selected disposable `many_test` on Unix socket
+`/var/tmp/many-t0-20261028/socket`, port 55432. No TCP listener; DATABASE_URL
+was an unreachable required-setting sentinel; conftest selection and actual DB
+identity asserted before pytest. Private Redis in loopback-only network
+namespace, flushed before run. PostgreSQL and Redis shutdown succeeded.
+[Log](a1-evidence/tests.log), [JUnit](a1-evidence/tests.xml). Source ZIP removed
+after validation; reproducible runner retained. Full suites/lint/type checks
+not run here: UNVERIFIED, deferred to final integration per owner instruction.
+
+Owner revised workflow: proceed through all batches autonomously; targeted
+checks per change, full suites once after integration, rerun only to investigate
+failures or validate new edits. Explicit live/network/paid/push/deployment and
+main-merge approvals remain required. Public Meta documentation lookup approved.
+D5 deferred by owner: leave OPEN and report at Batch A completion. A16 draft
+requires owner confirmation before B2/C2. Groups 1, 2 and 6 started in isolated
+worktrees with disjoint file ownership; no batch marked complete.
+
+Both existing plan copies verified SHA256
+`D005F8B2DD9D9BE974F6E9097EFF1DDEED9DE020AC63D51BC8BC173E584B871B`.
+The SaaS plan is in `../SAAS-chats-ai/implementation/CLOSEOUT-PLAN.md`;
+`../SAAS-chats-ai-phase6/implementation/CLOSEOUT-PLAN.md` does not exist.
