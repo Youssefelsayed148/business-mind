@@ -70,24 +70,38 @@ def _find_or_create_conversation(db: Session, platform: str, channel, lead) -> C
     )
 
 
+# Only a message Many actually got out can be the "text Many delivered" (A11);
+# queued or failed campaign messages never count.
+_DELIVERED_STATUSES = ("sent", "delivered", "read")
+
+
 def _origin(db: Session, platform: str, lead) -> dict | None:
     """Campaign context (contract A11): campaign name and the text Many
-    delivered. Sent on every forwarded message of such a conversation."""
-    query = db.query(Message).filter(Message.lead_id == lead.id, Message.direction == "outbound")
+    delivered. Sent on every forwarded message of such a conversation.
+
+    Picks the newest campaign message that was really sent (queued or failed
+    ones never count), with id as a stable tie-break."""
+    query = db.query(Message).filter(
+        Message.lead_id == lead.id,
+        Message.direction == "outbound",
+        Message.status.in_(_DELIVERED_STATUSES),
+    )
     if platform == "whatsapp":
         message = (
-            query.filter(Message.whatsapp_campaign_id.isnot(None)).order_by(Message.created_at.desc()).first()
+            query.filter(Message.whatsapp_campaign_id.isnot(None)).order_by(Message.created_at.desc(), Message.id.desc()).first()
         )
         campaign = db.get(WhatsappCampaign, message.whatsapp_campaign_id) if message else None
     elif platform == "facebook":
         message = (
-            query.filter(Message.facebook_campaign_id.isnot(None)).order_by(Message.created_at.desc()).first()
+            query.filter(Message.facebook_campaign_id.isnot(None)).order_by(Message.created_at.desc(), Message.id.desc()).first()
         )
         campaign = db.get(FacebookCampaign, message.facebook_campaign_id) if message else None
     else:
         message = (
             query.filter(Message.campaign_id.isnot(None))
-            .order_by((Message.message_type == "final_delivery").desc(), Message.created_at.desc())
+            .order_by(
+                (Message.message_type == "final_delivery").desc(), Message.created_at.desc(), Message.id.desc()
+            )
             .first()
         )
         campaign = db.get(Campaign, message.campaign_id) if message else None

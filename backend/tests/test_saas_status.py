@@ -3,7 +3,7 @@ platform, delivered/read/failed from the WhatsApp status webhook, error
 mapping on the wire, and delivery through the ordered/retried outbox."""
 
 import json
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from unittest.mock import patch
 
 import httpx
@@ -256,6 +256,7 @@ def test_failed_status_is_retried_with_the_same_event_id(db_session, clients):  
     client = httpx.Client(transport=httpx.MockTransport(handler), follow_redirects=False)
     first = fwd.process_ordering_key(db_session, str(w.conv.id), client=client)
     assert first.retry_in and first.sent == 0
-    later = datetime.now(timezone.utc).replace(year=2100)
+    # past the backoff but well inside the 24 h budget
+    later = datetime.now(timezone.utc) + timedelta(hours=1)
     second = fwd.process_ordering_key(db_session, str(w.conv.id), client=client, now=later)
     assert second.sent == 1 and ids[0] == ids[1]

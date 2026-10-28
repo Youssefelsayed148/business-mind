@@ -312,6 +312,12 @@ def test_instagram_delegated_reuses_existing_campaign_conversation(db_session):
                            status="sent"))
     db_session.commit()
 
+    # T1-P3: queued/failed campaign messages must never supply the origin.
+    for status, body in (("queued", "queued text"), ("failed", "failed text")):
+        db_session.add(Message(campaign_id=campaign.id, lead_id=lead.id, direction="outbound",
+                               message_type="final_delivery", rendered_body=body, status=status))
+    db_session.commit()
+
     _run(db_session, ig_payload(acc.ig_user_id, "9000012", "thanks, how do I use it?", "mid.ig2"), "instagram")
     [event] = _events(db_session, acc)
     assert event.ordering_key == str(existing.id)

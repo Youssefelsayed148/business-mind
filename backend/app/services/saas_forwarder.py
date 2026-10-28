@@ -17,6 +17,7 @@ import json
 import logging
 import random
 import uuid
+from email.utils import parsedate_to_datetime
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 
@@ -39,7 +40,6 @@ EVENTS_PATH = "/api/channels/manyosiris/events"
 RETRY_BUDGET = timedelta(hours=24)
 BACKOFF_BASE_SECONDS = 5
 BACKOFF_CAP_SECONDS = 30 * 60
-RETRY_AFTER_CAP_SECONDS = 60 * 60
 # Retention (F-02). A failed event keeps its payload so an operator can replay
 # it; the message text is cleared after FAILED_PAYLOAD_RETENTION. Terminal
 # rows and the outbound idempotency records go after TERMINAL_ROW_RETENTION
@@ -227,14 +227,23 @@ def backoff_seconds(attempts: int, rng: random.Random | None = None) -> float:
     return ceiling / 2 + rng.uniform(0, ceiling / 2)
 
 
-def _retry_after(response: httpx.Response) -> float | None:
-    value = response.headers.get("Retry-After")
+def _retry_after(response: httpx.Response, now: datetime) -> float | None:
+    """Seconds to wait per Retry-After: delta-seconds or an HTTP-date.
+    Uncapped here; the caller bounds it by the remaining 24 h budget."""
+    value = (response.headers.get("Retry-After") or "").strip()
     if not value:
         return None
     try:
-        return max(0.0, min(float(value), RETRY_AFTER_CAP_SECONDS))
+        return max(0.0, float(value))
     except ValueError:
+        pass
+    try:
+        when = parsedate_to_datetime(value)
+    except (TypeError, ValueError):
         return None
+    if when.tzinfo is None:
+        when = when.replace(tzinfo=timezone.utc)
+    return max(0.0, (when - now).total_seconds())
 
 
 @dataclass
@@ -276,17 +285,25 @@ def process_ordering_key(
             )
             if head is None:
                 return result
-            if head.next_attempt_at and head.next_attempt_at > current:
-                result.retry_in = (head.next_attempt_at - current).total_seconds()
-                return result
-
             channel = db.get(CHANNEL_MODELS[head.platform], head.channel_id)
+            if _expired(head, current):
+                # Section 6: nothing is sent or waited on past the 24 h budget.
+                _finish(head, "failed", "retry_budget_exhausted (expired before send)", current)
+                if channel is not None:
+                    _record(channel, "retry_budget_exhausted", degraded=True, now=current)
+                db.commit()
+                result.failed += 1
+                continue
             if channel is None or not channel.saas_delegation_enabled:
                 # A13: switched off (or gone) -> never send queued events.
                 drop_pending(db, platform=head.platform, channel_id=head.channel_id)
                 db.commit()
                 result.dropped += 1
                 continue
+
+            if head.next_attempt_at and head.next_attempt_at > current:
+                result.retry_in = (head.next_attempt_at - current).total_seconds()
+                return result
 
             outcome = _attempt(db, head, channel, client, current, rng)
             db.commit()
@@ -300,6 +317,10 @@ def process_ordering_key(
     finally:
         if owns_client:
             client.close()
+
+
+def _expired(row: SaasForwardEvent, current: datetime) -> bool:
+    return current - (row.created_at or current) >= RETRY_BUDGET
 
 
 def _attempt(db, row: SaasForwardEvent, channel, client, current: datetime, rng) -> str:
@@ -334,7 +355,7 @@ def _attempt(db, row: SaasForwardEvent, channel, client, current: datetime, rng)
             return "sent"
         if code >= 500 or code == 429:
             error = f"http_{code}"
-            retry_after = _retry_after(response) if code == 429 else None
+            retry_after = _retry_after(response, current) if code in (429, 503) else None
         elif code == 401:
             # A15: retryable, the operator may still be entering the new secret.
             error = "http_401"
@@ -350,13 +371,10 @@ def _attempt(db, row: SaasForwardEvent, channel, client, current: datetime, rng)
             return "failed"
 
     created = row.created_at or current
-    if current - created >= RETRY_BUDGET:
-        _finish(row, "failed", f"retry_budget_exhausted ({error})", current)
-        _record(channel, "retry_budget_exhausted", degraded=True, now=current)
-        return "failed"
-
     delay = max(backoff_seconds(row.attempts, rng), retry_after or 0.0)
-    row.next_attempt_at = current + timedelta(seconds=delay)
+    # Never wait past the deadline: the next pass then fails the row cleanly.
+    deadline = created + RETRY_BUDGET
+    row.next_attempt_at = min(current + timedelta(seconds=delay), deadline)
     row.last_error = error[:200]
     _record(channel, retry_status, degraded=True, now=current)
     return "retry"

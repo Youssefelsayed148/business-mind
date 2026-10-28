@@ -206,8 +206,9 @@ def test_401_until_the_24h_budget_ends_fails_and_keeps_payload(db_session, accou
     result = fwd.process_ordering_key(db_session, "conv-1", client=saas.client(), now=T0)
     assert result.failed == 1
     row = _row(db_session, "e1")
-    assert row.status == "failed" and "retry_budget_exhausted" in row.last_error and "http_401" in row.last_error
+    assert row.status == "failed" and "retry_budget_exhausted" in row.last_error
     assert row.payload["text"] == "keep"
+    assert saas.requests == []  # expired: nothing is sent (T1-P1)
 
 
 @skip_if_no_db
@@ -257,9 +258,10 @@ def test_event_older_than_24h_fails_and_the_queue_continues(db_session, account)
     first = _row(db_session, "e1")
     first.created_at = T0 - timedelta(hours=24, minutes=1)
     db_session.commit()
-    saas = FakeSaas(_resp(500), _resp(202))
+    saas = FakeSaas(_resp(202))
     result = fwd.process_ordering_key(db_session, "conv-1", client=saas.client(), now=T0)
     assert result.failed == 1 and result.sent == 1
+    assert len(saas.requests) == 1  # only e2 was sent
     assert _row(db_session, "e1").status == "failed"
     assert "retry_budget_exhausted" in _row(db_session, "e1").last_error
     assert _row(db_session, "e2").status == "sent"
@@ -314,3 +316,55 @@ def test_backoff_grows_and_is_capped():
     values = [fwd.backoff_seconds(n, rng) for n in (1, 2, 4, 8, 20)]
     assert values[0] <= 5 and values[1] >= 5 and values[-1] <= fwd.BACKOFF_CAP_SECONDS
     assert values[3] > values[0]
+
+
+@skip_if_no_db
+def test_expired_event_is_not_delivered_even_if_the_saas_would_accept(db_session, account):
+    _enqueue(db_session, account, "e1")
+    _row(db_session, "e1").created_at = T0 - timedelta(hours=25)
+    db_session.commit()
+    saas = FakeSaas(_resp(202))
+    result = fwd.process_ordering_key(db_session, "conv-1", client=saas.client(), now=T0)
+    assert result.failed == 1 and result.sent == 0 and saas.requests == []
+
+
+@skip_if_no_db
+def test_wait_is_capped_at_the_deadline_then_the_event_fails_without_sending(db_session, account):
+    _enqueue(db_session, account, "e1")
+    _row(db_session, "e1").created_at = T0 - timedelta(hours=23, minutes=50)
+    db_session.commit()
+    saas = FakeSaas(_resp(429, {"Retry-After": "7200"}))
+    fwd.process_ordering_key(db_session, "conv-1", client=saas.client(), now=T0)
+    row = _row(db_session, "e1")
+    assert row.status == "pending"
+    assert row.next_attempt_at.astimezone(timezone.utc) <= T0 + timedelta(minutes=10, seconds=1)
+    later = T0 + timedelta(minutes=11)
+    result = fwd.process_ordering_key(db_session, "conv-1", client=FakeSaas(_resp(202)).client(), now=later)
+    assert result.failed == 1 and _row(db_session, "e1").status == "failed"
+
+
+@skip_if_no_db
+def test_retry_after_over_an_hour_is_honoured(db_session, account):
+    _enqueue(db_session, account, "e1")
+    fwd.process_ordering_key(
+        db_session, "conv-1", client=FakeSaas(_resp(429, {"Retry-After": "7200"})).client(), now=T0
+    )
+    assert _row(db_session, "e1").next_attempt_at.astimezone(timezone.utc) >= T0 + timedelta(seconds=7200)
+
+
+@skip_if_no_db
+def test_retry_after_http_date_and_503_are_honoured(db_session, account):
+    from email.utils import format_datetime
+
+    _enqueue(db_session, account, "e1")
+    when = format_datetime(T0 + timedelta(seconds=900), usegmt=True)
+    fwd.process_ordering_key(
+        db_session, "conv-1", client=FakeSaas(_resp(503, {"Retry-After": when})).client(), now=T0
+    )
+    assert _row(db_session, "e1").next_attempt_at.astimezone(timezone.utc) >= T0 + timedelta(seconds=900)
+
+
+def test_retry_after_parsing():
+    assert fwd._retry_after(_resp(429, {"Retry-After": "30"}), T0) == 30
+    assert fwd._retry_after(_resp(429, {"Retry-After": "garbage"}), T0) is None
+    assert fwd._retry_after(_resp(429), T0) is None

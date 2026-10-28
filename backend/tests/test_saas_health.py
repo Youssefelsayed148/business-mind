@@ -163,6 +163,11 @@ def test_health_events_are_delivered_by_the_signed_forwarder(db_session):
         seen.append(request)
         return httpx.Response(202, json={"status": "accepted"})
 
+    # created_at is the DB clock; align it with the fixed test clock (24 h budget).
+    from app.models.saas_forward_event import SaasForwardEvent
+
+    db_session.query(SaasForwardEvent).update({"created_at": NOW})
+    db_session.commit()
     client_ = httpx.Client(transport=httpx.MockTransport(handler))
     res = fwd.process_ordering_key(db_session, f"channel:whatsapp:{w.channel.id}", client=client_, now=NOW)
     assert res.sent == 1 and len(seen) == 1
