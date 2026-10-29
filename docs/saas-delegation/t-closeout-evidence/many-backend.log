@@ -1,0 +1,54 @@
+........................................................................ [  7%]
+........................................................................ [ 15%]
+........................................................................ [ 23%]
+........................................................................ [ 31%]
+........................................................................ [ 39%]
+........................................................................ [ 47%]
+........................................................................ [ 55%]
+........................................................................ [ 63%]
+........................................................................ [ 71%]
+........................................................................ [ 79%]
+........................................................................ [ 86%]
+........................................................................ [ 94%]
+...............................................                          [100%]
+=============================== warnings summary ===============================
+../../../many-t0-20261028/venv/lib/python3.11/site-packages/passlib/utils/__init__.py:854
+  /var/tmp/many-t0-20261028/venv/lib/python3.11/site-packages/passlib/utils/__init__.py:854: DeprecationWarning: 'crypt' is deprecated and slated for removal in Python 3.13
+    from crypt import crypt as _crypt
+
+tests/test_auth.py::test_login_returns_token
+  /var/tmp/many-t0-20261028/venv/lib/python3.11/site-packages/passlib/handlers/argon2.py:716: DeprecationWarning: Accessing argon2.__version__ is deprecated and will be removed in a future release. Use importlib.metadata directly to query for argon2-cffi's packaging metadata.
+    _argon2_cffi.__version__, max_version)
+
+tests/test_campaigns.py::test_invalid_template_variable_rejected
+  /var/tmp/many-closeout-t-20261028-02/source/backend/tests/test_campaigns.py:143: StarletteDeprecationWarning: 'HTTP_422_UNPROCESSABLE_ENTITY' is deprecated. Use 'HTTP_422_UNPROCESSABLE_CONTENT' instead.
+    create_campaign(
+
+tests/test_campaigns.py::test_activate_fails_with_no_keywords
+tests/test_campaigns.py::test_activate_fails_with_disconnected_account
+  /var/tmp/many-closeout-t-20261028-02/source/backend/app/services/campaign_service.py:298: StarletteDeprecationWarning: 'HTTP_422_UNPROCESSABLE_ENTITY' is deprecated. Use 'HTTP_422_UNPROCESSABLE_CONTENT' instead.
+    _validate_campaign_can_activate(db, campaign)
+
+tests/test_facebook_token_verification.py::test_callback_stops_before_exchange_when_verification_fails
+  /var/tmp/many-closeout-t-20261028-02/source/backend/tests/test_facebook_token_verification.py:139: DeprecationWarning: Call to deprecated setex. (Use 'set' instead.) -- Deprecated since version 2.6.12.
+    Redis.from_url(settings.REDIS_URL, decode_responses=True).setex(f"facebook_oauth_state:{state}", 600, "1")
+
+tests/test_instagram_routes.py::test_reconnect_restores_account_and_token_without_reactivating_campaigns
+  /var/tmp/many-closeout-t-20261028-02/source/backend/app/api/routes_instagram.py:193: DeprecationWarning: Call to deprecated setex. (Use 'set' instead.) -- Deprecated since version 2.6.12.
+    _r.setex(f"oauth_state:{state}", 600, str(account_id))
+
+tests/test_whatsapp_e2e.py: 33 warnings
+  /var/tmp/many-closeout-t-20261028-02/source/backend/app/workers/whatsapp_tasks.py:190: DeprecationWarning: Call to deprecated setex. (Use 'set' instead.) -- Deprecated since version 2.6.12.
+    _redis().setex(_dispatch_heartbeat_key(campaign_id), ttl, "1")
+
+tests/test_whatsapp_e2e.py: 16 warnings
+  /var/tmp/many-closeout-t-20261028-02/source/backend/app/workers/whatsapp_tasks.py:163: DeprecationWarning: Call to deprecated setex. (Use 'set' instead.) -- Deprecated since version 2.6.12.
+    _redis().setex(key, _bounded_ttl(seconds), reason)
+
+tests/test_workspace_scoping.py::test_cross_workspace_whatsapp_reconnect_returns_409_and_leaves_row_untouched
+tests/test_workspace_scoping.py::test_cross_workspace_facebook_reconnect_reports_conflict_and_leaves_row_untouched
+  /var/tmp/many-closeout-t-20261028-02/source/backend/tests/test_workspace_scoping.py:81: DeprecationWarning: Call to deprecated setex. (Use 'set' instead.) -- Deprecated since version 2.6.12.
+    Redis.from_url(settings.REDIS_URL, decode_responses=True).setex(
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+911 passed, 58 warnings in 129.45s (0:02:09)

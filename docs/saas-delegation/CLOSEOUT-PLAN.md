@@ -3,8 +3,8 @@
 Written 2026-10-28 for the owner. Same file lives in both repos (SaaS: `implementation/CLOSEOUT-PLAN.md`, Many: `docs/saas-delegation/CLOSEOUT-PLAN.md`); keep them identical.
 
 Repos and branches
-- Many: `D:\Projects\Work Projects\The Osiris Labs\ManyOsirisChat`, branch `feature/saas-delegation` (head 13c7873; T1 fixes already committed in ed91c04).
-- SaaS: `...\SAAS-chats-ai-phase6`, branch `feature/phase-6-channels` (head 5fa72f7), not merged to `main`.
+- Many: integrated `.closeout-worktrees/batch-b`, `closeout/batch-b`, application commit `6dc4bb9bc7a30735f994cad25c2a0cbdd91cd6cf` (2026-10-29); handoff documentation follows. Reviewed Batch T/A5 corrections and CSV workspace fix committed; R1 implemented locally. See PROGRESS.md.
+- SaaS: integrated `.closeout-worktrees/batch-c`, `closeout/batch-c`, `86c992dafee0caf36f4b26e861e6a89bf1de17f1` (verified with git rev-parse HEAD). SaaS suites were not run by this Many-side session. Neither application branch is merged to `main`.
 - Contract source of truth: SaaS `implementation/PHASE-06-V2/many-pack/CONTRACT-V1.md` + `CONTRACT-V1.1-DELTA.md`, copied byte-for-byte into Many (`CONTRACT.sha256`).
 
 ## Owner decisions recorded
@@ -15,7 +15,7 @@ Repos and branches
 | D2 | Hosting (ADR-007): the SaaS is **already deployed** (VPS, Docker, Caddy, `scripts/deploy.sh`). Close-out only **rebuilds** it. Record ADR-007 as decided | Decided (owner); ADR-007 hosting text recorded in C1; runtime rebuild pending |
 | D3 | Deletion across both apps | Recommendation accepted by owner; A16 text approved 2026-10-28; implementation verification pending |
 | D4 | Screencasts show Many's native flows per permission plus one delegated conversation; privacy discloses the SaaS | Owner follows recommendation; confirm evidence/recording text before publication |
-| D5 | Instagram unsupported-message diff (`59d3442`) | OPEN, must be answered before gate A closes |
+| D5 | Instagram unsupported-message forwarding for delegated accounts (`59d3442`) | CONFIRMED (owner, 2026-10-28): keep commit `59d3442` |
 | D6 | Expired Meta token file ("popeye access token.txt") | Owner: ignore |
 
 ## D3 review: what happens today with deletion
@@ -44,25 +44,25 @@ Recommendation
 
 | ID | Pri | Item | Repo | Batch |
 |---|---|---|---|---|
-| R1 | P0 | PARTIAL: signed callbacks, durable operator ledger/status, verified mapped token revocation; automatic OAuth subject mapping and full FB/WA admin erasure unresolved | Many | B |
+| R1 | P0 | [x] Local owner-approved identity policy/schema and two-phase FB/WA erasure implemented; typed unresolved provider context, scoped callbacks and migration 0030. R1-IMPLEMENTATION.md records 38 final R1-only passes, 62 related passes, migration/drift evidence and limits. Full clean-head integration, staging and unresolved-identity operator remediation remain UNVERIFIED | Many | B |
 | R2 | P0 | IMPLEMENTED: A16 producer/receiver, hashed dedupe, runbooks; Many 87 / SaaS 78 distinct latest targeted passes. Full integrated/live verification pending; Many in-flight quiescence remains operational requirement | Many + SaaS | B, C |
 | R3 | P0 | Draft policies implemented in both apps with processor/retention/erasure wording; targeted type/browser checks pass. Owner publication review pending | Many + SaaS | B, C |
 | R4 | P0 | [x] Key template + API/worker Compose passthrough, fail-closed backup, actual DOMAIN public URL and worker wiring documented;6 source checks pass. Runtime rebuild UNVERIFIED | SaaS | C |
 | R5 | P0 | Phase 6 merge to `main` with green Playwright (D1) | SaaS | C |
 | R6 | P0 | Business Verification + Tech Provider status (long lead; **start now**) | Meta | E (start day 1) |
 | R7 | P0 | Meta dashboard settings and real permission sets for Facebook and WhatsApp; remove `pages_manage_engagement` | Meta | E |
-| R8 | P0 | Graph `v21.0` possibly sunset: check changelog, bump, retest | Many | A |
-| R9 | P0 | [x] Migration 0019 guards/drift checks; actual empty?head, 0022?head and downgrade/upgrade pass (A2 evidence; independent review) | Many | A |
-| R10 | P0 | Fixture repairs: 66 targeted cases pass in latest execution across retained attempts; final full suite pending | Many | A |
+| R8 | P0 | [x] Local A5: owner approved v26.0 after Meta official SDK evidence; config/examples/docs updated, all version pins reviewed and 237 related tests pass. Public changelog remains inaccessible; live compatibility/dashboard settings UNVERIFIED (a5-closeout-evidence) | Many | A |
+| R9 | P0 | [x] Fresh Batch T empty-to-head, 0022-to-head, downgrade-to-0022/reupgrade pass. Initial Alembic drift corrected by registering processed-event metadata/index; fresh alembic check passes (t-closeout-evidence) | Many | A, T |
+| R10 | P0 | Full backend at e284afd: 911 passed, 0 failed/errors/skipped. Subsequent metadata/fixture corrections: 10 focused backend and 29 script tests pass. Final post-implementation full suite remains pending at A5 stop | Many | A, T |
 | R11 | P1 | [x] T1 fixes committed as ed91c04; A1 rerun: 418 passed, 0 failures/errors/skips (a1-evidence/tests.xml) | Many | A |
-| R12 | P1 | Instagram diff decision (D5) | Many | A |
+| R12 | P1 | [x] D5 CONFIRMED by owner (2026-10-28): keep `59d3442`, Instagram unsupported-message forwarding for delegated accounts. Full-suite verification remains required | Many | A |
 | R13 | P1 | [x] Raw forwarding headers ignored; explicit proxy peers replace wildcard (25 focused pytest tests; A6 review) | Many | A |
 | R14 | P1 | [x] UTF-8 byte compare_digest with rejection/call regression tests (A6 evidence) | Many | A |
 | R15 | P1 | [x] Read-only selected-channel HTTPS/secret-presence/enabled checks + independent beat observation (20 canary tests; A7 review) | Many | A |
 | R16 | P1 | Canary on staging with rotation drill, replay, 429, expiry, take-over, rollback | Both | D |
-| R17 | P1 | AI policy wording (business support only), 24 h window (no human-agent tag) in review text | Many/Meta | B, E |
+| R17 | P1 | [x] Local review/policy text states business-support AI disclosure, 24 h messaging rule, existing WA free-entry exception, no human-agent tag and local rejection outside the applicable window. R17-B4-IMPLEMENTATION.md: policy tsc/lint and nine UNVERIFIED D4 evidence rows. Owner publication/recordings pending | Many/Meta | B, E |
 | R18 | P1 | IMPLEMENTED repairs: 31 targeted API passes; 17 distinct latest Playwright passes include all 12 historical failures. Full suites/D1 gate deferred to new session | SaaS | C |
-| R19 | P2 | CSV phone guard `-1-1`; health-poll index; `alembic check` drift (`bots.uq_bots_widget_locator`, `provisioning_requests`); undefined S10; `webhook_unhealthy` provider-global; CI workflow never run | Both | A, C |
+| R19 | P2 | [x] Local fixes/verification: Many model registry/index alignment and CSV formula output guard (3 related + 8 expanded CSV passes); SaaS existing phone guard/index/model alignment verified by 41 tests and actual index roundtrip/clean drift. No current S10; both manual CI YAMLs parse/static-check only. R19-VERIFICATION.md records limits; legacy Many CSV workspace leak proven and fixed (14 CSV passes, 2026-10-29); full/hosted checks pending. webhook_unhealthy stays provider-global | Both | A, C, T |
 
 ## Batches
 
@@ -77,14 +77,17 @@ Tickets
 - A5 Graph version bump after checking Meta changelog (R8): config, tests, docs.
 - A6 forwarded-IP trust and verify-token `compare_digest` (R13, R14).
 - A7 preflight delegation checks (R15).
-- A8 owner answers D5; then confirm or drop the Instagram commit.
-Gate A: full Many suite results listed (pass count, every remaining failure explained), migration evidence, nothing pushed.
+- A8 [x] D5 CONFIRMED by owner (2026-10-28): keep commit `59d3442` (Instagram unsupported-message forwarding for delegated accounts).
+Gate A: D5 owner decision is resolved (CONFIRMED: keep `59d3442`); this does not close the gate. Full Many suite results must be listed (pass count, every remaining failure explained), with migration evidence and nothing pushed.
+
+Full-suite checklist:
+- [ ] `backend/tests/test_saas_unsupported_instagram.py` must pass in the final full backend suite; record its result in the suite evidence. No new test run or passing result is claimed by this documentation update.
 
 ### Batch B: Meta compliance, Many side (Many repo)
 - B1 deauthorize + data-deletion callbacks, `signed_request` verification, status page, tests (R1).
 - B2 end-customer erasure service + admin route + `webhook_events` purge task; delegated channels queue `contact.erasure` (R2). Blocked on C2 for the receiver, but the Many half can be built against the fake SaaS.
 - B3 privacy and terms rewrite (SaaS processor, retention reality, deletion routes, 24 h window, AI disclosure) (R3, R17).
-- B4 update `docs/meta-app-review-submission.md` (remove unverified claims, delegation description, A16).
+- [x] B4 local review pack and policy consistency updated after R1 f3a7de0; source-backed delegation/A16/callback/retention text and nine UNVERIFIED permission evidence rows. Policy tsc/lint pass; R17-B4-IMPLEMENTATION.md. Owner publication and D4 recordings pending.
 Gate B: owner reads policy text; callback tests green; contract amendment text agreed.
 
 ### Batch C: SaaS readiness (SaaS repo)
@@ -133,7 +136,7 @@ Lead responsibilities
 - Merge worker branches into the batch branch in order, rerun the batch tests, update `PROGRESS.md` in each repo, then stop for the owner gate.
 - Keep this file's backlog table current; tick an item only with evidence.
 
-## Current owner execution update ? 2026-10-28
+## Current owner execution update - 2026-10-28
 
 This update supersedes earlier requirements to wait for a separate go or stop
 at every batch gate: proceed through all batches autonomously, run related
@@ -141,7 +144,7 @@ checks for each change, and run the full suites once after local integration.
 Repeat tests only when new changes or failures justify it. It does not authorize
 pushes, main merges, deployment, live sends, paid calls, authenticated external
 service calls, or cloud resources. Public Meta documentation lookup is approved.
-D5 is deferred by the owner: leave OPEN and report at Batch A completion.
+D5 was deferred in this earlier update; superseded by the 2026-10-28 owner decision: CONFIRMED, keep `59d3442`.
 A16 approved by owner and adopted locally in synchronized contracts/manifests.
 Text: Many `docs/saas-delegation/A16-PROPOSED.md` (historic name; ADOPTED status).
 Many commit bfb1cc8, SaaS batch-c205bdab; producer/receiver verification pending.
@@ -176,7 +179,7 @@ integrated/live verification remains pending.
 The synchronized SaaS plan copy is in SAAS-chats-ai/implementation, not the
 SAAS-chats-ai-phase6 checkout. Keep the two existing copies byte-identical.
 
-## Final implementation handoff ? 2026-10-28
+## Final implementation handoff - 2026-10-28
 
 Latest owner instruction: finish the three remaining implementations, then give
 an exact prompt for full testing in a NEW SESSION. No full integrated suites
@@ -195,11 +198,39 @@ closeout/batch-c1ee703e; only final lead documentation/source-check updates foll
 Full testing prompt: Many docs/saas-delegation/TESTING-HANDOFF.md. Single source
 migration heads: Many0029_hash_processed_event_keys; SaaS0031_contact_erasure.
 
-Still OPEN: D5 (owner deferred), A5 primary Graph-version evidence (official429),
+At this handoff, OPEN items included D5 (owner deferred; now superseded by CONFIRMED: keep `59d3442`), A5 primary Graph-version evidence (official429),
 R1 automatic Meta admin mapping/full FBWA admin erasure, full integrated suites,
 D1 full Playwright gate, staging/live canary, owner-run Meta verification/settings,
 main merge/rebuild/deployment/submission approvals. No release gate is closed by
 targeted tests. No push, main merge, deployment, live send or paid call occurred.
 
+## Many-side testing update - 2026-10-28
+
+Batch T ran once on a fresh allowlisted snapshot of Many e284afd: 911 backend
+passes, zero failures/errors/skips; contract hashes pass; dashboard tsc/lint
+pass (one lint warning). Migration rehearsals pass. Two stale canary fixtures
+and real metadata drift were corrected locally with 10 focused backend passes,
+29 script passes and a clean fresh Alembic check. No full-suite result is claimed
+for later application changes. See PROGRESS.md and t-closeout-evidence.
+
+A5 resumed after Meta's official Node SDK source established a v26.0 pin and the
+owner explicitly approved that target. Local upgrade and 237 related tests pass;
+no live compatibility claim. R1 design is now concrete and awaits the required
+owner gate before migration. Unproven provider subject namespaces remain a
+blocking question, not an inferred mapping. R17/B4 re-check, remaining R19 and
+D/E preparation are pending behind this ordered R1 stop. No migration added.
+D5 is now CONFIRMED by owner (2026-10-28): keep `59d3442`; no code changed for this decision. Merge plan documented only; no merge executed.
+
 ## Standing rules
 No push, merge, deploy, live send or paid call without separate approval. Meta tokens and webhooks stay in Many only. Tenant scope on every SaaS query, with A/B tests. Alembic migrations only. Record exact commands and outcomes in `PROGRESS.md`.
+
+## CSV/handoff close-out update - 2026-10-29
+
+This update supersedes historical source-head and pending-review statements above.
+Reviewed Batch T/A5 changes and legacy CSV authorization fix are committed in the
+Many application commit listed at the top. CSV A/B regressions first proved leaks
+on all three platforms; after workspace and label scoping, 14 related tests pass.
+No full-suite result is claimed. TESTING-HANDOFF.md pins the actual application
+commits and verified single migration source heads: Many 0030_meta_account_erasure,
+SaaS 0031_contact_erasure. R1/R17 implementation reports supersede older proposal
+status. Staging, unresolved identity remediation and owner release gates remain.

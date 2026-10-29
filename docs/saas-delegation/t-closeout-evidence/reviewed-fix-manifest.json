@@ -1,0 +1,18 @@
+[
+  {
+    "path": "backend/app/models/__init__.py",
+    "sha256": "81d554f8da60ecb8ecd250ff3dc00d26f0f655aa171757db1788fe3b7b5a9b39"
+  },
+  {
+    "path": "backend/app/models/processed_webhook_event.py",
+    "sha256": "7d175a2deae3ef7e59c6362a661acb9bcc7d7db765f80c37013ed42cce246b41"
+  },
+  {
+    "path": "backend/tests/test_model_registry.py",
+    "sha256": "676b96d2dfea1fe9227a911fd17b11bb4ffb831f722fd98ac46033d67734735a"
+  },
+  {
+    "path": "scripts/test_canary_preflight.py",
+    "sha256": "4567c7ce4df94945adf717243c1227a8e31ddb27d56dbbde3ecb48e55eb6560b"
+  }
+]

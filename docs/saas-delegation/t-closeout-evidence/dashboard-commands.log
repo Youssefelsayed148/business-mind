@@ -1,0 +1,8 @@
+npm ci --offline --ignore-scripts --no-audit --no-fund 
+dashboard-install exit=1 duration=2s
+npm ci --offline --ignore-scripts --no-audit --no-fund 
+dashboard-install exit=0 duration=8s
+npx --no-install tsc --noEmit --incremental false 
+dashboard-tsc exit=0 duration=2s
+npm run lint 
+dashboard-lint exit=0 duration=2s

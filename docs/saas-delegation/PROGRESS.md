@@ -1213,3 +1213,307 @@ worker teardown; tooling/worktrees/evidence retained.
 New-session prompt: **TESTING-HANDOFF.md**. It identifies exact worktrees, cached
 Linux Python/Node/browser paths, fresh-cluster/socket safety, source-snapshot
 secret exclusions, full-suite commands, evidence rules and unresolved gates.
+
+## Many Batch T execution and A5 stop - 2026-10-28
+
+Verified source: Many closeout/batch-b
+`e284afd2d8866dd75c551404306e23c015d8c7cc`, initially clean; original docs-only
+feature/saas-delegation `db12511754862b7d1a05a8b5ac6ad459045b6a36`.
+SaaS closeout/batch-c `c70c5c3d2c77e26911651c32c600564e2c45a5fa`, clean;
+its application base is 1ee703e followed by the handoff commit. SaaS suites
+were not requested/run in this Many-side execution and remain UNVERIFIED here.
+
+Evidence directory: `docs/saas-delegation/t-closeout-evidence/` (E below).
+Fresh snapshot file hashes/provenance: E/source-manifest.json; exactly four
+reviewed uncommitted corrections later copied with E/reviewed-fix-manifest.json.
+No overlays from worker trees. No env/token file or forbidden token was read,
+copied or hashed. Source snapshot/DBs/node_modules remain outside the repository.
+All application tests used an env-cleared loopback-only network namespace,
+private Unix-socket PostgreSQL 18 initialized in this session, and private Redis
+where needed. Only run-owned processes were stopped, with teardown confirmed.
+No provider credentials were inherited. Synthetic settings only; generated
+test key never intentionally printed (initial Pydantic error displayed a partial
+synthetic value; sanitized in retained logs). No authenticated external call.
+
+### Exact validation commands, exits and counts
+
+All commands below ran from the fresh source snapshot. Backend cwd:
+`/var/tmp/many-closeout-t-20261028-02/source/backend`; root commands from its
+parent; dashboard from its dashboard subdirectory. Python is cached Many 3.11;
+Node is cached 24.22.1. Every Python/pytest/Alembic validation was invoked with
+explicit `APP_ENV=test TEST_DATABASE_URL="$TEST_DATABASE_URL"`; DATABASE_URL
+was explicitly the same private target. Host/name were printed and actual
+`current_database()` asserted before each group. Backend conftest's selected
+target and DB_AVAILABLE were asserted before the full run.
+
+Initial cluster URL expansion:
+`postgresql+psycopg://postgres@/<DB>?host=/var/tmp/many-closeout-t-20261028-02/socket&port=55461`.
+Command spelling and wall seconds also retained in E/commands.log.
+
+| DB | Command | Exit | Result |
+| --- | --- | --- | --- |
+| many_test_closeout_t | `pytest tests -q --junitxml="$evidence/many-backend.xml"` | 0 | 911 passed, 0 failed/errors/skipped, 58 warnings; 129.45 s console, 129.443 s JUnit |
+| many_test_closeout_canary | `python -m unittest discover -s scripts -p 'test_*.py' -v` | 1 | 29 run, 27 passed, 2 failed, 0 errors/skips; 1.059 s |
+| same | `python scripts/check_contract_copies.py` | 0 | 3 hashes match |
+| many_test_closeout_empty | `alembic heads` | 0 | single 0029_hash_processed_event_keys |
+| same | `alembic upgrade head` | 0 | empty-to-head |
+| same | `alembic check` | 255 | real model registry/index drift for processed_webhook_events |
+| same | `alembic downgrade 0022_whatsapp_opt_in` | 0 | disposable empty synthetic schema only |
+| same | `alembic upgrade head` | 0 | reupgrade |
+| many_test_closeout_0022 | `alembic upgrade 0022_whatsapp_opt_in` | 0 | fresh baseline |
+| same | `alembic upgrade head` | 0 | 0022-to-head |
+
+Here `$evidence` expands to
+`/mnt/d/Projects/Work Projects/The Osiris Labs/ManyOsirisChat/docs/saas-delegation/t-closeout-evidence`.
+
+Dashboard (env cleared, network isolated for checks; E/dashboard-commands.log):
+
+| Command | Exit | Result |
+| --- | --- | --- |
+| `npm ci --offline --ignore-scripts --no-audit --no-fund` | 1 | missing cached yaml-2.9.0, ENOTCACHED; no checks ran |
+| `npm ci --ignore-scripts --no-audit --no-fund` | 0 | public locked dependency fetch outside netns, no package scripts; 393 packages/43 s |
+| `npm ci --offline --ignore-scripts --no-audit --no-fund` | 0 | cache now complete; 393 packages/8 s |
+| `npx --no-install tsc --noEmit --incremental false` | 0 | no errors, 2 s |
+| `npm run lint` | 0 | 0 errors, 1 existing accounts/page.tsx:510 missing toast dependency warning, 2 s |
+
+Npm reports the existing Next 14.2.23 security advisory/deprecations. No
+dependency upgrade was made in this testing batch; dependency security review
+is a remaining limitation. No authenticated registry or paid API was used.
+
+### Corrections and affected reruns (no second full suite)
+
+- `scripts/test_canary_preflight.py`: synthetic version fixture uses the actual
+  single source head instead of the last minimum required revision (0027).
+  All safety/old-revision/independent beat assertions remain intact.
+- `backend/app/models/__init__.py`: register ProcessedWebhookEvent so Alembic
+  sees it in a fresh process. `backend/app/models/processed_webhook_event.py`:
+  declare the already-migrated received_at index. No migration added.
+- `backend/tests/test_model_registry.py`: subprocess regression verifies a fresh
+  Base import includes the dedupe table and received_at index.
+
+First focused harness attempt mistakenly omitted required synthetic
+META_WEBHOOK_VERIFY_TOKEN: registry pytest exit 4 (no collection); empty-to-head
+and check each exit 1 (no migration ran); canary still 29 passed in 1.080 s,
+exit 0. Retained registry.log, fixed-empty-head.log, fixed-drift.log,
+canary-fixed.log and fix-commands.log. Harness outer exit 0 only means command
+capture/teardown completed, NOT that its validations passed. Added the missing
+dummy setting; retried on a second freshly initialized cluster, retaining logs.
+
+Successful focused cluster URL:
+`postgresql+psycopg://postgres@/<DB>?host=/var/tmp/many-closeout-t-fix-20261028-02/socket&port=55462`.
+APP_ENV/explicit URLs are set for every command. Results:
+
+| DB | Command | Exit | Result |
+| --- | --- | --- | --- |
+| many_test_closeout_registry | `pytest tests/test_model_registry.py tests/test_processed_event_service.py tests/test_processed_event_migration.py -q --junitxml="$evidence/registry2.xml"` | 0 | 10 passed, 0 failed/errors/skipped, 3.51 s console, 3.517 s JUnit |
+| many_test_closeout_drift | `alembic upgrade head` | 0 | fresh empty-to-head after metadata correction |
+| same | `alembic check` | 0 | No new upgrade operations detected |
+| many_test_closeout_canary_fixed | `python -m unittest discover -s scripts -p 'test_*.py' -v` | 0 | 29 passed, 0 failed/errors/skipped, 0.880 s |
+
+Full suite is green at e284afd, NOT claimed green for later uncommitted changes.
+Only affected checks rerun. Final full integrated source checks remain pending
+until A5 and the remaining ordered implementations/approval gates are resolved.
+
+### Harness invocation / preparation record
+
+All scripts referenced are under E; exact contents retained. Windows command
+prefix was `wsl -d Ubuntu -u root --`; invocations, in order:
+
+1. `wsl -l -q`: exit 1, sandbox WSL access denied. Escalated WSL tooling probe
+   `bash -c 'test -x /var/tmp/many-t0-20261028/venv/bin/python && test -x /usr/lib/postgresql/18/bin/initdb && command -v unshare && command -v redis-server'`:
+   exit 0. No DB/service touched by probe.
+2. `python3 "$evidence/prepare.py"`: exit 1 initially, Linux Git could not
+   resolve Windows worktree .git path. `bash "$evidence/run.sh"` then exit 1,
+   missing snapshot; its new cluster stopped. No tests ran in this attempt.
+3. Corrected Git metadata path explicitly; `python3 "$evidence/prepare.py"`
+   exit 0, 357 allowlisted files at e284afd, no overlays, new scratch suffix 02.
+4. `bash "$evidence/run.sh"`: exit 0 outer capture; validation statuses above.
+   Namespace env is cleared by `env -i`; E/inner.sh holds exact setup.
+5. `unshare --net env -i HOME=/root PATH=/usr/bin:/bin LANG=C.UTF-8 bash "$evidence/dashboard.sh"`:
+   first exit 1 (offline cache), second exit 0 after locked fetch.
+   Fetch invocation: `env -i HOME=/root PATH=/var/tmp/saas-closeout-tools/node-v24.22.1-linux-x64/bin:/usr/bin:/bin LANG=C.UTF-8 bash -c 'cd /var/tmp/many-closeout-t-20261028-02/source/dashboard && npm ci --ignore-scripts --no-audit --no-fund'`, exit 0.
+6. An inline Python nginx fixture copy failed with SyntaxError, exit 1, before
+   reading/writing files (PowerShell quoting). `python3 "$evidence/add-nginx.py"`
+   exit 0 copied only nginx/default.conf, updated manifest before canary tests.
+7. `python3 "$evidence/prepare-fix.py"`: exit 0, four explicitly reviewed files.
+8. `bash "$evidence/fix-run.sh"`: exit 0 outer capture on each of two runs;
+   individual first/second statuses above, unique fresh cluster each time.
+9. `git diff --check` in original and batch-b: exit 0 each. JUnit stdlib
+   extraction: exit 0, confirms 911 and 10 cases, zero failures/errors/skips.
+
+### A5 blocking stop and next work
+
+Public web.run primary-source requests: changelog, versions, versioning guide
+and release blog each HTTP 429; version26.0/apps versions inaccessible; two
+official-domain searches empty. Tool calls have no shell exit code. Exact URLs
+and queries: E/A5-PUBLIC-LOOKUP.md. Third-party results not accepted as evidence.
+No current-version/sunset assertion made and no version guessed or changed.
+Owner asked for exact target via pending async input; implementation STOPPED
+at A5 per explicit instruction. No new migration, merge or commit in this run.
+
+R1 OAuth mapping/admin erasure design and implementation, R17/B4 traceability
+re-check, remaining Many R19/undefined S10 clarification, D/E docs preparation
+remain NOT RUN/UNVERIFIED behind the ordered A5 stop. No permission for an R1
+migration has been requested without a concrete design. D5 stays OPEN;
+59d3442 ancestry verified (git merge-base --is-ancestor exit 0), untouched.
+Owner-run Meta steps, live canary, merge and deploy approvals remain open.
+
+Exact proposed feature integration sequence and verified merge base are in
+E/MERGE-PLAN.md. No merge executed; never main. Contract copies/manifests
+unchanged. Plan copies synchronized byte-for-byte; no gate ticked on a claim
+without retained evidence. No push/deploy/live send/paid API/cloud/real DB.
+
+Final evidence housekeeping: `python docs/saas-delegation/t-closeout-evidence/sanitize.py`
+exit 0; sanitized only partial generated synthetic settings in the three failed
+harness logs. Final `git diff --check` in original and batch-b exit 0 each.
+Explicit PowerShell `Copy-Item -LiteralPath` canonical CLOSEOUT-PLAN to the
+owner-named sibling SaaS path, followed by Get-FileHash SHA256 equality assertion,
+exit 0. Both plan bytes hash
+`68ba8569e5202919f83bc9cbf095b8f02a3b8eb49ca992b6b556c15a2ede9980`.
+No application file was changed after the final affected checks. Source SHA
+plus four-file reviewed-fix-manifest identifies exactly the tested correction.
+
+## A5 owner-approved upgrade and R1 design gate - 2026-10-28
+
+Supersedes the preceding A5 stop: the owner asked for a recommendation, then
+explicitly approved v26.0 ("yes approved go on"). Primary public source fetched:
+`https://raw.githubusercontent.com/facebook/facebook-nodejs-business-sdk/main/src/api.js`
+returns VERSION v26.0 and SDK_VERSION 26.0.2. This is Meta-owned SDK source,
+not evidence that every application endpoint is compatible. Further official
+changelog/versions/Instagram overview attempts returned 429/inaccessible;
+official-domain search empty. Python SDK candidate URL returned 404 and v26
+release blog candidate was inaccessible. No authenticated/provider call.
+
+Many remains based at `e284afd2d8866dd75c551404306e23c015d8c7cc`, with the
+four Batch T corrections plus A5 reviewed uncommitted changes. No commit made.
+SaaS last verified c70c5c3; no SaaS application changes or tests in this stage.
+
+Changed in batch-b:
+
+- `backend/app/core/config.py`, `.env.example`, `.env.production.example`:
+  source/template default v26.0. Real env files remain untouched/unread.
+- `backend/tests/test_meta_graph_version.py`: 32 cases cover all default clients,
+  explicit version overrides, Facebook/WA OAuth and Instagram profile/media
+  request URLs, and preserved unversioned Instagram login/token endpoints.
+- `README.md`, `docs/whatsapp-outreach-implementation.md`,
+  `docs/meta-app-review-submission.md`: approved version and verification limits;
+  README's stale Facebook-based Instagram OAuth description corrected to code.
+- Design only: `docs/saas-delegation/R1-DESIGN.md` in batch-b. NO R1 migration,
+  OAuth mapping or full FB/WA erasure implementation is claimed added yet.
+
+Version audit: `a5-closeout-evidence/version-audit.json`. All current Meta
+production client URLs use the shared setting, including graph.instagram.com.
+Synthetic v99.0 tests are intentionally retained. The stale batch-b plan's
+v21.0 row is replaced by the synchronized canonical plan; historical evidence
+is preserved. No Instagram dispatch/send implementation changed; D5 untouched.
+
+### Commands and results
+
+Evidence E=`docs/saas-delegation/a5-closeout-evidence` and WSL evidence path
+`/mnt/d/Projects/Work Projects/The Osiris Labs/ManyOsirisChat/docs/saas-delegation/a5-closeout-evidence`.
+Both invocations below exited 0:
+
+```text
+wsl -d Ubuntu -u root -- python3 '/mnt/d/Projects/Work Projects/The Osiris Labs/ManyOsirisChat/docs/saas-delegation/a5-closeout-evidence/prepare.py'
+wsl -d Ubuntu -u root -- bash '/mnt/d/Projects/Work Projects/The Osiris Labs/ManyOsirisChat/docs/saas-delegation/a5-closeout-evidence/run.sh'
+```
+
+Fresh source-only allowlist snapshot (387 files, no worker overlays) with
+source SHA/file hashes and reviewed uncommitted path list in E/source-manifest.json.
+Placeholder env templates read only for the default assertion, not copied.
+Tests run from `/var/tmp/many-closeout-a5-20261028-01/source/backend` inside
+env-cleared loopback-only namespace. New Postgres/Redis were started in this
+session and stopped in teardown. Host/name, actual current_database(), conftest
+DB_AVAILABLE/target and matching DATABASE_URL were asserted. Explicit env on
+pytest: APP_ENV=test,
+TEST_DATABASE_URL=postgresql+psycopg://postgres@/many_test_closeout_a5?host=/var/tmp/many-closeout-a5-20261028-01/socket&port=55463.
+DATABASE_URL explicitly the same. Exact test command (E is the expanded WSL
+evidence path above; commands.log also retains shell-escaped expansion):
+
+```sh
+APP_ENV=test TEST_DATABASE_URL="$TEST_DATABASE_URL" pytest tests/test_facebook_ai_conversation_turn.py tests/test_facebook_comment_dispatch.py tests/test_facebook_message_dispatch.py tests/test_facebook_psid_identity.py tests/test_facebook_send_recipient.py tests/test_facebook_token_verification.py tests/test_facebook_webhook_parser.py tests/test_instagram_token_refresh.py tests/test_message_retry.py tests/test_message_retry_platform_guard.py tests/test_meta_compliance.py tests/test_meta_errors.py tests/test_meta_graph_version.py tests/test_meta_integration.py tests/test_meta_webhook_signatures.py tests/test_meta_webhooks.py tests/test_send_private_reply.py tests/test_webhook_object_dispatch.py tests/test_webhook_persistence.py tests/test_webhook_processed_logging.py tests/test_webhook_processing.py tests/test_webhook_recovery.py tests/test_webhook_retention.py tests/test_webhook_secrets.py tests/test_whatsapp_cloud_client.py tests/test_whatsapp_ids.py tests/test_whatsapp_management_client.py tests/test_whatsapp_message_dispatch.py tests/test_whatsapp_webhook_handlers.py tests/test_whatsapp_webhook_parser.py tests/test_workspace_scoping.py -q --junitxml="$E/tests.xml"
+```
+
+Exit 0: **237 passed, 0 failures/errors/skips, 5 warnings, 4.82 s** console,
+4.824 s JUnit (E/tests.xml). Captured wall 6 s. No full suite repeated: the
+earlier 911-pass full run predates these reviewed changes. Full final integrated
+testing remains pending after the remaining implementations and approval gates.
+`git -C .closeout-worktrees/batch-b diff --check` exit 0; JUnit stdlib extraction
+exit 0 confirms counts. Read-only PowerShell brace/glob inspection attempts
+failed parsing/path expansion before inspecting source; corrected explicit-path
+inspection succeeded. These were not test runs or application failures.
+
+### R1 design / blocking owner gate
+
+Concrete proposal: batch-b `docs/saas-delegation/R1-DESIGN.md`. It extends the
+existing mapping with encrypted typed provider identity/context, enforces subject
+namespaces and atomically records OAuth grant/account/token. It proposes an
+Alembic0030 job table and two-phase erasure so deleting an account cannot strand
+A16 events. Tokens and ordinary traffic stop immediately; account/signing config
+remain disabled until remote acceptance or independently verified cleanup, then
+FK-ordered deletion removes account/profile and related data. A16 acceptance
+alone never marks the public receipt completed. It preserves workspace isolation,
+quiescence requirements and the operator verification path.
+
+Blocking evidence: source does not establish that WA business/system-user IDs
+or normalized Instagram profile IDs equal the callback's user_id. Public
+debug_token/deauth pages returned429; Instagram Business Login/Embedded Signup
+overview inaccessible. No shell exit code applies to web requests. Proposed
+policy keeps unproven subjects unresolved for operator verification; no identity
+guessed. This still leaves automatic mapping for unproven flows incomplete.
+Owner must approve the schema/lifecycle and this policy or provide authoritative
+namespace evidence before migration/implementation. Exact URLs:
+
+- https://developers.facebook.com/docs/graph-api/reference/debug_token/
+- https://developers.facebook.com/docs/facebook-login/guides/advanced/manual-flow/#deauth-callback
+- https://developers.facebook.com/documentation/instagram-platform/instagram-api-with-instagram-login/business-login
+- https://developers.facebook.com/docs/whatsapp/embedded-signup/overview/
+
+STOP per owner's explicit design-before-migration gate. Later ordered R17/B4,
+remaining Many R19/undefined S10 and D/E preparation remain NOT RUN/UNVERIFIED.
+D5/59d3442 OPEN/untouched; owner Meta actions, staging canary, feature merge and
+deployment approvals remain open. Exact feature merge plan is still
+t-closeout-evidence/MERGE-PLAN.md; no merge/main/push/deploy/live send/paid call.
+
+Final A5 documentation checks: explicit Copy-Item canonical plan into batch-b
+exit 0; original and batch-b `git diff --check` exit 0 each; stdlib version-audit
+assertion (no v21.0 production matches) exit 0. Explicit root Compose-file
+version/Graph source audit completed without a stale version match (rg no-match
+exit 1 is expected, no path/read failure). No real env/token file enumerated for
+content. Canonical plan Copy-Item to sibling SaaS plus SHA256 equality assertion
+exit 0, both bytes hash
+`c020ff892e3d4adf6fc0b399a4bc2a2a7b91b34b5ca52d32610bb3e2654dc55b`.
+Only documentation changed after the successful 237-test run. R1 approval is
+still pending; no application/migration work was performed past that gate.
+
+
+## Historical closeout evidence publication - 2026-10-29
+
+Owner requested committing and pushing all 56 pending files on
+feature/saas-delegation: this log, CLOSEOUT-PLAN.md, and the 54 files under
+a5-closeout-evidence/ and t-closeout-evidence/. These retained reports, JUnit,
+logs, source manifests and harness scripts describe their original test runs;
+no test was rerun and no new test success is claimed for this publication.
+Historical D5 OPEN, R1 proposal, old migration/head and uncommitted-file statements
+in the evidence describe the earlier snapshot, not current implementation status.
+The plan is refreshed byte-for-byte from the verified batch-b canonical copy.
+
+Current application: closeout/batch-b f8e9aa70b3fbb0a2af7bd8cff0db3f73f1338f84,
+pushed to origin; implementation commit 6dc4bb9bc7a30735f994cad25c2a0cbdd91cd6cf.
+SaaS previously verified HEAD: 86c992dafee0caf36f4b26e861e6a89bf1de17f1.
+Migration source heads: Many 0030_meta_account_erasure, SaaS 0031_contact_erasure.
+D5 is confirmed: keep 59d3442. R1/R17 and CSV workspace fix details are in the
+batch-b implementation reports and PROGRESS.md; its TESTING-HANDOFF.md is current.
+This feature branch remains the documentation/evidence checkout; committing these
+files does not merge batch-b application changes into it or close release gates.
+
+Prepublication checks: exact 56-file inventory; evidence UTF-8/extension/size
+inspection; credential-pattern scan (private/provider keys, JWTs and password URLs)
+found no real credential. The one password-URL match is a synthetic malformed-URL
+rejection testcase name. Harness settings are dummy values/generated ephemeral
+keys; no actual env/credential file was read. No source snapshots, dependencies,
+build artifacts or database files are included. Tracked-document diff check passes.
+The subsequent staged check found trailing spaces/EOF blank lines in historical
+.log files; raw evidence is preserved. Staged whitespace checks excluding .log
+files pass. No test failure or application change is associated with these warnings.
+No tests, migration, live service, merge or deployment executed for this commit.
