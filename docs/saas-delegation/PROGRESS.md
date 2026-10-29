@@ -1357,3 +1357,61 @@ copies are synchronized under the owner's explicit plan-only exception.
 Git diff --check passes. Initial git add was denied by the sandbox shared-index
 boundary; approved escalation performed the explicit-list commit successfully.
 No generated artifacts staged; .r1-validation/ and .r19-validation/ are ignored.
+
+
+## Many full-test closeout - 2026-10-29
+
+Verified initial clean Windows Git status, closeout/batch-b,
+HEAD f8e9aa70b3fbb0a2af7bd8cff0db3f73f1338f84. Read CLAUDE, handoff, plan and
+release gates. Current owner instruction supersedes historic D5 confirmation:
+D5 remains OPEN; 59d3442 is retained, no Instagram dispatch/send code changed.
+
+Fresh allowlisted 383-file snapshots, new private PostgreSQL 18 clusters using
+Unix sockets (listen_addresses empty), private Redis and loopback-only namespace,
+env -i and dummy secrets. No old source snapshot used. No env/credential/token
+or backup files copied into snapshots. Every test command has explicit test
+environment and a current_database assertion. PostgreSQL/Redis started by each
+run were stopped; evidence includes teardown records.
+
+Final backend: 1007 passed, 0 failed, 0 errors, 0 skipped, 58 warnings,
+153.02 s pytest / 154.315 s command wall time. Scripts: 29 passed, no failures,
+errors/skips, 0.991 s unittest / 1.121 s wall. Contracts: 3 hashes OK, exit 0.
+Locked dashboard dependency tree, TypeScript (--incremental false) and full lint:
+exit 0 each; lint retains one existing missing-toast-dependency warning.
+Actual empty-to-0030 and 0022-to-0030, both 0030-to-0029/re-upgrade roundtrips,
+and both alembic checks pass; one head 0030_meta_account_erasure.
+
+Named final-suite passes: account erasure 31; R1 OAuth 15; R1 migration 2;
+callbacks/compliance 32; A16 contact erasure 26; hashed dedupe service 8 and
+migration 1; unsupported Instagram 13; Graph versions 32; CSV 15 including all
+14 export/security cases. These are subsets, not extra suite totals.
+
+Only test-fixture behavior changed: real Alembic upgrade replaces create_all;
+dispose connections at teardown and let the harness own its disposable database,
+preserving Alembic revision/schema consistency across sessions. Two consecutive
+model sessions pass 3/3 each. Final manifest hashes match current source.
+No authorization, tenancy, dedupe, erasure or assertions were weakened.
+
+Earlier failures are retained, not omitted: initial harness module invocation
+caused 1007 setup errors (local alembic shadows installed module); corrected to
+the console entrypoint. Next full attempt was interrupted at -15 after discovering
+drop_all left the revision at head; its progress log has no completed-suite/JUnit
+claim. A rejected downgrade-to-base teardown yielded 3 passed plus 1 teardown
+error: the legacy path drops missing ix_conversations_instagram_account_id.
+That optional path is outside the requested 0030/0029 rehearsal; it remains a
+documented limitation, not a claim of working base rollback. Final fixture cleanup
+uses engine.dispose, with cluster lifecycle managed by the owning harness.
+
+Exact commands, exits, durations, source hashes, failed/interrupted attempt logs,
+final JUnit and converted script JUnit: many-full-test-evidence/README.md,
+commands.json, counts.json, source-manifest.json and attempt-1/attempt-2/attempt-3.
+No new test reruns were used to produce reports. Only conftest differs between
+earlier passing dashboard/script/migration snapshots and final source; those
+checks' application/configuration/script files are byte-identical.
+
+Updated evidence-backed local R9/R10/R1/R2/R3/R17/R19 backlog statements; SaaS
+implementation/CLOSEOUT-PLAN.md synchronized byte-for-byte under the plan-only
+exception. No SaaS application/source changes or SaaS test claims by this run.
+UNVERIFIED: live Meta/Graph compatibility, staging/canary, operator remediation,
+deployment/hosted CI, real SaaS round trip, publication/recordings and release
+approval. D5 OPEN. No push, merge, deploy, authenticated external/paid call or send.

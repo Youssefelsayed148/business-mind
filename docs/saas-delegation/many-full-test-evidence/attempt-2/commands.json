@@ -1,0 +1,100 @@
+[
+  {
+    "label": "fixture-regression",
+    "cwd": "/var/tmp/many-r1-full-eyl5l1q2/source/backend",
+    "command": "APP_ENV=test TEST_DATABASE_URL='postgresql+psycopg://postgres@/many_test_r1?host=/var/tmp/many-r1-full-eyl5l1q2/socket&port=55439' DATABASE_URL='postgresql+psycopg://postgres@/many_test_r1?host=/var/tmp/many-r1-full-eyl5l1q2/socket&port=55439' /var/tmp/many-t0-20261028/venv/bin/python -m pytest tests/test_models.py -q '--junitxml=/mnt/d/Projects/Work Projects/The Osiris Labs/ManyOsirisChat/.closeout-worktrees/batch-b/docs/saas-delegation/many-full-test-evidence/fixture-regression.xml'",
+    "exit_code": 0,
+    "seconds": 1.644
+  },
+  {
+    "label": "backend",
+    "cwd": "/var/tmp/many-r1-full-eyl5l1q2/source/backend",
+    "command": "APP_ENV=test TEST_DATABASE_URL='postgresql+psycopg://postgres@/many_test_r1?host=/var/tmp/many-r1-full-eyl5l1q2/socket&port=55439' DATABASE_URL='postgresql+psycopg://postgres@/many_test_r1?host=/var/tmp/many-r1-full-eyl5l1q2/socket&port=55439' /var/tmp/many-t0-20261028/venv/bin/python -m pytest tests -q '--junitxml=/mnt/d/Projects/Work Projects/The Osiris Labs/ManyOsirisChat/.closeout-worktrees/batch-b/docs/saas-delegation/many-full-test-evidence/many-backend.xml'",
+    "exit_code": -15,
+    "seconds": 93.608
+  },
+  {
+    "label": "many_test_migrate_empty-upgrade",
+    "cwd": "/var/tmp/many-r1-full-eyl5l1q2/source/backend",
+    "command": "APP_ENV=test TEST_DATABASE_URL='postgresql+psycopg://postgres@/many_test_migrate_empty?host=/var/tmp/many-r1-full-eyl5l1q2/socket&port=55439' DATABASE_URL='postgresql+psycopg://postgres@/many_test_migrate_empty?host=/var/tmp/many-r1-full-eyl5l1q2/socket&port=55439' /var/tmp/many-t0-20261028/venv/bin/alembic upgrade head",
+    "exit_code": 0,
+    "seconds": 1.094
+  },
+  {
+    "label": "many_test_migrate_empty-current",
+    "cwd": "/var/tmp/many-r1-full-eyl5l1q2/source/backend",
+    "command": "APP_ENV=test TEST_DATABASE_URL='postgresql+psycopg://postgres@/many_test_migrate_empty?host=/var/tmp/many-r1-full-eyl5l1q2/socket&port=55439' DATABASE_URL='postgresql+psycopg://postgres@/many_test_migrate_empty?host=/var/tmp/many-r1-full-eyl5l1q2/socket&port=55439' /var/tmp/many-t0-20261028/venv/bin/alembic current",
+    "exit_code": 0,
+    "seconds": 0.642
+  },
+  {
+    "label": "many_test_migrate_empty-downgrade",
+    "cwd": "/var/tmp/many-r1-full-eyl5l1q2/source/backend",
+    "command": "APP_ENV=test TEST_DATABASE_URL='postgresql+psycopg://postgres@/many_test_migrate_empty?host=/var/tmp/many-r1-full-eyl5l1q2/socket&port=55439' DATABASE_URL='postgresql+psycopg://postgres@/many_test_migrate_empty?host=/var/tmp/many-r1-full-eyl5l1q2/socket&port=55439' /var/tmp/many-t0-20261028/venv/bin/alembic downgrade 0029_hash_processed_event_keys",
+    "exit_code": 0,
+    "seconds": 0.686
+  },
+  {
+    "label": "many_test_migrate_empty-reupgrade",
+    "cwd": "/var/tmp/many-r1-full-eyl5l1q2/source/backend",
+    "command": "APP_ENV=test TEST_DATABASE_URL='postgresql+psycopg://postgres@/many_test_migrate_empty?host=/var/tmp/many-r1-full-eyl5l1q2/socket&port=55439' DATABASE_URL='postgresql+psycopg://postgres@/many_test_migrate_empty?host=/var/tmp/many-r1-full-eyl5l1q2/socket&port=55439' /var/tmp/many-t0-20261028/venv/bin/alembic upgrade head",
+    "exit_code": 0,
+    "seconds": 0.722
+  },
+  {
+    "label": "many_test_migrate_empty-drift",
+    "cwd": "/var/tmp/many-r1-full-eyl5l1q2/source/backend",
+    "command": "APP_ENV=test TEST_DATABASE_URL='postgresql+psycopg://postgres@/many_test_migrate_empty?host=/var/tmp/many-r1-full-eyl5l1q2/socket&port=55439' DATABASE_URL='postgresql+psycopg://postgres@/many_test_migrate_empty?host=/var/tmp/many-r1-full-eyl5l1q2/socket&port=55439' /var/tmp/many-t0-20261028/venv/bin/alembic check",
+    "exit_code": 0,
+    "seconds": 0.839
+  },
+  {
+    "label": "many_test_migrate_0022-baseline",
+    "cwd": "/var/tmp/many-r1-full-eyl5l1q2/source/backend",
+    "command": "APP_ENV=test TEST_DATABASE_URL='postgresql+psycopg://postgres@/many_test_migrate_0022?host=/var/tmp/many-r1-full-eyl5l1q2/socket&port=55439' DATABASE_URL='postgresql+psycopg://postgres@/many_test_migrate_0022?host=/var/tmp/many-r1-full-eyl5l1q2/socket&port=55439' /var/tmp/many-t0-20261028/venv/bin/alembic upgrade 0022_whatsapp_opt_in",
+    "exit_code": 0,
+    "seconds": 0.991
+  },
+  {
+    "label": "many_test_migrate_0022-upgrade",
+    "cwd": "/var/tmp/many-r1-full-eyl5l1q2/source/backend",
+    "command": "APP_ENV=test TEST_DATABASE_URL='postgresql+psycopg://postgres@/many_test_migrate_0022?host=/var/tmp/many-r1-full-eyl5l1q2/socket&port=55439' DATABASE_URL='postgresql+psycopg://postgres@/many_test_migrate_0022?host=/var/tmp/many-r1-full-eyl5l1q2/socket&port=55439' /var/tmp/many-t0-20261028/venv/bin/alembic upgrade head",
+    "exit_code": 0,
+    "seconds": 0.719
+  },
+  {
+    "label": "many_test_migrate_0022-current",
+    "cwd": "/var/tmp/many-r1-full-eyl5l1q2/source/backend",
+    "command": "APP_ENV=test TEST_DATABASE_URL='postgresql+psycopg://postgres@/many_test_migrate_0022?host=/var/tmp/many-r1-full-eyl5l1q2/socket&port=55439' DATABASE_URL='postgresql+psycopg://postgres@/many_test_migrate_0022?host=/var/tmp/many-r1-full-eyl5l1q2/socket&port=55439' /var/tmp/many-t0-20261028/venv/bin/alembic current",
+    "exit_code": 0,
+    "seconds": 0.511
+  },
+  {
+    "label": "many_test_migrate_0022-downgrade",
+    "cwd": "/var/tmp/many-r1-full-eyl5l1q2/source/backend",
+    "command": "APP_ENV=test TEST_DATABASE_URL='postgresql+psycopg://postgres@/many_test_migrate_0022?host=/var/tmp/many-r1-full-eyl5l1q2/socket&port=55439' DATABASE_URL='postgresql+psycopg://postgres@/many_test_migrate_0022?host=/var/tmp/many-r1-full-eyl5l1q2/socket&port=55439' /var/tmp/many-t0-20261028/venv/bin/alembic downgrade 0029_hash_processed_event_keys",
+    "exit_code": 0,
+    "seconds": 0.48
+  },
+  {
+    "label": "many_test_migrate_0022-reupgrade",
+    "cwd": "/var/tmp/many-r1-full-eyl5l1q2/source/backend",
+    "command": "APP_ENV=test TEST_DATABASE_URL='postgresql+psycopg://postgres@/many_test_migrate_0022?host=/var/tmp/many-r1-full-eyl5l1q2/socket&port=55439' DATABASE_URL='postgresql+psycopg://postgres@/many_test_migrate_0022?host=/var/tmp/many-r1-full-eyl5l1q2/socket&port=55439' /var/tmp/many-t0-20261028/venv/bin/alembic upgrade head",
+    "exit_code": 0,
+    "seconds": 0.47
+  },
+  {
+    "label": "many_test_migrate_0022-drift",
+    "cwd": "/var/tmp/many-r1-full-eyl5l1q2/source/backend",
+    "command": "APP_ENV=test TEST_DATABASE_URL='postgresql+psycopg://postgres@/many_test_migrate_0022?host=/var/tmp/many-r1-full-eyl5l1q2/socket&port=55439' DATABASE_URL='postgresql+psycopg://postgres@/many_test_migrate_0022?host=/var/tmp/many-r1-full-eyl5l1q2/socket&port=55439' /var/tmp/many-t0-20261028/venv/bin/alembic check",
+    "exit_code": 0,
+    "seconds": 0.588
+  },
+  {
+    "label": "migration-heads",
+    "cwd": "/var/tmp/many-r1-full-eyl5l1q2/source/backend",
+    "command": "APP_ENV=test TEST_DATABASE_URL='postgresql+psycopg://postgres@/many_test_scripts?host=/var/tmp/many-r1-full-eyl5l1q2/socket&port=55439' DATABASE_URL='postgresql+psycopg://postgres@/many_test_scripts?host=/var/tmp/many-r1-full-eyl5l1q2/socket&port=55439' /var/tmp/many-t0-20261028/venv/bin/alembic heads",
+    "exit_code": 0,
+    "seconds": 0.24
+  }
+]

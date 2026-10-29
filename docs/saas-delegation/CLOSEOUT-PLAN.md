@@ -15,7 +15,7 @@ Repos and branches
 | D2 | Hosting (ADR-007): the SaaS is **already deployed** (VPS, Docker, Caddy, `scripts/deploy.sh`). Close-out only **rebuilds** it. Record ADR-007 as decided | Decided (owner); ADR-007 hosting text recorded in C1; runtime rebuild pending |
 | D3 | Deletion across both apps | Recommendation accepted by owner; A16 text approved 2026-10-28; implementation verification pending |
 | D4 | Screencasts show Many's native flows per permission plus one delegated conversation; privacy discloses the SaaS | Owner follows recommendation; confirm evidence/recording text before publication |
-| D5 | Instagram unsupported-message forwarding for delegated accounts (`59d3442`) | CONFIRMED (owner, 2026-10-28): keep commit `59d3442` |
+| D5 | Instagram unsupported-message forwarding for delegated accounts (`59d3442`) | OPEN per current owner testing instruction (2026-10-29); preserve implementation; 13 full-suite tests pass |
 | D6 | Expired Meta token file ("popeye access token.txt") | Owner: ignore |
 
 ## D3 review: what happens today with deletion
@@ -44,25 +44,25 @@ Recommendation
 
 | ID | Pri | Item | Repo | Batch |
 |---|---|---|---|---|
-| R1 | P0 | [x] Local owner-approved identity policy/schema and two-phase FB/WA erasure implemented; typed unresolved provider context, scoped callbacks and migration 0030. R1-IMPLEMENTATION.md records 38 final R1-only passes, 62 related passes, migration/drift evidence and limits. Full clean-head integration, staging and unresolved-identity operator remediation remain UNVERIFIED | Many | B |
-| R2 | P0 | IMPLEMENTED: A16 producer/receiver, hashed dedupe, runbooks; Many 87 / SaaS 78 distinct latest targeted passes. Full integrated/live verification pending; Many in-flight quiescence remains operational requirement | Many + SaaS | B, C |
-| R3 | P0 | Draft policies implemented in both apps with processor/retention/erasure wording; targeted type/browser checks pass. Owner publication review pending | Many + SaaS | B, C |
+| R1 | P0 | [x] Many local identity/account-erasure integration verified: 31 account-erasure, 15 OAuth and 2 real migration tests pass in the 1007-pass full suite. Scoped callbacks also pass (32 compliance tests). Staging and unresolved-identity operator remediation remain UNVERIFIED (many-full-test-evidence) | Many | B |
+| R2 | P0 | [x] Many local A16 producer and hashed dedupe verified in the full suite: 26 contact-erasure, 8 processed-event service and 1 migration tests pass. SaaS receiver/full/live round trip remains UNVERIFIED by this Many-only run; in-flight quiescence remains required (many-full-test-evidence) | Many + SaaS | B, C |
+| R3 | P0 | [x] Many local policy source passes full dashboard TypeScript and lint checks (one existing hook warning). Owner publication review and SaaS verification remain pending; no publication authorization (many-full-test-evidence) | Many + SaaS | B, C |
 | R4 | P0 | [x] Key template + API/worker Compose passthrough, fail-closed backup, actual DOMAIN public URL and worker wiring documented;6 source checks pass. Runtime rebuild UNVERIFIED | SaaS | C |
 | R5 | P0 | Phase 6 merge to `main` with green Playwright (D1) | SaaS | C |
 | R6 | P0 | Business Verification + Tech Provider status (long lead; **start now**) | Meta | E (start day 1) |
 | R7 | P0 | Meta dashboard settings and real permission sets for Facebook and WhatsApp; remove `pages_manage_engagement` | Meta | E |
 | R8 | P0 | [x] Local A5: owner approved v26.0 after Meta official SDK evidence; config/examples/docs updated, all version pins reviewed and 237 related tests pass. Public changelog remains inaccessible; live compatibility/dashboard settings UNVERIFIED (a5-closeout-evidence) | Many | A |
-| R9 | P0 | [x] Fresh Batch T empty-to-head, 0022-to-head, downgrade-to-0022/reupgrade pass. Initial Alembic drift corrected by registering processed-event metadata/index; fresh alembic check passes (t-closeout-evidence) | Many | A, T |
-| R10 | P0 | Full backend at e284afd: 911 passed, 0 failed/errors/skipped. Subsequent metadata/fixture corrections: 10 focused backend and 29 script tests pass. Final post-implementation full suite remains pending at A5 stop | Many | A, T |
+| R9 | P0 | [x] Current 0030 rehearsals pass: empty-to-head, 0022-to-head, each downgrade to 0029/re-upgrade, clean alembic check; exactly one head 0030_meta_account_erasure. Legacy downgrade-to-base is outside this gate and has a missing-index limitation (many-full-test-evidence) | Many | A, T |
+| R10 | P0 | [x] Fresh final source snapshot: 1007 backend passed, 0 failed/errors/skipped; scripts 29 passed, contract hashes OK; dashboard tsc/lint pass. Fixture now uses actual Alembic upgrades; all earlier failed/interrupted attempts retained and explained (many-full-test-evidence) | Many | A, T |
 | R11 | P1 | [x] T1 fixes committed as ed91c04; A1 rerun: 418 passed, 0 failures/errors/skips (a1-evidence/tests.xml) | Many | A |
-| R12 | P1 | [x] D5 CONFIRMED by owner (2026-10-28): keep `59d3442`, Instagram unsupported-message forwarding for delegated accounts. Full-suite verification remains required | Many | A |
+| R12 | P1 | [ ] D5 remains OPEN per current owner testing instruction; commit 59d3442 preserved and no Instagram dispatch/send edits. All 13 unsupported-Instagram tests pass in the final full suite (many-full-test-evidence) | Many | A |
 | R13 | P1 | [x] Raw forwarding headers ignored; explicit proxy peers replace wildcard (25 focused pytest tests; A6 review) | Many | A |
 | R14 | P1 | [x] UTF-8 byte compare_digest with rejection/call regression tests (A6 evidence) | Many | A |
 | R15 | P1 | [x] Read-only selected-channel HTTPS/secret-presence/enabled checks + independent beat observation (20 canary tests; A7 review) | Many | A |
 | R16 | P1 | Canary on staging with rotation drill, replay, 429, expiry, take-over, rollback | Both | D |
-| R17 | P1 | [x] Local review/policy text states business-support AI disclosure, 24 h messaging rule, existing WA free-entry exception, no human-agent tag and local rejection outside the applicable window. R17-B4-IMPLEMENTATION.md: policy tsc/lint and nine UNVERIFIED D4 evidence rows. Owner publication/recordings pending | Many/Meta | B, E |
+| R17 | P1 | [x] Many local policy/review consistency and dashboard checks verified; full suite green. Owner publication, nine D4 recordings and live Meta evidence remain UNVERIFIED (many-full-test-evidence) | Many/Meta | B, E |
 | R18 | P1 | IMPLEMENTED repairs: 31 targeted API passes; 17 distinct latest Playwright passes include all 12 historical failures. Full suites/D1 gate deferred to new session | SaaS | C |
-| R19 | P2 | [x] Local fixes/verification: Many model registry/index alignment and CSV formula output guard (3 related + 8 expanded CSV passes); SaaS existing phone guard/index/model alignment verified by 41 tests and actual index roundtrip/clean drift. No current S10; both manual CI YAMLs parse/static-check only. R19-VERIFICATION.md records limits; legacy Many CSV workspace leak proven and fixed (14 CSV passes, 2026-10-29); full/hosted checks pending. webhook_unhealthy stays provider-global | Both | A, C, T |
+| R19 | P2 | [x] Many local full verification: all 15 CSV tests pass (14 export/security cases plus import), model registry passes, actual migration drift clean, dashboard checks pass. SaaS, hosted CI and provider-global webhook health remain outside this run (many-full-test-evidence) | Both | A, C, T |
 
 ## Batches
 
@@ -77,11 +77,11 @@ Tickets
 - A5 Graph version bump after checking Meta changelog (R8): config, tests, docs.
 - A6 forwarded-IP trust and verify-token `compare_digest` (R13, R14).
 - A7 preflight delegation checks (R15).
-- A8 [x] D5 CONFIRMED by owner (2026-10-28): keep commit `59d3442` (Instagram unsupported-message forwarding for delegated accounts).
-Gate A: D5 owner decision is resolved (CONFIRMED: keep `59d3442`); this does not close the gate. Full Many suite results must be listed (pass count, every remaining failure explained), with migration evidence and nothing pushed.
+- A8 [ ] D5 remains OPEN per current testing instruction; keep commit `59d3442` unchanged. Its 13 tests pass in the final full suite.
+Gate A: local Many tests and requested migration rehearsals are green (many-full-test-evidence). D5 remains OPEN per current instruction; no release/owner approval is inferred.
 
 Full-suite checklist:
-- [ ] `backend/tests/test_saas_unsupported_instagram.py` must pass in the final full backend suite; record its result in the suite evidence. No new test run or passing result is claimed by this documentation update.
+- [x] `backend/tests/test_saas_unsupported_instagram.py`: 13 passed in the final 1007-pass suite; JUnit and named-file counts in many-full-test-evidence. D5 stays OPEN.
 
 ### Batch B: Meta compliance, Many side (Many repo)
 - B1 deauthorize + data-deletion callbacks, `signed_request` verification, status page, tests (R1).
@@ -234,3 +234,19 @@ No full-suite result is claimed. TESTING-HANDOFF.md pins the actual application
 commits and verified single migration source heads: Many 0030_meta_account_erasure,
 SaaS 0031_contact_erasure. R1/R17 implementation reports supersede older proposal
 status. Staging, unresolved identity remediation and owner release gates remain.
+
+
+## Many full-test closeout - 2026-10-29
+
+This current testing instruction supersedes older D5 confirmed/resolved wording:
+D5 stays OPEN; 59d3442 is retained without this session changing Instagram handlers.
+Tested HEAD f8e9aa70b3fbb0a2af7bd8cff0db3f73f1338f84 plus the reviewed test-fixture
+diff recorded in the fresh 383-file source manifest. Full backend: 1007 passed,
+0 failed/errors/skipped (153.02 s). Scripts: 29 passed (0.991 s), contracts OK.
+Locked-cache dashboard TypeScript and lint exit 0; one pre-existing hook warning.
+Both requested migration paths and 0030-to-0029 roundtrips/drift pass, one head.
+R1/R2/R3/R17/R19 checkmarks cover the stated Many local evidence only, never live,
+SaaS receiver, publication, operator remediation or release gates. Initial harness
+errors, interrupted run, rejected teardown approach and the legacy base-downgrade
+missing-index limitation are preserved in many-full-test-evidence/README.md.
+No push, merge, deployment, external authenticated/paid call or live send.

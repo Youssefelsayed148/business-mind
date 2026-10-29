@@ -1,11 +1,13 @@
 import os
+from pathlib import Path
+import subprocess
+import shutil
 
 import pytest
 from sqlalchemy import create_engine, text
 from sqlalchemy.orm import sessionmaker
 
 from app.core.config import settings
-from app.db.base import Base
 from app.db.session import get_db
 
 
@@ -24,8 +26,8 @@ def isolate_rate_limiter(request, monkeypatch):
     )
 
 
-# setup_db() below runs Base.metadata.drop_all() at the end of every pytest
-# session, so this must never resolve to a real database. In a production
+# setup_db() below applies migrations, so this must never resolve to a real
+# database. The caller owns the disposable database lifecycle. In a production
 # environment (APP_ENV=production, set in .env.production) that is an
 # absolute rule with no override: DATABASE_URL there IS the live application
 # database, and running pytest against it once already wiped it for real
@@ -75,9 +77,19 @@ def setup_db():
     if not DB_AVAILABLE:
         yield
         return
-    Base.metadata.create_all(bind=engine)
+    # Exercise the real schema history rather than hiding missing migrations.
+    subprocess.run(
+        [shutil.which("alembic") or "alembic", "upgrade", "head"],
+        cwd=Path(__file__).resolve().parents[1],
+        env={**os.environ, "APP_ENV": "test", "TEST_DATABASE_URL": TEST_DATABASE_URL,
+             "DATABASE_URL": TEST_DATABASE_URL},
+        check=True,
+        capture_output=True,
+        text=True,
+    )
     yield
-    Base.metadata.drop_all(bind=engine)
+    # Preserve schema/revision consistency; the caller destroys its disposable DB.
+    engine.dispose()
 
 
 @pytest.fixture
