@@ -3,8 +3,8 @@
 Written 2026-10-28 for the owner. Same file lives in both repos (SaaS: `implementation/CLOSEOUT-PLAN.md`, Many: `docs/saas-delegation/CLOSEOUT-PLAN.md`); keep them identical.
 
 Repos and branches
-- Many: original `feature/saas-delegation` is docs-only at `db12511`. Integrated application: `.closeout-worktrees/batch-b`, `closeout/batch-b`, `e284afd`; reviewed uncommitted Batch T/A5 corrections and the R1 proposal follow (see PROGRESS.md and source manifests in t-closeout-evidence/a5-closeout-evidence).
-- SaaS: integrated `.closeout-worktrees/batch-c`, `closeout/batch-c`, `c70c5c3`; verified clean. SaaS suites were not run by this Many-side session. Neither application branch is merged to `main`.
+- Many: integrated `.closeout-worktrees/batch-b`, `closeout/batch-b`, application commit `6dc4bb9bc7a30735f994cad25c2a0cbdd91cd6cf` (2026-10-29); handoff documentation follows. Reviewed Batch T/A5 corrections and CSV workspace fix committed; R1 implemented locally. See PROGRESS.md.
+- SaaS: integrated `.closeout-worktrees/batch-c`, `closeout/batch-c`, `86c992dafee0caf36f4b26e861e6a89bf1de17f1` (verified with git rev-parse HEAD). SaaS suites were not run by this Many-side session. Neither application branch is merged to `main`.
 - Contract source of truth: SaaS `implementation/PHASE-06-V2/many-pack/CONTRACT-V1.md` + `CONTRACT-V1.1-DELTA.md`, copied byte-for-byte into Many (`CONTRACT.sha256`).
 
 ## Owner decisions recorded
@@ -62,7 +62,7 @@ Recommendation
 | R16 | P1 | Canary on staging with rotation drill, replay, 429, expiry, take-over, rollback | Both | D |
 | R17 | P1 | [x] Local review/policy text states business-support AI disclosure, 24 h messaging rule, existing WA free-entry exception, no human-agent tag and local rejection outside the applicable window. R17-B4-IMPLEMENTATION.md: policy tsc/lint and nine UNVERIFIED D4 evidence rows. Owner publication/recordings pending | Many/Meta | B, E |
 | R18 | P1 | IMPLEMENTED repairs: 31 targeted API passes; 17 distinct latest Playwright passes include all 12 historical failures. Full suites/D1 gate deferred to new session | SaaS | C |
-| R19 | P2 | [x] Local fixes/verification: Many model registry/index alignment and CSV formula output guard (3 related + 8 expanded CSV passes); SaaS existing phone guard/index/model alignment verified by 41 tests and actual index roundtrip/clean drift. No current S10; both manual CI YAMLs parse/static-check only. R19-VERIFICATION.md records limits; full/hosted checks and legacy Many export workspace-isolation review pending. webhook_unhealthy stays provider-global | Both | A, C, T |
+| R19 | P2 | [x] Local fixes/verification: Many model registry/index alignment and CSV formula output guard (3 related + 8 expanded CSV passes); SaaS existing phone guard/index/model alignment verified by 41 tests and actual index roundtrip/clean drift. No current S10; both manual CI YAMLs parse/static-check only. R19-VERIFICATION.md records limits; legacy Many CSV workspace leak proven and fixed (14 CSV passes, 2026-10-29); full/hosted checks pending. webhook_unhealthy stays provider-global | Both | A, C, T |
 
 ## Batches
 
@@ -223,3 +223,14 @@ D5 is now CONFIRMED by owner (2026-10-28): keep `59d3442`; no code changed for t
 
 ## Standing rules
 No push, merge, deploy, live send or paid call without separate approval. Meta tokens and webhooks stay in Many only. Tenant scope on every SaaS query, with A/B tests. Alembic migrations only. Record exact commands and outcomes in `PROGRESS.md`.
+
+## CSV/handoff close-out update - 2026-10-29
+
+This update supersedes historical source-head and pending-review statements above.
+Reviewed Batch T/A5 changes and legacy CSV authorization fix are committed in the
+Many application commit listed at the top. CSV A/B regressions first proved leaks
+on all three platforms; after workspace and label scoping, 14 related tests pass.
+No full-suite result is claimed. TESTING-HANDOFF.md pins the actual application
+commits and verified single migration source heads: Many 0030_meta_account_erasure,
+SaaS 0031_contact_erasure. R1/R17 implementation reports supersede older proposal
+status. Staging, unresolved identity remediation and owner release gates remain.

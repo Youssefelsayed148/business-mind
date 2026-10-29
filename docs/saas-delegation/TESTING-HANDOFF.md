@@ -31,9 +31,8 @@ Owner authorizations carried forward:
   paid API, cloud resource or real database operation. Only new disposable test
   databases. Public Meta documentation lookup was approved, but it is not needed
   to begin this testing stage.
-- D5 is deliberately OPEN: leave the Instagram unsupported-message commit
-  `59d3442` unchanged and report it. Do not ask for its decision again during
-  independent testing.
+- D5 is CONFIRMED by the owner: keep Instagram unsupported-message commit
+  `59d3442`; its final full-suite verification remains required.
 - A16 was approved and adopted. Shared hashed dedupe keys and their migration
   were explicitly approved; no Instagram dispatch/send-handler refactor was
   authorized.
@@ -63,9 +62,14 @@ Verify git branch, HEAD and status in both integrated worktrees before running.
 Use the final SHAs in the latest PROGRESS entry. Preserve any unexpected edits;
 do not reset, clean, or delete worktrees.
 
-Application integration bases (only lead documentation/source-check updates follow):
-Many `33bde97`, SaaS `1ee703e`. Migration heads: Many
-`0029_hash_processed_event_keys`, SaaS `0031_contact_erasure`.
+Verified application source as of 2026-10-29 (the handoff documentation commit
+follows this Many implementation commit):
+Many `6dc4bb9bc7a30735f994cad25c2a0cbdd91cd6cf`, SaaS `86c992dafee0caf36f4b26e861e6a89bf1de17f1`.
+Migration heads: Many `0030_meta_account_erasure`, SaaS `0031_contact_erasure`.
+These SHAs were read with git rev-parse HEAD in the integrated worktrees;
+actual Alembic revision/down_revision source graphs each have one head.
+Use git rev-parse HEAD again before testing to record the documentation descendant.
+The latest CSV-only check passed 14 tests; it does not replace full integration testing.
 See `FINAL-IMPLEMENTATION-REVIEW.md` for the independent review and exact limits.
 
 ## Test environment and safety
@@ -178,9 +182,10 @@ you execute them. Fix genuine defects and stale fixtures without weakening
 authorization, tenant isolation, dedupe, erasure, billing or meaningful asserts.
 Do not add skips/xfails merely to obtain green output.
 
-Known non-test release blockers remain: D5; official Graph-version evidence
-(A5, official docs returned 429); automatic Meta callback admin/authorization
-mapping and full Facebook/WhatsApp admin-account erasure (R1 remains partial);
+Known release blockers remain: full integrated testing; live Graph-version
+compatibility (A5 local v26.0 approval is recorded, public changelog was inaccessible);
+R1 staging and unresolved-identity operator remediation (local verified-identity
+mapping and two-phase Facebook/WhatsApp erasure are implemented; see R1-IMPLEMENTATION.md);
 owner-run Business Verification/Tech Provider/dashboard actions; staging canary;
 main merge/rebuild/deployment/submission approvals. Do not mark them complete
 because local tests pass. SaaS main merge still requires a genuinely green full
