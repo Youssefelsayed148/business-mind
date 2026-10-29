@@ -4,14 +4,14 @@ Written 2026-10-28 for the owner. Same file lives in both repos (SaaS: `implemen
 
 Repos and branches
 - Many: integrated `.closeout-worktrees/batch-b`, `closeout/batch-b`, application commit `6dc4bb9bc7a30735f994cad25c2a0cbdd91cd6cf` (2026-10-29); handoff documentation follows. Reviewed Batch T/A5 corrections and CSV workspace fix committed; R1 implemented locally. See PROGRESS.md.
-- SaaS: integrated `.closeout-worktrees/batch-c`, `closeout/batch-c`, `86c992dafee0caf36f4b26e861e6a89bf1de17f1` (verified with git rev-parse HEAD). SaaS suites were not run by this Many-side session. Neither application branch is merged to `main`.
+- SaaS: integrated .closeout-worktrees/batch-c, closeout/batch-c. Full API baseline 86c992d: 1208 passed / 8 fixture failures, all resolved by affected reruns. Test-only fixes ce1532a and 88599d7. Final full Playwright at 88599d7: 176/176 passed, D1 MET. Neither application branch was merged by this testing session.
 - Contract source of truth: SaaS `implementation/PHASE-06-V2/many-pack/CONTRACT-V1.md` + `CONTRACT-V1.1-DELTA.md`, copied byte-for-byte into Many (`CONTRACT.sha256`).
 
 ## Owner decisions recorded
 
 | # | Decision | Status |
 |---|---|---|
-| D1 | B1: a **green Playwright run is required** before the SaaS merges to `main` | Decided (owner) |
+| D1 | B1: a **green Playwright run is required** before the SaaS merges to main | Decided; local gate MET 2026-10-29: 176/176 at 88599d7; owner merge approval remains separate |
 | D2 | Hosting (ADR-007): the SaaS is **already deployed** (VPS, Docker, Caddy, `scripts/deploy.sh`). Close-out only **rebuilds** it. Record ADR-007 as decided | Decided (owner); ADR-007 hosting text recorded in C1; runtime rebuild pending |
 | D3 | Deletion across both apps | Recommendation accepted by owner; A16 text approved 2026-10-28; implementation verification pending |
 | D4 | Screencasts show Many's native flows per permission plus one delegated conversation; privacy discloses the SaaS | Owner follows recommendation; confirm evidence/recording text before publication |
@@ -47,8 +47,8 @@ Recommendation
 | R1 | P0 | [x] Local owner-approved identity policy/schema and two-phase FB/WA erasure implemented; typed unresolved provider context, scoped callbacks and migration 0030. R1-IMPLEMENTATION.md records 38 final R1-only passes, 62 related passes, migration/drift evidence and limits. Full clean-head integration, staging and unresolved-identity operator remediation remain UNVERIFIED | Many | B |
 | R2 | P0 | IMPLEMENTED: A16 producer/receiver, hashed dedupe, runbooks; Many 87 / SaaS 78 distinct latest targeted passes. Full integrated/live verification pending; Many in-flight quiescence remains operational requirement | Many + SaaS | B, C |
 | R3 | P0 | Draft policies implemented in both apps with processor/retention/erasure wording; targeted type/browser checks pass. Owner publication review pending | Many + SaaS | B, C |
-| R4 | P0 | [x] Key template + API/worker Compose passthrough, fail-closed backup, actual DOMAIN public URL and worker wiring documented;6 source checks pass. Runtime rebuild UNVERIFIED | SaaS | C |
-| R5 | P0 | Phase 6 merge to `main` with green Playwright (D1) | SaaS | C |
+| R4 | P0 | [x] Local rebuild source readiness verified: six C3 source checks within 23 passing script checks, API/worker key passthrough, fail-closed backup, public URL and worker wiring; three fresh migration rehearsals and clean drift. Runtime rebuild UNVERIFIED | SaaS | C |
+| R5 | P0 | D1 MET: full Playwright 176/176 at 88599d7. Phase 6 merge to main remains OPEN, owner approval required; no merge executed | SaaS | C |
 | R6 | P0 | Business Verification + Tech Provider status (long lead; **start now**) | Meta | E (start day 1) |
 | R7 | P0 | Meta dashboard settings and real permission sets for Facebook and WhatsApp; remove `pages_manage_engagement` | Meta | E |
 | R8 | P0 | [x] Local A5: owner approved v26.0 after Meta official SDK evidence; config/examples/docs updated, all version pins reviewed and 237 related tests pass. Public changelog remains inaccessible; live compatibility/dashboard settings UNVERIFIED (a5-closeout-evidence) | Many | A |
@@ -61,8 +61,8 @@ Recommendation
 | R15 | P1 | [x] Read-only selected-channel HTTPS/secret-presence/enabled checks + independent beat observation (20 canary tests; A7 review) | Many | A |
 | R16 | P1 | Canary on staging with rotation drill, replay, 429, expiry, take-over, rollback | Both | D |
 | R17 | P1 | [x] Local review/policy text states business-support AI disclosure, 24 h messaging rule, existing WA free-entry exception, no human-agent tag and local rejection outside the applicable window. R17-B4-IMPLEMENTATION.md: policy tsc/lint and nine UNVERIFIED D4 evidence rows. Owner publication/recordings pending | Many/Meta | B, E |
-| R18 | P1 | IMPLEMENTED repairs: 31 targeted API passes; 17 distinct latest Playwright passes include all 12 historical failures. Full suites/D1 gate deferred to new session | SaaS | C |
-| R19 | P2 | [x] Local fixes/verification: Many model registry/index alignment and CSV formula output guard (3 related + 8 expanded CSV passes); SaaS existing phone guard/index/model alignment verified by 41 tests and actual index roundtrip/clean drift. No current S10; both manual CI YAMLs parse/static-check only. R19-VERIFICATION.md records limits; legacy Many CSV workspace leak proven and fixed (14 CSV passes, 2026-10-29); full/hosted checks pending. webhook_unhealthy stays provider-global | Both | A, C, T |
+| R18 | P1 | [x] Local test repairs verified: full API baseline 1208 pass / 8 stale-fixture failures; all eight pass in 94 distinct affected cases. Final full Playwright 176/176; Ruff, formatting, full mypy, frontend checks/build pass. No second full API green-run claim. Evidence: batch-c/saas-full-test-evidence/README.md | SaaS | C |
+| R19 | P2 | [x] Local fixes/verification: Many model registry/index alignment and CSV formula output guard (3 related + 8 expanded CSV passes); SaaS existing phone guard/index/model alignment verified by 41 tests and actual index roundtrip/clean drift. No current S10; both manual CI YAMLs parse/static-check only. R19-VERIFICATION.md records limits; legacy Many CSV workspace leak proven and fixed (14 CSV passes, 2026-10-29); latest SaaS full run plus affected repairs and 176/176 full Playwright are recorded in batch-c/saas-full-test-evidence; hosted CI remains UNVERIFIED. webhook_unhealthy stays provider-global | Both | A, C, T |
 
 ## Batches
 
@@ -234,3 +234,43 @@ No full-suite result is claimed. TESTING-HANDOFF.md pins the actual application
 commits and verified single migration source heads: Many 0030_meta_account_erasure,
 SaaS 0031_contact_erasure. R1/R17 implementation reports supersede older proposal
 status. Staging, unresolved identity remediation and owner release gates remain.
+
+## SaaS full testing close-out — 2026-10-29
+
+This entry supersedes earlier SaaS full-suite/D1-pending statements. Worktree
+batch-c, source tested by final full Playwright:
+88599d7a9034f670dc0ee0fead89fa828feb69cc. Fresh allowlisted source snapshot,
+new private Postgres cluster and loopback-only namespace for every run.
+
+Full API at 86c992d: 1208 passed, 8 failed, zero errors/skips, 1330.93s.
+All eight were stale fixtures (four diagnostic floors; no-model busy cap;
+R19 scratch path; production-settings stub inheritance; Cairo DST arithmetic).
+Test-only repairs committed in ce1532a; 78 + 16 distinct affected cases pass.
+Initial full mypy's 13 pre-existing test-typing errors are separately corrected;
+final app/full mypy pass (128/289 files), Ruff/format pass (304 files).
+Scripts: 23 pass. Contracts: both manifests and cross-repo copies match.
+Three disposable Alembic rehearsals and all drift checks pass; sole head 0031.
+No production source or migration changed; no test skips/xfails added.
+
+Frontend typecheck/lint, 24 Node unit tests and production build pass. Initial
+full Playwright: 174 passed / 2 failed because widget-domain.spec.ts hard-coded
+3100 instead of E2E_WEB_PORT. One-line fix 88599d7 preserves all CSP/domain
+assertions; affected spec 2/2 passes. Final normal full npm test at 88599d7:
+176/176 passed, no failures/errors/skips, 224.45107s JUnit (225s wall).
+Normal global setup/teardown and production build, no reuse/temp config.
+
+A16 receiver 23 cases, tenant A/B matrix, channel suite, 18 CSV export safety
+cases, actual health-poll index roundtrip/clean drift and S10 absence verified.
+Exact commands, all attempts, counts, logs/JUnit, provenance and teardown
+warning explanation: .closeout-worktrees/batch-c/saas-full-test-evidence/README.md.
+
+D1 is MET; R5 main merge is OPEN and unperformed. R4 deployed rebuild, hosted CI,
+live Meta, real Many-to-SaaS round trip, staging canary and owner release
+approvals remain UNVERIFIED. No push/merge/deploy/live send/paid or authenticated
+external call. Only the canonical Many plan/progress documentation is updated
+outside batch-c. The prohibited original SaaS checkouts remain untouched.
+For this session batch-c/implementation/CLOSEOUT-PLAN.md is the synchronized
+SaaS plan copy; it is byte-identical to this Many canonical copy.
+## Owner release decision - 2026-10-29
+
+D5 is CONFIRMED (keep `59d3442`); this supersedes every earlier D5 OPEN statement above. Owner authorized commit, push and merge of both close-out branches to `main`. Deployment, Meta submission and live canary still need their own approval.
