@@ -124,10 +124,8 @@ function logApiError(error: ApiError, path: string) {
 }
 
 // --- Workspace-scoped routes -----------------------------------------------
-// Only WhatsApp and Facebook routes are workspace-scoped this phase; the
-// X-Workspace-Id header is attached to exactly those paths and deliberately
-// never to /instagram/* (Instagram routes ignore the header and still gate
-// off the global user role). No workspace-switcher UI yet — the workspace is
+// WhatsApp/Facebook and Instagram OAuth mutations use workspace membership.
+// Other Instagram routes retain their existing authorization. The workspace is
 // resolved once per page load from /workspaces/me, preferring the workspace
 // with slug "default" and falling back to the first membership.
 
@@ -141,7 +139,7 @@ export type WorkspaceMembership = {
 const WORKSPACE_SCOPED_PREFIXES = ["/whatsapp/", "/facebook/"];
 
 function isWorkspaceScopedPath(path: string): boolean {
-  return WORKSPACE_SCOPED_PREFIXES.some(
+  return path === "/meta/connect/start" || /^\/instagram\/accounts\/[^/]+\/reconnect$/.test(path) || WORKSPACE_SCOPED_PREFIXES.some(
     (prefix) => path === prefix.slice(0, -1) || path.startsWith(prefix),
   );
 }

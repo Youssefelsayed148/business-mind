@@ -1,0 +1,6 @@
+PASS: Alembic source head and 0023-0027 ancestry
+PASS: single merged beat schedule, four SaaS tasks
+PASS: nginx signed prefixes gzip off
+UNVERIFIED: database revision and stored connection UUID (static-only)
+
+EXIT=2

@@ -26,7 +26,7 @@ def _raise_meta_error(response: httpx.Response, data: dict, fallback: str) -> No
     raise MetaAPIError(msg, status_code=response.status_code, response_body=data)
 
 
-async def verify_user_access_token(user_access_token: str) -> None:
+async def verify_user_access_token(user_access_token: str) -> dict:
     """Confirm a client-supplied user access token is valid and was issued to
     *our* Facebook app before trusting it.
 
@@ -59,6 +59,7 @@ async def verify_user_access_token(user_access_token: str) -> None:
             "Facebook access token is invalid or was not issued to this app",
             status_code=response.status_code,
         )
+    return info
 
 
 async def exchange_for_long_lived_token(short_lived_token: str) -> dict:

@@ -18,6 +18,23 @@ logger = logging.getLogger(__name__)
 GRAPH_BASE = "https://graph.facebook.com"
 
 
+async def fetch_waba_grant(access_token: str, waba_id: str) -> tuple[dict, list[dict]]:
+    """Read provider WABA and its phone grants; browser IDs are selectors only."""
+    async with httpx.AsyncClient() as client:
+        results = []
+        for path in (waba_id, f"{waba_id}/phone_numbers"):
+            response = await client.get(f"{GRAPH_BASE}/{settings.META_GRAPH_API_VERSION}/{path}",
+                                        params={"fields": "id", "access_token": access_token})
+            try:
+                data = response.json()
+            except ValueError:
+                raise MetaAPIError("Invalid provider grant response") from None
+            if response.status_code >= 400 or "error" in data:
+                _raise_meta_error(response, data, "Provider WABA grant verification failed")
+            results.append(data)
+    return results[0], results[1].get("data", [])
+
+
 def _raise_meta_error(response: httpx.Response, data: dict, fallback: str) -> None:
     error = data.get("error")
     if isinstance(error, dict):

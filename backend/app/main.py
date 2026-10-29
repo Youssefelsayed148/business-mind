@@ -12,6 +12,7 @@ from app.api import (
     routes_health,
     routes_instagram,
     routes_meta,
+    routes_meta_compliance,
     routes_messages,
     routes_webhooks,
     routes_whatsapp,
@@ -20,6 +21,7 @@ from app.api import (
     routes_saas_messages,
     routes_workspaces,
 )
+from app.api import routes_contact_erasure
 from app.core.config import get_allowed_origins, settings
 from app.core.logging import setup_logging
 
@@ -60,6 +62,7 @@ app.include_router(routes_health.router)
 app.include_router(routes_webhooks.router)
 app.include_router(routes_auth.router)
 app.include_router(routes_meta.router)
+app.include_router(routes_meta_compliance.router)
 app.include_router(routes_instagram.router)
 app.include_router(routes_campaigns.router)
 app.include_router(routes_messages.router)
@@ -75,6 +78,7 @@ app.include_router(routes_saas_delegation.whatsapp_router)
 app.include_router(routes_saas_delegation.facebook_router)
 app.include_router(routes_saas_messages.router, prefix="/saas")
 app.include_router(routes_saas_messages.router, prefix="/api/saas")
+app.include_router(routes_contact_erasure.router)
 
 
 @app.get("/")

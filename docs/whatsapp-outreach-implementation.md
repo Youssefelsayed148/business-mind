@@ -48,7 +48,7 @@ dispatcher, whatsapp_webhooks.py, whatsapp_client.py, routes_whatsapp.py, authz.
 beat_schedule.py, rate_limit_service.py, the existing template_service.py (name
 clash: new code uses whatsapp_template_service.py), tests for WhatsApp.
 Report: where each hook point is, and what the current Graph API version setting
-means (META_GRAPH_API_VERSION is v21.0 — check Meta's current supported versions
+means (META_GRAPH_API_VERSION defaults to owner-approved v26.0 — check Meta's current supported versions
 and flag it, do not bump silently).
 
 ## Phase 0.5 — Outreach settings migration

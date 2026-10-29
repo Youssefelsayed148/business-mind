@@ -21,6 +21,7 @@ NOW = datetime(2026, 11, 1, 12, 0, tzinfo=timezone.utc)
 def _make_token(db, *, expires_in_days, age_days=30, status="active", plain="old-token"):
     ws = Workspace(id=uuid4(), name="Default", slug=f"tok-{uuid4().hex[:8]}")
     db.add(ws)
+    db.flush()  # Resolve the parent FK before inserting the account.
     account = InstagramAccount(
         id=uuid4(), workspace_id=ws.id, ig_user_id=f"ig-{uuid4().hex[:8]}", ig_username="shop"
     )

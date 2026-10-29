@@ -304,8 +304,13 @@ def test_cross_workspace_whatsapp_reconnect_returns_409_and_leaves_row_untouched
     async def fake_subscribe(user_token, waba_id):
         return None
 
+    from unittest.mock import AsyncMock
+    monkeypatch.setattr("app.api.routes_whatsapp.verify_user_access_token", AsyncMock(return_value={
+        "is_valid": True, "app_id": settings.facebook_app_id, "user_id": "123", "type": "SYSTEM_USER"}))
+    monkeypatch.setattr("app.api.routes_whatsapp.fetch_waba_grant", AsyncMock(return_value=({"id": "789"}, [{"id": "1008677222"}])))
+
     async def fake_metadata(token, phone_number_id):
-        return {"display_phone_number": "+15559997777"}
+        return {"id": phone_number_id, "display_phone_number": "+15559997777"}
 
     monkeypatch.setattr("app.api.routes_whatsapp.exchange_code_for_token", fake_exchange)
     monkeypatch.setattr(
@@ -326,7 +331,7 @@ def test_cross_workspace_whatsapp_reconnect_returns_409_and_leaves_row_untouched
         json={
             "code": "some_code",
             "phone_number_id": "1008677222",
-            "waba_id": "some_waba",
+            "waba_id": "789",
             "state": state,
         },
     )
@@ -398,7 +403,7 @@ def test_cross_workspace_facebook_reconnect_reports_conflict_and_leaves_row_unto
     ]
 
     async def fake_verify(user_token):
-        return None
+        return {"is_valid": True, "app_id": settings.facebook_app_id, "user_id": "123", "type": "USER"}
 
     async def fake_long_lived(short_token):
         return {"access_token": "brand_new_long_lived_token"}

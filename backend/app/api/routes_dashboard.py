@@ -8,6 +8,7 @@ from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from app.api.routes_auth import get_current_user
+from app.authz import WorkspaceContext, require_workspace_role
 from app.db.session import get_db
 from app.models.automation_log import AutomationLog
 from app.models.audit_log import AuditLog
@@ -30,10 +31,17 @@ def _today_start() -> datetime:
     return now.replace(hour=0, minute=0, second=0, microsecond=0)
 
 
-def _campaign_names(db: Session, campaign_ids: set[UUID]) -> dict[str, str]:
+def _campaign_names(
+    db: Session, campaign_ids: set[UUID], workspace_id: UUID | None = None
+) -> dict[str, str]:
     if not campaign_ids:
         return {}
-    campaigns = db.query(Campaign.id, Campaign.name).filter(Campaign.id.in_(campaign_ids)).all()
+    campaigns = (
+        db.query(Campaign.id, Campaign.name)
+        .filter(Campaign.id.in_(campaign_ids))
+        .filter(Campaign.workspace_id == workspace_id if workspace_id is not None else True)
+        .all()
+    )
     return {str(campaign_id): name for campaign_id, name in campaigns}
 
 
@@ -304,7 +312,9 @@ async def campaign_stats(
     }
 
 
-def _account_usernames(db: Session, account_ids: set[UUID]) -> dict[str, str]:
+def _account_usernames(
+    db: Session, account_ids: set[UUID], workspace_id: UUID | None = None
+) -> dict[str, str]:
     # Callers pass a set comprehension over every lead, which now includes
     # None for WhatsApp/Facebook rows. Harmless (it renders IN (NULL, ...))
     # but filtered for consistency with the two helpers below.
@@ -314,42 +324,52 @@ def _account_usernames(db: Session, account_ids: set[UUID]) -> dict[str, str]:
     rows = (
         db.query(InstagramAccount.id, InstagramAccount.ig_username)
         .filter(InstagramAccount.id.in_(account_ids))
+        .filter(InstagramAccount.workspace_id == workspace_id if workspace_id is not None else True)
         .all()
     )
     return {str(acc_id): (username or "") for acc_id, username in rows}
 
 
-def _whatsapp_account_names(db: Session, account_ids: set[UUID]) -> dict[str, str]:
+def _whatsapp_account_names(
+    db: Session, account_ids: set[UUID], workspace_id: UUID | None = None
+) -> dict[str, str]:
     account_ids = {a for a in account_ids if a is not None}
     if not account_ids:
         return {}
     rows = (
         db.query(WhatsappAccount.id, WhatsappAccount.display_phone_number)
         .filter(WhatsappAccount.id.in_(account_ids))
+        .filter(WhatsappAccount.workspace_id == workspace_id if workspace_id is not None else True)
         .all()
     )
     return {str(acc_id): (name or "") for acc_id, name in rows}
 
 
-def _facebook_page_names(db: Session, page_ids: set[UUID]) -> dict[str, str]:
+def _facebook_page_names(
+    db: Session, page_ids: set[UUID], workspace_id: UUID | None = None
+) -> dict[str, str]:
     page_ids = {p for p in page_ids if p is not None}
     if not page_ids:
         return {}
     rows = (
         db.query(FacebookPage.id, FacebookPage.page_name)
         .filter(FacebookPage.id.in_(page_ids))
+        .filter(FacebookPage.workspace_id == workspace_id if workspace_id is not None else True)
         .all()
     )
     return {str(page_id): (name or "") for page_id, name in rows}
 
 
-def _facebook_campaign_names(db: Session, campaign_ids: set[UUID]) -> dict[str, str]:
+def _facebook_campaign_names(
+    db: Session, campaign_ids: set[UUID], workspace_id: UUID | None = None
+) -> dict[str, str]:
     campaign_ids = {c for c in campaign_ids if c is not None}
     if not campaign_ids:
         return {}
     campaigns = (
         db.query(FacebookCampaign.id, FacebookCampaign.name)
         .filter(FacebookCampaign.id.in_(campaign_ids))
+        .filter(FacebookCampaign.workspace_id == workspace_id if workspace_id is not None else True)
         .all()
     )
     return {str(campaign_id): name for campaign_id, name in campaigns}
@@ -460,23 +480,28 @@ async def list_leads(
     return results
 
 
+def _csv_safe(value: str) -> str:
+    """Keep customer-controlled cells from becoming spreadsheet formulas."""
+    return "'" + value if value.startswith(("=", "+", "-", "@", "\t", "\r")) else value
+
+
 @router.get("/leads/export.csv")
 async def export_leads_csv(
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    ctx: WorkspaceContext = Depends(require_workspace_role()),
 ):
-    leads = db.query(Lead).order_by(Lead.created_at.desc()).all()
-    names = _campaign_names(db, {lead.source_campaign_id for lead in leads if lead.source_campaign_id})
-    acc_names = _account_usernames(db, {lead.instagram_account_id for lead in leads})
-    whatsapp_names = _whatsapp_account_names(db, {lead.whatsapp_account_id for lead in leads})
-    facebook_names = _facebook_page_names(db, {lead.facebook_page_id for lead in leads})
+    leads = db.query(Lead).filter(Lead.workspace_id == ctx.workspace_id).order_by(Lead.created_at.desc()).all()
+    names = _campaign_names(db, {lead.source_campaign_id for lead in leads if lead.source_campaign_id}, ctx.workspace_id)
+    acc_names = _account_usernames(db, {lead.instagram_account_id for lead in leads}, ctx.workspace_id)
+    whatsapp_names = _whatsapp_account_names(db, {lead.whatsapp_account_id for lead in leads}, ctx.workspace_id)
+    facebook_names = _facebook_page_names(db, {lead.facebook_page_id for lead in leads}, ctx.workspace_id)
     fb_campaign_lookup = {
         lead.id: _facebook_campaign_and_keyword_for_lead(db, lead.id)
         for lead in leads
         if lead.platform == "facebook" and lead.lead_source == "campaign"
     }
     fb_campaign_names = _facebook_campaign_names(
-        db, {fb_cid for fb_cid, _ in fb_campaign_lookup.values()}
+        db, {fb_cid for fb_cid, _ in fb_campaign_lookup.values()}, ctx.workspace_id
     )
 
     def _source_campaign_label(lead: Lead) -> str:
@@ -513,18 +538,17 @@ async def export_leads_csv(
         ]
     )
     for lead in leads:
-        writer.writerow(
-            [
-                lead.platform or "",
-                lead.ig_username or "",
-                lead.ig_user_id,
-                lead.lead_source or "",
-                _source_campaign_label(lead),
-                _account_label(lead),
-                lead.created_at.isoformat() if lead.created_at else "",
-                lead.last_seen_at.isoformat() if lead.last_seen_at else "",
-            ]
-        )
+        row = [
+            lead.platform or "",
+            lead.ig_username or "",
+            lead.ig_user_id,
+            lead.lead_source or "",
+            _source_campaign_label(lead),
+            _account_label(lead),
+            lead.created_at.isoformat() if lead.created_at else "",
+            lead.last_seen_at.isoformat() if lead.last_seen_at else "",
+        ]
+        writer.writerow([_csv_safe(value) for value in row])
     return Response(
         content=output.getvalue(),
         media_type="text/csv",

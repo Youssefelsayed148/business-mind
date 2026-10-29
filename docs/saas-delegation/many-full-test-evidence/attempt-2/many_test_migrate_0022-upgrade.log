@@ -1,0 +1,10 @@
+INFO  [alembic.runtime.migration] Context impl PostgresqlImpl.
+INFO  [alembic.runtime.migration] Will assume transactional DDL.
+INFO  [alembic.runtime.migration] Running upgrade 0022_whatsapp_opt_in -> 0023_saas_delegation, Add per-channel SaaS delegation settings.
+INFO  [alembic.runtime.migration] Running upgrade 0023_saas_delegation -> 0024_saas_forward_events, Add the SaaS forwarding outbox.
+INFO  [alembic.runtime.migration] Running upgrade 0024_saas_forward_events -> 0025_saas_outbound_messages, Add the SaaS outbound message idempotency table.
+INFO  [alembic.runtime.migration] Running upgrade 0025_saas_outbound_messages -> 0026_saas_channel_health, Track the last channel.status pushed to the SaaS.
+INFO  [alembic.runtime.migration] Running upgrade 0026_saas_channel_health -> 0027_saas_conn_id_lowercase, Normalise stored SaaS connection ids to canonical lowercase UUIDs.
+INFO  [alembic.runtime.migration] Running upgrade 0027_saas_conn_id_lowercase -> 0028_meta_compliance, Durable Meta callback receipts and explicitly verified authorization ownership.
+INFO  [alembic.runtime.migration] Running upgrade 0028_meta_compliance -> 0029_hash_processed_event_keys, Hash historical webhook dedupe keys and remove diagnostic personal data.
+INFO  [alembic.runtime.migration] Running upgrade 0029_hash_processed_event_keys -> 0030_meta_account_erasure, Typed grant proof and durable two-phase account erasure.

@@ -20,6 +20,19 @@ from app.services.message_service import create_queued_message
 from tests.conftest import skip_if_no_db
 
 
+@pytest.fixture(autouse=True)
+def run_processing_worker_locally(db_session, monkeypatch):
+    from app.workers import tasks
+
+    # Use the fixture session so a later duplicate rollback cannot undo a
+    # worker commit made inside the request session's still-open savepoint.
+    monkeypatch.setattr(tasks, "_get_db", lambda: db_session)
+    monkeypatch.setattr(db_session, "close", lambda: None)
+    # Execute processing synchronously; delivery remains queued and never calls Meta.
+    monkeypatch.setattr(tasks.process_webhook_event, "delay", tasks.process_webhook_event.run)
+    monkeypatch.setattr(tasks.send_private_reply, "delay", lambda *args, **kwargs: None)
+
+
 def _make_signed_post(client, payload: dict):
     import hashlib
     import hmac

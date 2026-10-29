@@ -100,7 +100,7 @@ def test_disconnect_instagram_account(client: TestClient, db_session: Session):
         email="igdel@test.com",
         name="IG Del",
         password_hash=hash_password("secret"),
-        role="user",
+        role="admin",
         is_active=True,
     )
     db_session.add(user)
@@ -143,7 +143,7 @@ def test_disconnect_instagram_account_is_idempotent(client: TestClient, db_sessi
         email="igidempotent@test.com",
         name="IG Idempotent",
         password_hash=hash_password("secret"),
-        role="user",
+        role="admin",
         is_active=True,
     )
     db_session.add(user)
@@ -187,7 +187,7 @@ def test_disconnect_pauses_active_campaigns_and_overview_count(client: TestClien
         email="iglifecycle@test.com",
         name="IG Lifecycle",
         password_hash=hash_password("secret"),
-        role="user",
+        role="admin",
         is_active=True,
     )
     db_session.add(user)
@@ -270,16 +270,16 @@ def test_disconnect_pauses_active_campaigns_and_overview_count(client: TestClien
 
 @skip_if_no_db
 def test_reconnect_restores_account_and_token_without_reactivating_campaigns(
-    client: TestClient, db_session: Session
+    client: TestClient, db_session: Session, monkeypatch
 ):
-    ws = Workspace(id=uuid4(), name="Default", slug=f"ig-reconnect-{uuid4()}")
+    ws = Workspace(id=uuid4(), name="Default", slug="default")
     db_session.add(ws)
     user = User(
         id=uuid4(),
         email="igreconnect@test.com",
         name="IG Reconnect",
         password_hash=hash_password("secret"),
-        role="user",
+        role="admin",
         is_active=True,
     )
     db_session.add(user)
@@ -314,6 +314,10 @@ def test_reconnect_restores_account_and_token_without_reactivating_campaigns(
     db_session.add(token_row)
     db_session.commit()
 
+    from app.models.user_workspace_membership import UserWorkspaceMembership
+    db_session.add(UserWorkspaceMembership(user_id=user.id, workspace_id=ws.id, role="admin"))
+    db_session.commit()
+
     token_resp = client.post(
         "/auth/login",
         data={"username": "igreconnect@test.com", "password": "secret"},
@@ -322,26 +326,46 @@ def test_reconnect_restores_account_and_token_without_reactivating_campaigns(
 
     response = client.post(
         f"/instagram/accounts/{acc.id}/reconnect",
-        headers={"Authorization": f"Bearer {token}"},
+        headers={"Authorization": f"Bearer {token}", "X-Workspace-Id": str(ws.id)},
     )
     assert response.status_code == 200
-    data = response.json()
-    assert data["status"] == "connected"
-    assert data["username"] == "testcompany"
+    from unittest.mock import AsyncMock
+    from urllib.parse import parse_qs, urlparse
+    from app.api import routes_meta
 
+    state = parse_qs(urlparse(response.json()["oauth_url"]).query)["state"][0]
     db_session.refresh(acc)
     db_session.refresh(token_row)
+    assert acc.status == "disconnected"
+    assert token_row.status == "expired"
+    monkeypatch.setattr(routes_meta, "exchange_code_for_short_lived_token", AsyncMock(return_value={"access_token": "short-test-token", "user_id": acc.ig_user_id}))
+    monkeypatch.setattr(routes_meta, "exchange_for_long_lived_token", AsyncMock(return_value={"access_token": "long-test-token", "expires_in": 5184000}))
+    monkeypatch.setattr(routes_meta, "fetch_instagram_account_metadata", AsyncMock(return_value={"ig_user_id": acc.ig_user_id, "provider_user_id": acc.ig_user_id, "provider_profile_id": acc.ig_user_id, "username": "testcompany", "account_type": "BUSINESS"}))
+    token_row_id = token_row.id
+    callback = client.get("/meta/connect/callback", params={"code": "test-code", "state": state}, follow_redirects=False)
+    assert callback.status_code == 307
+    assert "reconnected=true" in callback.headers["location"]
+
+    db_session.refresh(acc)
     db_session.refresh(campaign)
     assert acc.status == "connected"
     assert acc.ig_username == "testcompany"
-    assert token_row.status == "active"
+    # Reconnect replaces the previous grant, including expired token material.
+    from app.services.token_service import get_decrypted_token
+    assert db_session.get(MetaToken, token_row_id) is None
+    active_token = db_session.query(MetaToken).filter(
+        MetaToken.instagram_account_id == acc.id, MetaToken.status == "active"
+    ).one()
+    assert active_token.id != token_row_id
+    assert get_decrypted_token(db_session, acc.id) == "long-test-token"
     assert campaign.status == "paused"
 
+    from app.models.audit_log import AuditLog
     log = (
-        db_session.query(AutomationLog)
+        db_session.query(AuditLog)
         .filter(
-            AutomationLog.instagram_account_id == acc.id,
-            AutomationLog.action == "account_reconnected",
+            AuditLog.entity_id == acc.id,
+            AuditLog.action == "account_reconnect_initiated",
         )
         .first()
     )

@@ -1,4 +1,4 @@
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import MagicMock, patch
 from uuid import uuid4
 
 import pytest
@@ -14,6 +14,16 @@ from app.models.workspace import Workspace
 from app.services.token_service import store_encrypted_token
 from app.workers.tasks import send_private_reply
 from tests.conftest import skip_if_no_db
+
+
+@pytest.fixture(autouse=True)
+def worker_uses_fixture_transaction(db_session, monkeypatch):
+    from app.workers import tasks
+
+    # Use the fixture session so a later duplicate rollback cannot undo a
+    # worker commit made inside the request session's still-open savepoint.
+    monkeypatch.setattr(tasks, "_get_db", lambda: db_session)
+    monkeypatch.setattr(db_session, "close", lambda: None)
 
 
 @skip_if_no_db
@@ -83,9 +93,9 @@ def test_send_private_reply_success(db_session: Session):
 
     with patch(
         "app.workers.tasks.MetaMessagingClient.send_private_reply",
-        new_callable=AsyncMock,
+        new_callable=MagicMock,
         return_value=mock_result,
-    ), patch("app.workers.tasks.MetaMessagingClient.close", new_callable=AsyncMock):
+    ), patch("app.workers.tasks.MetaMessagingClient.close", new_callable=MagicMock):
         send_private_reply(str(msg.id))
 
     db_session.refresh(msg)
@@ -159,9 +169,9 @@ def test_send_private_reply_expired_private_reply(db_session: Session):
 
     with patch(
         "app.workers.tasks.MetaMessagingClient.send_private_reply",
-        new_callable=AsyncMock,
+        new_callable=MagicMock,
         return_value=mock_result,
-    ), patch("app.workers.tasks.MetaMessagingClient.close", new_callable=AsyncMock):
+    ), patch("app.workers.tasks.MetaMessagingClient.close", new_callable=MagicMock):
         send_private_reply(str(msg.id))
 
     db_session.refresh(msg)
@@ -235,9 +245,9 @@ def test_send_private_reply_token_error_no_retry(db_session: Session):
 
     with patch(
         "app.workers.tasks.MetaMessagingClient.send_private_reply",
-        new_callable=AsyncMock,
+        new_callable=MagicMock,
         return_value=mock_result,
-    ), patch("app.workers.tasks.MetaMessagingClient.close", new_callable=AsyncMock):
+    ), patch("app.workers.tasks.MetaMessagingClient.close", new_callable=MagicMock):
         send_private_reply(str(msg.id))
 
     db_session.refresh(msg)
@@ -310,17 +320,19 @@ def test_send_private_reply_retryable_500(db_session: Session):
     mock_result.error_message = "Internal server error"
     mock_result.retryable = True
 
+    from celery.exceptions import Retry
+
     with patch(
         "app.workers.tasks.MetaMessagingClient.send_private_reply",
-        new_callable=AsyncMock,
+        new_callable=MagicMock,
         return_value=mock_result,
-    ), patch("app.workers.tasks.MetaMessagingClient.close", new_callable=AsyncMock):
-        # The task will raise self.retry, which we need to catch
-        try:
+    ), patch("app.workers.tasks.MetaMessagingClient.close", new_callable=MagicMock), patch.object(
+        send_private_reply, "retry", side_effect=Retry()
+    ) as retry_task:
+        with pytest.raises(Retry):
             send_private_reply(str(msg.id))
-        except Exception as exc:
-            exc_name = type(exc).__name__
-            assert exc_name in ("Retry", "MaxRetriesExceededError")
+        assert retry_task.call_count == 1
+        assert retry_task.call_args.kwargs["countdown"] == 60
 
     db_session.refresh(msg)
     assert msg.status == "failed"

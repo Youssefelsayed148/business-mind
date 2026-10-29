@@ -82,3 +82,27 @@ def test_webhook_post_accepts_valid_signature(client):
     )
     assert response.status_code == 200
     assert response.json()["status"] == "received"
+
+
+def test_webhook_get_rejects_unicode_token_without_server_error():
+    response = client.get("/webhooks/meta", params={
+        "hub.mode": "subscribe", "hub.verify_token": "???-????", "hub.challenge": "test",
+    })
+    assert response.status_code == 403
+
+
+def test_webhook_get_uses_constant_time_byte_comparison(monkeypatch):
+    import secrets
+    calls = []
+    original = secrets.compare_digest
+
+    def compare(left, right):
+        calls.append((type(left), type(right)))
+        return original(left, right)
+
+    monkeypatch.setattr("app.api.routes_webhooks.secrets.compare_digest", compare)
+    response = client.get("/webhooks/meta", params={
+        "hub.mode": "subscribe", "hub.verify_token": "wrong", "hub.challenge": "test",
+    })
+    assert response.status_code == 403
+    assert calls == [(bytes, bytes)]

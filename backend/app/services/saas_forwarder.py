@@ -106,7 +106,7 @@ def enqueue_event(
 
 
 def drop_pending(db: Session, *, platform: str, channel_id, reason: str = "delegation_disabled") -> int:
-    """Drop every queued, unsent event of a channel (contract A13). Does not
+    """Drop queued ordinary events (A13); erasure survives disablement (A16). Does not
     commit."""
     rows = (
         db.query(SaasForwardEvent)
@@ -114,6 +114,7 @@ def drop_pending(db: Session, *, platform: str, channel_id, reason: str = "deleg
             SaasForwardEvent.platform == platform,
             SaasForwardEvent.channel_id == channel_id,
             SaasForwardEvent.status == "pending",
+            SaasForwardEvent.event_type != "contact.erasure",
         )
         .all()
     )
@@ -163,6 +164,7 @@ def requeue_failed(db: Session, *, platform: str, channel_id, now: datetime | No
             SaasForwardEvent.platform == platform,
             SaasForwardEvent.channel_id == channel_id,
             SaasForwardEvent.status == "failed",
+            SaasForwardEvent.event_type != "contact.erasure",
             SaasForwardEvent.payload != {},
         )
         .all()
@@ -198,6 +200,7 @@ def purge_expired(db: Session, *, now: datetime | None = None) -> PurgeResult:
         db.query(SaasForwardEvent)
         .filter(
             SaasForwardEvent.status == "failed",
+            SaasForwardEvent.event_type != "contact.erasure",
             SaasForwardEvent.completed_at < now - FAILED_PAYLOAD_RETENTION,
             SaasForwardEvent.payload != {},
         )
@@ -207,6 +210,7 @@ def purge_expired(db: Session, *, now: datetime | None = None) -> PurgeResult:
         db.query(SaasForwardEvent)
         .filter(
             SaasForwardEvent.status.in_(("sent", "dropped", "failed")),
+            SaasForwardEvent.event_type != "contact.erasure",
             SaasForwardEvent.completed_at < now - TERMINAL_ROW_RETENTION,
         )
         .delete(synchronize_session=False)
@@ -294,8 +298,13 @@ def process_ordering_key(
                 db.commit()
                 result.failed += 1
                 continue
-            if channel is None or not channel.saas_delegation_enabled:
-                # A13: switched off (or gone) -> never send queued events.
+            if head.event_type == "contact.erasure" and channel is None:
+                _finish(head, "failed", "erasure_operator_action_required: channel_missing", current)
+                db.commit()
+                result.failed += 1
+                continue
+            if channel is None or (not channel.saas_delegation_enabled and head.event_type != "contact.erasure"):
+                # A13 ordinary events stop; A16 privacy events survive disablement.
                 drop_pending(db, platform=head.platform, channel_id=head.channel_id)
                 db.commit()
                 result.dropped += 1
@@ -326,6 +335,20 @@ def _expired(row: SaasForwardEvent, current: datetime) -> bool:
 def _attempt(db, row: SaasForwardEvent, channel, client, current: datetime, rng) -> str:
     """One delivery attempt. Returns 'sent', 'failed' or 'retry'."""
     row.attempts += 1
+    if row.event_type == "contact.erasure":
+        try:
+            secret, _previous = delegation.get_secrets(channel)
+            valid = (
+                secret and channel.saas_connection_id and channel.saas_base_url
+                and row.payload.get("connection_id") == channel.saas_connection_id
+                and row.payload.get("external_contact_id")
+            )
+        except (ValueError, RuntimeError):
+            valid = False
+        if not valid:
+            _finish(row, "failed", "erasure_operator_action_required: signing_configuration", current)
+            _record(channel, "erasure_operator_action_required", degraded=True, now=current)
+            return "failed"
     try:
         base_url = delegation.validate_base_url(channel.saas_base_url or "")
         secret, _previous = delegation.get_secrets(channel)
@@ -349,7 +372,7 @@ def _attempt(db, row: SaasForwardEvent, channel, client, current: datetime, rng)
         error = f"network_error: {type(exc).__name__}"
     else:
         code = response.status_code
-        if 200 <= code < 300:
+        if (code == 202 if row.event_type == "contact.erasure" else 200 <= code < 300):
             _finish(row, "sent", None, current)
             _record(channel, f"sent_{code}", degraded=False, now=current)
             return "sent"

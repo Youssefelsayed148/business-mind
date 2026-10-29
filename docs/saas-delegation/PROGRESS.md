@@ -43,8 +43,8 @@ Records exact commands and outcomes. Nothing here is estimated.
   - `tasks.process_webhook_event`: one extra list per platform (WhatsApp, Facebook) added to the "anything to do?" check and one extra call after the regular message handler. No existing statement was changed.
 - Tests: `backend/tests/test_saas_unsupported.py` (new): parser unit tests, every media type forwarded, each dropped WhatsApp shape forwarded, dedupe, non-delegated account/page stores nothing and the webhook stays `skipped`, disconnected delegated Facebook page not forwarded. Status: written, not yet run (F-10).
 
-### F-04 Instagram part - AWAITING OWNER CONFIRMATION (CLAUDE.md rule 5)
-This is its own commit and touches live Instagram dispatch code, so it needs the owner's review before it ships. The complete diff to existing Instagram code in `workers/tasks.py::process_webhook_event` is exactly:
+### F-04 Instagram part - CONFIRMED by owner (2026-10-28): keep `59d3442`
+Owner decision D5 is CONFIRMED (2026-10-28): keep commit `59d3442`, Instagram unsupported-message forwarding for delegated accounts. This resolves the earlier owner-confirmation requirement; full-suite verification and the remaining release gates still apply. The complete diff to existing Instagram code in `workers/tasks.py::process_webhook_event` is exactly:
 1. `message_events = parse_instagram_message_events(...)` is followed by one new line computing `delegated_unsupported_events = delegated_instagram_unsupported_events(db, payload)` (returns `[]` unless the account is delegated).
 2. The "nothing to do -> skipped" condition gets one extra `and not delegated_unsupported_events` term (for a non-delegated account the list is empty, so the condition is unchanged).
 3. One new call `_process_delegated_instagram_unsupported(db, delegated_unsupported_events)` right after that skip block and before the comment loop. The existing `for msg_evt in message_events` loop, `parse_instagram_message_events`, and every non-delegated statement are untouched.
@@ -1559,3 +1559,204 @@ untouched. Many-side docs are synchronized only; no Many full suite is claimed.
 Deployed rebuild, hosted CI, live Meta, real Many-to-SaaS round trip, staging
 canary and owner merge/release approvals remain UNVERIFIED/unperformed.
 No push, merge, deploy, live send, paid or authenticated external call.
+
+## Owner decision D5 - 2026-10-28
+
+- D5 = **CONFIRMED**: keep commit `59d3442` (Instagram unsupported-message forwarding for delegated accounts). This owner instruction supersedes all earlier D5 OPEN/deferred/awaiting-confirmation entries in this historical log and the closeout plan.
+- R12/A8 owner decision is resolved. Batch A is not closed by this decision; the remaining suite and migration evidence requirements still apply.
+- Full-suite checklist: [ ] `backend/tests/test_saas_unsupported_instagram.py` must pass in the final full backend suite, with its result recorded in the suite evidence. No tests were run for this documentation-only update; no new passing result is claimed.
+- Scope: `docs/saas-delegation/PROGRESS.md`, `docs/saas-delegation/CLOSEOUT-PLAN.md`, and the byte-identical SaaS `implementation/CLOSEOUT-PLAN.md` copy. Existing unrelated worktree changes are preserved. No code changes, commit, push, merge, deployment or live call.
+- Verification: `python -` (stdlib documentation assertions) exited 0: both plan copies are byte-identical, SHA256 `4da8afa7be098f80effa1220dd963dddb70183c8c6ec15ce600c034fd6bd360e`; D5/R12/Batch A gate/checklist assertions passed; branch is `closeout/batch-b`; unrelated tracked diff SHA256 remained `5548248772351b17df91b85e3d020f18d18a6924e66233e73ec422ef6f98eef0`.
+- Verification: `git diff --check -- docs/saas-delegation/PROGRESS.md docs/saas-delegation/CLOSEOUT-PLAN.md` exited 0 (Git emitted only LF-to-CRLF checkout warnings). A preliminary read-only PowerShell diff-hash command failed because `Get-FileHash -InputStream` received a script block; the successful Python byte-hash assertion above replaced it. No application tests run (documentation only).
+
+
+## R1 owner-approved implementation - 2026-10-28
+
+Implemented typed encrypted provider grant proof, transactional OAuth/reconnect,
+namespace-safe callbacks, migration 0030 and durable two-phase Facebook/WhatsApp
+account erasure. Unknown identities/scope remain operator cases; HTTP 202 is
+acceptance only. Exact commands, files/scope, initial failures and corrected
+outcomes: R1-IMPLEMENTATION.md. Latest R1-only run: 38 passed (4.75 s); related
+reconnect/delegation/retention: 62 passed (7.13 s). Both real migration scenarios
+passed in the earlier 149-pass run; each later fresh head/drift check passed.
+Dashboard tsc and changed API-client lint passed. These are targeted iterative
+checks, not a full suite or clean-head integration claim. Pre-existing Batch T/A5
+working-tree edits were preserved separately. Instagram dispatch/send handlers
+and 59d3442 unchanged; the legacy Instagram immediate hard-delete route remains
+subject to coordinated remote cleanup. No push/merge/deploy/live/paid calls.
+
+
+## R17 / B4 review and policy refresh - 2026-10-28
+
+Ran after R1 commit f3a7de0. Rewrote the submission pack against implemented
+behavior; aligned privacy/terms; nine per-permission native/delegated recording
+rows remain UNVERIFIED. AI support-only disclosure, no human-agent tag, local
+window rejection and the existing WhatsApp free-entry exception are explicit.
+Removed guessed contacts/effective dates in favor of marked owner inputs.
+Env-free snapshot dashboard tsc and changed-page lint both exit 0; source checks
+and diff whitespace check pass. No backend test rerun for docs-only changes.
+Exact commands, files, owner placeholders and remaining live gates:
+R17-B4-IMPLEMENTATION.md. Policy publication, D4 recordings and Meta activity
+remain owner/UNVERIFIED gates; no publish/push/merge/deploy/live/paid call.
+
+
+## R1 final grant/account binding review - 2026-10-28
+
+After R1 f3a7de0 and docs d4734d4, final review added fail-closed platform and
+provider-account equality checks to save_grant. Wrong model/Page proofs cannot
+be persisted to another account. Affected identity + all three OAuth matrices:
+16 passed, 2.33 s, zero failures/errors/skips; fresh upgrade/drift pass. Evidence
+and exact command in R1-IMPLEMENTATION.md (many-r1-eXcWfH1t). No policy behavior,
+Instagram send/dispatch, live service or full-suite claim changed.
+
+
+
+
+## R1 callback matrix and phase-two rollback coverage - 2026-10-28
+
+Completed nine unproven/wrong-app callback replay cases across all three platforms
+and a phase-two caller rollback regression. 10 passed, 2.77 s, zero failures/errors/
+skips; fresh upgrade/drift pass in many-r1-pwM6hMIH. Exact selection and evidence
+in R1-IMPLEMENTATION.md. Tests/docs only; no application behavior or full-suite claim.
+
+## R19 Many/SaaS local verification - 2026-10-28
+
+SaaS commit 86c992d verifies already-present phone guard, 0030 health expression
+index and bot/provisioning alignment: 41 related tests pass; actual index roundtrip
+and Alembic check clean. Current prompt has no S10; no invented prompt change or
+new migration. Both CI definitions parsed/static-checked (4 Many / 14 SaaS blocks),
+without running workflows; C3 source head test passes. webhook_unhealthy unchanged.
+Many adopts the reviewed pre-existing model-registry/received_at-index corrections
+and regression; strict CSV import is verified. Found and fixed raw formula cells
+in Many lead CSV output, with six prefix and actual-response tests. Initial related
+run 3 passed (14.01 s); expanded CSV run 8 passed (3.73 s); fresh head/drift checks
+passed in both private clusters. Full suites/hosted CI remain UNVERIFIED. Exact
+commands/files/limits: R19-VERIFICATION.md. The legacy Many export's global auth
+and lead query are unchanged and require a separate workspace-isolation review.
+Unrelated A5/config/template/canary/docs edits remain unstaged. No generated files,
+push/merge/deploy/live/paid calls. External plan synchronized only under the owner's
+explicit one-file exception; other original checkouts untouched.
+
+
+## CSV workspace isolation close-out - 2026-10-29
+
+Starting Many HEAD c03ef5683c9117651b23aa87de568e1553043763 on closeout/batch-b.
+Source search found one CSV exporter, GET /leads/export.csv, downloaded by
+ dashboard/app/(dashboard)/leads/page.tsx. It authenticated globally and queried
+all leads. New A/B tests proved cross-workspace leaks for all three platforms;
+the missing-workspace request also incorrectly returned 200. Before fix: 4 failed,
+8 deselected, 11.51 s, exit 1 (expected vulnerability evidence).
+Evidence: /var/tmp/many-csv-D2dwsdMx/evidence.
+
+Fix: existing workspace-membership dependency, Lead.workspace_id predicate,
+workspace predicates on all five account/campaign label lookups, and the download
+supplies X-Workspace-Id through the existing membership resolver. Failed HTTP
+responses are surfaced instead of saved as CSV. Formula escaping is retained.
+A/B responses, all three platforms, missing/malformed/foreign/nonexistent workspace,
+unauthenticated callers and inconsistent foreign account/campaign FKs are covered.
+After fix: 14 passed, 1 unrelated import test deselected, zero failures/errors/skips,
+4.08 s, exit 0. Evidence: /var/tmp/many-csv-mp12LMDu/evidence. One existing Python
+crypt deprecation warning. Frontend runtime/type/lint checks were not run here.
+
+Exact PowerShell harness commands (from batch-b):
+- wsl -d Ubuntu -u root -- unshare --net bash '/mnt/d/Projects/Work Projects/The Osiris Labs/ManyOsirisChat/.closeout-worktrees/batch-b/.r19-validation/csv-before.sh'
+- wsl -d Ubuntu -u root -- unshare --net bash '/mnt/d/Projects/Work Projects/The Osiris Labs/ManyOsirisChat/.closeout-worktrees/batch-b/.r19-validation/csv-after.sh'
+
+Both use a newly initialized private PostgreSQL 18 cluster, many_test_csv DB,
+private Redis namespace 2, loopback-only network and fresh allowlisted backend
+source copied from this worktree. No actual env/credential file was copied/read.
+The first unprivileged WSL attempt failed with E_ACCESSDENIED before running;
+automatically approved escalation ran the harness. Each successful launch prints
+only DB host/name and asserts current_database, explicitly sets APP_ENV=test,
+TEST_DATABASE_URL and DATABASE_URL; alembic upgrade head and alembic check pass.
+Exact pytest selections from snapshot backend:
+- APP_ENV=test TEST_DATABASE_URL="$TEST_DATABASE_URL" pytest tests/test_r19_csv_import.py -k "export_workspace_isolation or export_requires_workspace" -q --junitxml="$scratch/evidence/targeted.xml"
+- APP_ENV=test TEST_DATABASE_URL="$TEST_DATABASE_URL" pytest tests/test_r19_csv_import.py -k "not csv_import_rejects" -q --junitxml="$scratch/evidence/targeted.xml"
+Traps stopped only services launched by each run. No other tests were run.
+
+Reviewed existing requested changes: v26.0 config/placeholder template pins,
+README Instagram Login documentation, matching outreach documentation,
+source-head-aware canary fixtures and mocked version-routing regression.
+These tests are committed as requested but not rerun (CSV-only test scope).
+Validation folders are ignored; no generated files are committed. Other dashboard
+routes remain outside this CSV-only authorization fix; no general dashboard
+workspace-isolation claim is made. No deployment, push, merge or external call.
+SaaS read-only verification authorized by owner: git rev-parse HEAD returns
+86c992dafee0caf36f4b26e861e6a89bf1de17f1 on closeout/batch-c. AST inspection of
+actual Alembic revision/down_revision assignments verifies single source heads
+Many 0030_meta_account_erasure and SaaS 0031_contact_erasure. No SaaS tests run.
+A documentation append initially failed decoding UTF-8 using Windows cp1252;
+repeated with explicit UTF-8 successfully; no application/test effect.
+
+
+Application changes and reviewed corrections committed: 6dc4bb9bc7a30735f994cad25c2a0cbdd91cd6cf.
+Explicit commit files: .env.example, .env.production.example, .gitignore, README.md,
+backend/app/api/routes_dashboard.py, backend/app/core/config.py,
+backend/tests/test_meta_graph_version.py, backend/tests/test_r19_csv_import.py,
+dashboard/app/(dashboard)/leads/page.tsx, docs/saas-delegation/CLOSEOUT-PLAN.md,
+docs/saas-delegation/PROGRESS.md, docs/saas-delegation/R19-VERIFICATION.md,
+docs/whatsapp-outreach-implementation.md, scripts/test_canary_preflight.py.
+The following documentation-only commit refreshes TESTING-HANDOFF.md, the plan
+and this log; its SHA is reported by git rev-parse HEAD after commit. Both plan
+copies are synchronized under the owner's explicit plan-only exception.
+Git diff --check passes. Initial git add was denied by the sandbox shared-index
+boundary; approved escalation performed the explicit-list commit successfully.
+No generated artifacts staged; .r1-validation/ and .r19-validation/ are ignored.
+
+
+## Many full-test closeout - 2026-10-29
+
+Verified initial clean Windows Git status, closeout/batch-b,
+HEAD f8e9aa70b3fbb0a2af7bd8cff0db3f73f1338f84. Read CLAUDE, handoff, plan and
+release gates. Current owner instruction supersedes historic D5 confirmation:
+D5 remains OPEN; 59d3442 is retained, no Instagram dispatch/send code changed.
+
+Fresh allowlisted 383-file snapshots, new private PostgreSQL 18 clusters using
+Unix sockets (listen_addresses empty), private Redis and loopback-only namespace,
+env -i and dummy secrets. No old source snapshot used. No env/credential/token
+or backup files copied into snapshots. Every test command has explicit test
+environment and a current_database assertion. PostgreSQL/Redis started by each
+run were stopped; evidence includes teardown records.
+
+Final backend: 1007 passed, 0 failed, 0 errors, 0 skipped, 58 warnings,
+153.02 s pytest / 154.315 s command wall time. Scripts: 29 passed, no failures,
+errors/skips, 0.991 s unittest / 1.121 s wall. Contracts: 3 hashes OK, exit 0.
+Locked dashboard dependency tree, TypeScript (--incremental false) and full lint:
+exit 0 each; lint retains one existing missing-toast-dependency warning.
+Actual empty-to-0030 and 0022-to-0030, both 0030-to-0029/re-upgrade roundtrips,
+and both alembic checks pass; one head 0030_meta_account_erasure.
+
+Named final-suite passes: account erasure 31; R1 OAuth 15; R1 migration 2;
+callbacks/compliance 32; A16 contact erasure 26; hashed dedupe service 8 and
+migration 1; unsupported Instagram 13; Graph versions 32; CSV 15 including all
+14 export/security cases. These are subsets, not extra suite totals.
+
+Only test-fixture behavior changed: real Alembic upgrade replaces create_all;
+dispose connections at teardown and let the harness own its disposable database,
+preserving Alembic revision/schema consistency across sessions. Two consecutive
+model sessions pass 3/3 each. Final manifest hashes match current source.
+No authorization, tenancy, dedupe, erasure or assertions were weakened.
+
+Earlier failures are retained, not omitted: initial harness module invocation
+caused 1007 setup errors (local alembic shadows installed module); corrected to
+the console entrypoint. Next full attempt was interrupted at -15 after discovering
+drop_all left the revision at head; its progress log has no completed-suite/JUnit
+claim. A rejected downgrade-to-base teardown yielded 3 passed plus 1 teardown
+error: the legacy path drops missing ix_conversations_instagram_account_id.
+That optional path is outside the requested 0030/0029 rehearsal; it remains a
+documented limitation, not a claim of working base rollback. Final fixture cleanup
+uses engine.dispose, with cluster lifecycle managed by the owning harness.
+
+Exact commands, exits, durations, source hashes, failed/interrupted attempt logs,
+final JUnit and converted script JUnit: many-full-test-evidence/README.md,
+commands.json, counts.json, source-manifest.json and attempt-1/attempt-2/attempt-3.
+No new test reruns were used to produce reports. Only conftest differs between
+earlier passing dashboard/script/migration snapshots and final source; those
+checks' application/configuration/script files are byte-identical.
+
+Updated evidence-backed local R9/R10/R1/R2/R3/R17/R19 backlog statements; SaaS
+implementation/CLOSEOUT-PLAN.md synchronized byte-for-byte under the plan-only
+exception. No SaaS application/source changes or SaaS test claims by this run.
+UNVERIFIED: live Meta/Graph compatibility, staging/canary, operator remediation,
+deployment/hosted CI, real SaaS round trip, publication/recordings and release
+approval. D5 OPEN. No push, merge, deploy, authenticated external/paid call or send.

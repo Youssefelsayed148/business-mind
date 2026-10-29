@@ -41,12 +41,21 @@ class SourceChecks(unittest.TestCase):
         path.write_text(source.replace(before, after))
 
     def test_real_source_passes_but_static_only_is_not_ready(self):
-        self.assertEqual(preflight.migration_head(self.root), preflight.REQUIRED_REVISIONS[-1])
+        # Required revisions are ancestry requirements, not a permanently pinned
+        # source head: later reviewed migrations must remain supported.
+        preflight.migration_head(self.root)
         preflight.check_beat(self.root)
         preflight.check_nginx(self.root / "nginx/default.conf")
         with redirect_stdout(io.StringIO()) as output:
             self.assertEqual(preflight.main(["--root", str(self.root), "--static-only"]), 2)
         self.assertIn("UNVERIFIED", output.getvalue())
+
+    def test_additional_descendant_migration_is_accepted(self):
+        current_head = preflight.migration_head(self.root)
+        (self.root / "backend/alembic/versions/future.py").write_text(
+            f"revision='future'\ndown_revision={current_head!r}\n"
+        )
+        self.assertEqual(preflight.migration_head(self.root), "future")
 
     def test_multiple_migration_heads_fail(self):
         (self.root / "backend/alembic/versions/extra.py").write_text(
@@ -100,6 +109,21 @@ class SourceChecks(unittest.TestCase):
         self.assertEqual(status, 1)
         self.assertNotIn("Traceback", output.getvalue())
 
+    def test_public_https_base_url_rejects_unsafe_config(self):
+        self.assertTrue(preflight.public_https_base_url("https://saas.example.com"))
+        self.assertTrue(preflight.public_https_base_url("https://saas.example.com:8443/prefix"))
+        for value in (None, "http://saas.example.com", "https://localhost", "https://127.0.0.1",
+                      "https://10.1.2.3", "https://saas.local", "https://user:pass@saas.example.com",
+                      "https://saas.example.com?token=synthetic", "https://bad..example.com") :
+            with self.subTest(value=value):
+                self.assertFalse(preflight.public_https_base_url(value))
+
+    def test_running_beat_count_is_separate_from_source_schedule(self):
+        preflight.check_beat_process_count(1)
+        for count in (None, 0, 2, -1):
+            with self.assertRaises(preflight.CheckFailed):
+                preflight.check_beat_process_count(count)
+
 
 class DisposableDatabaseChecks(unittest.TestCase):
     @classmethod
@@ -111,20 +135,21 @@ class DisposableDatabaseChecks(unittest.TestCase):
         if os.environ.get("APP_ENV") != "test" or not raw_url:
             raise RuntimeError("Explicit APP_ENV=test and TEST_DATABASE_URL are required")
         url = make_url(raw_url)
-        if url.database != "many_test" or url.host is not None or not url.query.get("host", "").startswith("/"):
+        if not preflight.re.fullmatch(r"many_test(?:_[a-z0-9_]+)?", url.database) or url.host is not None or not url.query.get("host", "").startswith("/"):
             raise RuntimeError("Only disposable local-socket many_test is permitted")
         cls.url = raw_url
+        cls.head = preflight.migration_head(preflight.ROOT)
         cls.engine = create_engine(url)
         cls.text = staticmethod(text)
         with cls.engine.begin() as conn:
-            if conn.execute(text("SELECT current_database()")).scalar_one() != "many_test":
+            if conn.execute(text("SELECT current_database()")).scalar_one() != url.database:
                 raise RuntimeError("Wrong test database")
             if {"alembic_version", "whatsapp_accounts"} & set(inspect(conn).get_table_names()):
                 raise RuntimeError("Synthetic fixture tables already exist; refusing to overwrite")
             conn.execute(text("CREATE TABLE alembic_version (version_num varchar(32) PRIMARY KEY)"))
-            conn.execute(text("CREATE TABLE whatsapp_accounts (id uuid PRIMARY KEY, saas_connection_id varchar(64))"))
-            conn.execute(text("INSERT INTO alembic_version VALUES (:v)"), {"v": preflight.REQUIRED_REVISIONS[-1]})
-            conn.execute(text("INSERT INTO whatsapp_accounts VALUES (:id, :cid)"), {"id": ACCOUNT, "cid": CONNECTION})
+            conn.execute(text("CREATE TABLE whatsapp_accounts (id uuid PRIMARY KEY, saas_connection_id varchar(64), saas_delegation_enabled boolean NOT NULL DEFAULT true, saas_base_url text DEFAULT 'https://saas.example.com', saas_secret_encrypted text DEFAULT 'synthetic-test-ciphertext')"))
+            conn.execute(text("INSERT INTO alembic_version VALUES (:v)"), {"v": cls.head})
+            conn.execute(text("INSERT INTO whatsapp_accounts (id, saas_connection_id) VALUES (:id, :cid)"), {"id": ACCOUNT, "cid": CONNECTION})
 
     @classmethod
     def tearDownClass(cls):
@@ -135,43 +160,63 @@ class DisposableDatabaseChecks(unittest.TestCase):
 
     def setUp(self):
         with self.engine.begin() as conn:
-            conn.execute(self.text("UPDATE alembic_version SET version_num=:v"), {"v": preflight.REQUIRED_REVISIONS[-1]})
-            conn.execute(self.text("UPDATE whatsapp_accounts SET saas_connection_id=:v"), {"v": CONNECTION})
+            conn.execute(self.text("UPDATE alembic_version SET version_num=:v"), {"v": self.head})
+            conn.execute(self.text("UPDATE whatsapp_accounts SET saas_connection_id=:v, saas_delegation_enabled=true, saas_base_url='https://saas.example.com', saas_secret_encrypted='synthetic-test-ciphertext'"), {"v": CONNECTION})
 
     def test_database_head_and_lowercase_uuid_pass(self):
-        preflight.check_database(self.url, ACCOUNT, preflight.REQUIRED_REVISIONS[-1])
+        preflight.check_database(self.url, ACCOUNT, self.head)
 
     def test_old_database_revision_fails(self):
         with self.engine.begin() as conn:
             conn.execute(self.text("UPDATE alembic_version SET version_num='0022_whatsapp_opt_in'"))
         with self.assertRaises(preflight.CheckFailed):
-            preflight.check_database(self.url, ACCOUNT, preflight.REQUIRED_REVISIONS[-1])
+            preflight.check_database(self.url, ACCOUNT, self.head)
 
     def test_uppercase_stored_uuid_fails(self):
         with self.engine.begin() as conn:
-            conn.execute(self.text("UPDATE whatsapp_accounts SET saas_connection_id=:v"), {"v": CONNECTION.upper()})
+            conn.execute(self.text("UPDATE whatsapp_accounts SET saas_connection_id=:v, saas_delegation_enabled=true, saas_base_url='https://saas.example.com', saas_secret_encrypted='synthetic-test-ciphertext'"), {"v": CONNECTION.upper()})
         with self.assertRaises(preflight.CheckFailed):
-            preflight.check_database(self.url, ACCOUNT, preflight.REQUIRED_REVISIONS[-1])
+            preflight.check_database(self.url, ACCOUNT, self.head)
 
     def test_missing_account_fails(self):
         with self.assertRaises(preflight.CheckFailed):
-            preflight.check_database(self.url, UUID(int=0), preflight.REQUIRED_REVISIONS[-1])
+            preflight.check_database(self.url, UUID(int=0), self.head)
 
     def test_tcp_is_refused_and_not_printed(self):
         marker = "synthetic-private-marker"
         with patch.dict(os.environ, {"CANARY_DATABASE_URL": f"postgresql+psycopg://user:{marker}@example.invalid/many_test"}):
             with redirect_stdout(io.StringIO()) as output:
-                status = preflight.main(["--account-id", str(ACCOUNT)])
+                status = preflight.main(["--account-id", str(ACCOUNT), "--beat-process-count", "1"])
         self.assertEqual(status, 1)
         self.assertNotIn(marker, output.getvalue())
         self.assertIn("TCP is refused", output.getvalue())
 
     def test_complete_cli_passes_without_outputting_uuid(self):
         with redirect_stdout(io.StringIO()) as output:
-            status = preflight.main(["--database-url-env", "TEST_DATABASE_URL", "--account-id", str(ACCOUNT)])
+            status = preflight.main(["--database-url-env", "TEST_DATABASE_URL", "--account-id", str(ACCOUNT), "--beat-process-count", "1"])
         self.assertEqual(status, 0, output.getvalue())
         self.assertNotIn(CONNECTION, output.getvalue())
         self.assertNotIn(str(ACCOUNT), output.getvalue())
+
+    def test_complete_cli_requires_independent_running_beat_observation(self):
+        for count in (None, "0", "2"):
+            args = ["--database-url-env", "TEST_DATABASE_URL", "--account-id", str(ACCOUNT)]
+            if count is not None:
+                args.extend(["--beat-process-count", count])
+            with redirect_stdout(io.StringIO()) as output:
+                self.assertEqual(preflight.main(args), 1)
+            self.assertIn("exactly one running beat", output.getvalue())
+
+    def test_selected_delegation_requires_url_secret_and_enabled_flag(self):
+        for field, value in (("saas_base_url", "http://saas.example.com"),
+                             ("saas_secret_encrypted", ""), ("saas_secret_encrypted", "   "),
+                             ("saas_delegation_enabled", False)):
+            with self.subTest(field=field):
+                self.setUp()
+                with self.engine.begin() as conn:
+                    conn.execute(self.text(f"UPDATE whatsapp_accounts SET {field}=:value"), {"value": value})
+                with self.assertRaises(preflight.CheckFailed):
+                    preflight.check_database(self.url, ACCOUNT, self.head)
 
 
 if __name__ == "__main__":

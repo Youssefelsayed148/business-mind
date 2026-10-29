@@ -14,6 +14,7 @@ from app.models.instagram_account import InstagramAccount
 from app.models.lead import Lead
 from app.models.message import Message
 from app.models.meta_token import MetaToken
+from app.models.processed_webhook_event import ProcessedWebhookEvent
 from app.models.user import User
 from app.models.user_cooldown import UserCooldown
 from app.models.user_workspace_membership import UserWorkspaceMembership
@@ -45,6 +46,7 @@ __all__ = [
     "Lead",
     "Message",
     "MetaToken",
+    "ProcessedWebhookEvent",
     "User",
     "UserCooldown",
     "UserWorkspaceMembership",
@@ -61,3 +63,7 @@ __all__ = [
 ]
 from app.models.saas_forward_event import SaasForwardEvent
 from app.models.saas_outbound_message import SaasOutboundMessage
+
+from app.models.meta_authorization import MetaAuthorization
+from app.models.data_deletion_request import DataDeletionRequest
+from app.models.account_erasure_job import AccountErasureJob

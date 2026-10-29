@@ -2,7 +2,9 @@ services:
   backend:
     build: ./backend
     restart: unless-stopped
-    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --proxy-headers --forwarded-allow-ips="*"
+    # Set to the actual ingress peer IP(s)/CIDR(s), never "*" or a shared network.
+    # Default fails closed for a remote Docker ingress until explicitly configured.
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --proxy-headers --forwarded-allow-ips=${FORWARDED_ALLOW_IPS:-127.0.0.1}
     env_file:
       - .env.production
     depends_on:

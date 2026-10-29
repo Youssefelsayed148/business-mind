@@ -33,13 +33,9 @@ class RateLimitResult:
 
 
 def get_client_ip(request: Request) -> str:
-    if settings.TRUST_PROXY_HEADERS:
-        forwarded_for = request.headers.get("x-forwarded-for")
-        if forwarded_for:
-            return forwarded_for.split(",", 1)[0].strip()
-        real_ip = request.headers.get("x-real-ip")
-        if real_ip:
-            return real_ip.strip()
+    # Uvicorn's ProxyHeadersMiddleware validates the socket peer against
+    # FORWARDED_ALLOW_IPS before updating request.client. Raw request headers
+    # here are untrusted, even when legacy TRUST_PROXY_HEADERS is enabled.
     return request.client.host if request.client else "unknown"
 
 

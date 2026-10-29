@@ -7,6 +7,7 @@ from sqlalchemy import text
 from app.db.session import SessionLocal, engine
 from app.models.saas_forward_event import SaasForwardEvent
 from app.services.saas_forwarder import process_ordering_key
+from app.services.account_erasure import sweep_erasure_jobs
 from app.workers.celery_app import celery_app
 
 logger = logging.getLogger(__name__)
@@ -45,6 +46,7 @@ def sweep_saas_forwards() -> dict:
     lost task (worker crash between retries) cannot strand a queue."""
     db = SessionLocal()
     try:
+        sweep_erasure_jobs(db)
         keys = [
             row[0]
             for row in db.query(SaasForwardEvent.ordering_key)

@@ -89,6 +89,8 @@ async def fetch_instagram_account_metadata(access_token: str) -> dict:
     ig_user_id = data.get("user_id") or data.get("id") or ""
     return {
         "ig_user_id": str(ig_user_id),
+        "provider_user_id": data.get("user_id"),
+        "provider_profile_id": data.get("id"),
         "username": data.get("username") or "",
         "profile_picture_url": data.get("profile_picture_url") or None,
         "followers_count": int(data.get("followers_count") or 0),
