@@ -138,6 +138,7 @@ class DisposableDatabaseChecks(unittest.TestCase):
         if not preflight.re.fullmatch(r"many_test(?:_[a-z0-9_]+)?", url.database) or url.host is not None or not url.query.get("host", "").startswith("/"):
             raise RuntimeError("Only disposable local-socket many_test is permitted")
         cls.url = raw_url
+        cls.head = preflight.migration_head(preflight.ROOT)
         cls.engine = create_engine(url)
         cls.text = staticmethod(text)
         with cls.engine.begin() as conn:
@@ -147,7 +148,7 @@ class DisposableDatabaseChecks(unittest.TestCase):
                 raise RuntimeError("Synthetic fixture tables already exist; refusing to overwrite")
             conn.execute(text("CREATE TABLE alembic_version (version_num varchar(32) PRIMARY KEY)"))
             conn.execute(text("CREATE TABLE whatsapp_accounts (id uuid PRIMARY KEY, saas_connection_id varchar(64), saas_delegation_enabled boolean NOT NULL DEFAULT true, saas_base_url text DEFAULT 'https://saas.example.com', saas_secret_encrypted text DEFAULT 'synthetic-test-ciphertext')"))
-            conn.execute(text("INSERT INTO alembic_version VALUES (:v)"), {"v": preflight.REQUIRED_REVISIONS[-1]})
+            conn.execute(text("INSERT INTO alembic_version VALUES (:v)"), {"v": cls.head})
             conn.execute(text("INSERT INTO whatsapp_accounts (id, saas_connection_id) VALUES (:id, :cid)"), {"id": ACCOUNT, "cid": CONNECTION})
 
     @classmethod
@@ -159,27 +160,27 @@ class DisposableDatabaseChecks(unittest.TestCase):
 
     def setUp(self):
         with self.engine.begin() as conn:
-            conn.execute(self.text("UPDATE alembic_version SET version_num=:v"), {"v": preflight.REQUIRED_REVISIONS[-1]})
+            conn.execute(self.text("UPDATE alembic_version SET version_num=:v"), {"v": self.head})
             conn.execute(self.text("UPDATE whatsapp_accounts SET saas_connection_id=:v, saas_delegation_enabled=true, saas_base_url='https://saas.example.com', saas_secret_encrypted='synthetic-test-ciphertext'"), {"v": CONNECTION})
 
     def test_database_head_and_lowercase_uuid_pass(self):
-        preflight.check_database(self.url, ACCOUNT, preflight.REQUIRED_REVISIONS[-1])
+        preflight.check_database(self.url, ACCOUNT, self.head)
 
     def test_old_database_revision_fails(self):
         with self.engine.begin() as conn:
             conn.execute(self.text("UPDATE alembic_version SET version_num='0022_whatsapp_opt_in'"))
         with self.assertRaises(preflight.CheckFailed):
-            preflight.check_database(self.url, ACCOUNT, preflight.REQUIRED_REVISIONS[-1])
+            preflight.check_database(self.url, ACCOUNT, self.head)
 
     def test_uppercase_stored_uuid_fails(self):
         with self.engine.begin() as conn:
             conn.execute(self.text("UPDATE whatsapp_accounts SET saas_connection_id=:v, saas_delegation_enabled=true, saas_base_url='https://saas.example.com', saas_secret_encrypted='synthetic-test-ciphertext'"), {"v": CONNECTION.upper()})
         with self.assertRaises(preflight.CheckFailed):
-            preflight.check_database(self.url, ACCOUNT, preflight.REQUIRED_REVISIONS[-1])
+            preflight.check_database(self.url, ACCOUNT, self.head)
 
     def test_missing_account_fails(self):
         with self.assertRaises(preflight.CheckFailed):
-            preflight.check_database(self.url, UUID(int=0), preflight.REQUIRED_REVISIONS[-1])
+            preflight.check_database(self.url, UUID(int=0), self.head)
 
     def test_tcp_is_refused_and_not_printed(self):
         marker = "synthetic-private-marker"
@@ -215,7 +216,7 @@ class DisposableDatabaseChecks(unittest.TestCase):
                 with self.engine.begin() as conn:
                     conn.execute(self.text(f"UPDATE whatsapp_accounts SET {field}=:value"), {"value": value})
                 with self.assertRaises(preflight.CheckFailed):
-                    preflight.check_database(self.url, ACCOUNT, preflight.REQUIRED_REVISIONS[-1])
+                    preflight.check_database(self.url, ACCOUNT, self.head)
 
 
 if __name__ == "__main__":

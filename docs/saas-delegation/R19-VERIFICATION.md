@@ -96,3 +96,17 @@ this ticket fixes formula escaping, not broader dashboard workspace isolation.
 That existing authorization boundary needs a separately scoped review before
 claiming the legacy dashboard is tenant-isolated. SaaS tenant A/B checks passed.
 No push, merge, deploy, live/authenticated/paid call or production DB operation.
+
+
+## Follow-up CSV authorization review - 2026-10-29
+
+The previously deferred legacy CSV authorization gap is now proven and fixed.
+A/B tests failed before the fix for Instagram, Facebook and WhatsApp: A received
+both workspaces' leads. Missing workspace selection also incorrectly returned 200.
+The exporter now requires membership in the requested workspace and filters lead
+and resource-label queries. Even inconsistent cross-workspace account/campaign
+FKs cannot disclose hidden labels. The dashboard sends the workspace header.
+Four pre-fix failures were followed by 14 CSV export/escaping passes (one unrelated
+import case deselected), 4.08 s; fresh upgrade and drift checks pass. Exact commands,
+private-cluster evidence and limits are in the 2026-10-29 PROGRESS entry. No full
+suite, frontend runtime, hosted CI or live-service result is claimed.

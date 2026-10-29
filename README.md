@@ -199,7 +199,7 @@ GET /meta/connect/start
 Authorization: Bearer <access_token>
 ```
 
-Returns `{ "oauth_url": "https://www.facebook.com/v21.0/dialog/oauth?..." }`. Redirect the browser to this URL. A CSRF state token is stored in Redis for 10 minutes.
+Returns `{ "oauth_url": "https://www.instagram.com/oauth/authorize?..." }`. Redirect the browser to this URL. A CSRF state token is stored in Redis for 10 minutes.
 
 **Step 2 — Callback**
 
@@ -211,9 +211,9 @@ GET /meta/connect/callback?code=<code>&state=<state>
 
 The backend:
 1. Validates the `state` against Redis (one-time use, deleted immediately after check).
-2. Exchanges `code` for a short-lived token via `POST https://graph.facebook.com/v21.0/oauth/access_token`.
-3. Exchanges the short-lived token for a long-lived token (60 days) via `GET .../oauth/access_token?grant_type=fb_exchange_token`.
-4. Calls `GET /me/accounts` to find linked Facebook Pages, then fetches the connected Instagram Business Account ID and username.
+2. Exchanges `code` for a short-lived token via `POST https://api.instagram.com/oauth/access_token`.
+3. Exchanges the short-lived token via `GET https://graph.instagram.com/access_token?grant_type=ig_exchange_token`; expiry comes from the provider response (60-day fallback).
+4. Calls `GET https://graph.instagram.com/{META_GRAPH_API_VERSION}/me` to fetch the connected Instagram professional account profile. This Instagram Login flow does not use a Facebook Page lookup.
 5. Upserts the `InstagramAccount` record, encrypts and stores the long-lived token.
 6. Redirects to `{FRONTEND_URL}/accounts?connected=true`.
 
@@ -225,7 +225,7 @@ On any error, redirects to `{FRONTEND_URL}/accounts?error=oauth_failed`.
 |---------|-------|
 | App type | Business |
 | Use case | Manage messaging & content on Instagram |
-| Permissions | `instagram_business_basic`, `instagram_business_manage_messages`, `instagram_business_manage_comments`, `pages_show_list` |
+| Permissions | `instagram_business_basic`, `instagram_business_manage_messages`, `instagram_business_manage_comments` |
 | Valid OAuth redirect URI | `https://yourdomain.com/meta/connect/callback` |
 | Webhook URL | `https://yourdomain.com/webhooks/meta` |
 | Webhook fields | `comments`, `messaging_postbacks`, `messages` |
@@ -746,7 +746,7 @@ backend/
 | `META_APP_ID` | Meta App ID | `local_meta_app_id` |
 | `META_APP_SECRET` | Meta App Secret — used for HMAC webhook verification and token exchange | *(required)* |
 | `META_WEBHOOK_VERIFY_TOKEN` | Token for webhook subscription challenge verification | *(required)* |
-| `META_GRAPH_API_VERSION` | Meta Graph API version | `v21.0` |
+| `META_GRAPH_API_VERSION` | Meta Graph API version (owner-approved upgrade target; live compatibility pending) | `v26.0` |
 | `META_MOCK_PRIVATE_REPLIES` | Bypass real Meta API calls for message sending (dev only) | `false` |
 | `AI_ENABLED_GLOBAL` | Global kill switch for AI conversation continuation, independent of per-account/campaign toggles | `true` |
 | `OPENAI_API_KEY` | OpenAI API key used to generate AI conversation replies | *(required for AI replies)* |

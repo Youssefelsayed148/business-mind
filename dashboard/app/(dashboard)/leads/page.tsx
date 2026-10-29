@@ -11,7 +11,7 @@ import { PlatformBadge } from "@/components/ui/PlatformBadge";
 import { Highlight } from "@/components/ui/Highlight";
 import { TableSkeleton } from "@/components/ui/Skeleton";
 import { TableWrap, tableClass, tdClass, thClass, theadRowClass, trClass } from "@/components/ui/Table";
-import { api, apiBaseUrl } from "@/lib/api";
+import { api, apiBaseUrl, getCurrentWorkspaceMembership } from "@/lib/api";
 import { getAccessToken } from "@/lib/auth";
 import type { Campaign, InstagramAccount, Lead } from "@/lib/types";
 
@@ -91,9 +91,21 @@ export default function LeadsPage() {
 
   async function exportCsv() {
     const token = getAccessToken();
+    const workspace = await getCurrentWorkspaceMembership();
+    if (!workspace) {
+      setError("Select an accessible workspace before exporting leads.");
+      return;
+    }
     const response = await fetch(`${apiBaseUrl}/leads/export.csv`, {
-      headers: token ? { Authorization: `Bearer ${token}` } : {},
+      headers: {
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        "X-Workspace-Id": workspace.id,
+      },
     });
+    if (!response.ok) {
+      setError("Unable to export leads. Please try again.");
+      return;
+    }
     const blob = await response.blob();
     const url = window.URL.createObjectURL(blob);
     const link = document.createElement("a");

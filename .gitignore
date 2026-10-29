@@ -25,3 +25,7 @@ node_modules/
 dashboard/dashboard-dev.*.log
 ".claude/" 
 backend/app/workers/tasks.py.server
+
+.r1-validation/
+
+.r19-validation/
