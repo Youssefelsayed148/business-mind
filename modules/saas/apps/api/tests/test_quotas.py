@@ -1,0 +1,387 @@
+"""P7-02 tenant scoped PLACEHOLDER quotas and staff overrides."""
+
+from concurrent.futures import ThreadPoolExecutor
+from io import BytesIO
+from typing import Any
+from uuid import uuid4
+
+from pydantic import SecretStr
+from sqlalchemy import select, update
+
+from app.core.config import Settings
+from app.db.models import AuditEvent, Bot, Conversation, Job, Message, Tenant, UsageEvent, User
+from tests.helpers import make_bot, seeded_tenant
+from tests.test_platform import platform_call, staff_login
+
+
+def test_quota_snapshot_is_tenant_scoped_and_readable_by_viewers(app: Any, db: Any) -> None:
+    tenant_a = seeded_tenant(app, db, prefix="quota-a")
+    tenant_b = seeded_tenant(app, db, prefix="quota-b")
+    bot_a = make_bot(tenant_a)
+    make_bot(tenant_b)
+
+    path_a = f"/api/v1/tenants/{tenant_a.tenant_id}/quota"
+    own = tenant_a.call("viewer", "GET", path_a)
+    assert own.status_code == 200
+    assert own.json()["placeholder"] is True
+    assert own.json()["usage"]["bots"] == 1
+    hidden = tenant_b.call("viewer", "GET", path_a)
+    assert hidden.status_code == 404
+
+    # The admin can see usage and the viewer sees the same tenant-scoped data.
+    assert tenant_a.call("admin", "GET", path_a).json() == own.json()
+    bot_path = f"/api/v1/tenants/{tenant_a.tenant_id}/bots/{bot_a['id']}/quota"
+    assert tenant_a.call("viewer", "GET", bot_path).status_code == 200
+    assert tenant_b.call("viewer", "GET", bot_path).status_code == 404
+    tenant_a.cleanup()
+    tenant_b.cleanup()
+
+
+def test_bot_quota_blocks_creation_and_viewers_cannot_mutate(app: Any, db: Any) -> None:
+    tenant = seeded_tenant(app, db, prefix="quota-bots")
+    other_tenant = seeded_tenant(app, db, prefix="quota-bots-other")
+    row = db.execute(select(Tenant).where(Tenant.id == tenant.tenant_id)).scalar_one()
+    row.plan_label = "free"
+    db.execute(
+        update(User).where(User.id == tenant.users["staff"]["id"]).values(is_platform_staff=True)
+    )
+    db.commit()
+    path = f"/api/v1/tenants/{tenant.tenant_id}/bots"
+    for role in ("admin", "editor", "viewer"):
+        assert tenant.call(role, "POST", path, json={"name": "Denied"}).status_code == 403
+    assert other_tenant.call("admin", "POST", path, json={"name": "Hidden"}).status_code == 404
+    platform_path = f"/api/v1/platform/tenants/{tenant.tenant_id}/bots"
+    created = tenant.call("staff", "POST", platform_path, json={"name": "First"})
+    assert created.status_code == 201, created.text
+    blocked = tenant.call("staff", "POST", platform_path, json={"name": "Second"})
+    assert blocked.status_code == 429
+    assert blocked.json()["error"]["code"] == "QUOTA_EXCEEDED"
+    assert (
+        blocked.json()["error"]["message"]
+        == "Your plan allows 1 bot(s). Contact us to add another bot."
+    )
+    tenant.cleanup()
+    other_tenant.cleanup()
+
+
+def test_bot_quota_is_serialized_under_concurrent_creation(app: Any, db: Any) -> None:
+    tenant = seeded_tenant(app, db, prefix="quota-race")
+    row = db.execute(select(Tenant).where(Tenant.id == tenant.tenant_id)).scalar_one()
+    row.plan_label = "free"
+    db.execute(
+        update(User)
+        .where(User.id.in_([tenant.users["staff"]["id"], tenant.users["staff"]["id"]]))
+        .values(is_platform_staff=True)
+    )
+    db.commit()
+    path = f"/api/v1/platform/tenants/{tenant.tenant_id}/bots"
+
+    def create(role: str, name: str) -> Any:
+        return tenant.call(role, "POST", path, json={"name": name})
+
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        futures = [
+            pool.submit(create, "staff", "Race A"),
+            pool.submit(create, "staff", "Race B"),
+        ]
+        responses = [future.result() for future in futures]
+    statuses = sorted(response.status_code for response in responses)
+    assert statuses == [201, 429], [(response.status_code, response.text) for response in responses]
+    db.expire_all()
+    assert (
+        len(db.execute(select(Bot).where(Bot.tenant_id == tenant.tenant_id)).scalars().all()) == 1
+    )
+    tenant.cleanup()
+
+
+def test_new_org_and_unknown_plan_default_to_one_bot(app: Any, db: Any) -> None:
+    from app.quotas.service import limits_for
+    from tests.helpers import create_tenant, logged_in
+
+    client, _ = logged_in(app, "one-bot-default@example.com")
+    tenant_id = create_tenant(client, "One Bot")
+    tenant = db.execute(select(Tenant).where(Tenant.id == tenant_id)).scalar_one()
+    assert limits_for(tenant).bots == 1
+    tenant.plan_label = "unknown-custom-plan"
+    tenant.quota_overrides = {}
+    db.commit()
+    db.refresh(tenant)
+    assert limits_for(tenant).bots == 1
+    client.close()
+
+
+def test_platform_quota_override_requires_staff_reason_and_audits(app: Any, db: Any) -> None:
+    tenant = seeded_tenant(app, db, prefix="quota-override")
+    admin = tenant.as_user("admin")
+    assert platform_call(admin, "GET", "/quotas").status_code == 403
+    path = f"/api/v1/platform/tenants/{tenant.tenant_id}/quota-overrides"
+    denied = platform_call(
+        admin,
+        "PATCH",
+        f"/tenants/{tenant.tenant_id}/quota-overrides",
+        json={"limits": {"bots": 8}, "reason": "Approved exception"},
+    )
+    assert denied.status_code == 403
+    staff = staff_login(app, db)
+    invalid = platform_call(
+        staff,
+        "PATCH",
+        f"/tenants/{tenant.tenant_id}/quota-overrides",
+        json={"limits": {"bots": 8}, "reason": " "},
+    )
+    assert invalid.status_code == 422
+    allowed = platform_call(
+        staff,
+        "PATCH",
+        f"/tenants/{tenant.tenant_id}/quota-overrides",
+        json={"limits": {"bots": 8}, "reason": "Approved exception"},
+    )
+    assert allowed.status_code == 200, allowed.text
+    db.expire_all()
+    row = db.execute(select(Tenant).where(Tenant.id == tenant.tenant_id)).scalar_one()
+    assert row.quota_overrides["bots"] == 8
+    audit = db.execute(
+        select(AuditEvent).where(AuditEvent.action == "platform.tenant.quota_override")
+    ).scalar_one()
+    assert audit.metadata_json["reason"] == "Approved exception"
+    assert path.endswith("quota-overrides")
+    tenant.cleanup()
+
+
+def test_plan_file_limit_applies_to_chunked_stream_without_content_length() -> None:
+    from app.core.config import Settings
+    from app.knowledge.service import read_upload
+
+    settings = Settings.model_construct(max_upload_file_bytes=5)
+    assert read_upload(BytesIO(b"12345"), settings) == b"12345"
+
+
+def test_contact_and_seat_quotas_are_scoped_and_viewer_writes_are_denied(app: Any, db: Any) -> None:
+    tenant_a = seeded_tenant(app, db, prefix="quota-create-a")
+    tenant_b = seeded_tenant(app, db, prefix="quota-create-b")
+    row = db.execute(select(Tenant).where(Tenant.id == tenant_a.tenant_id)).scalar_one()
+    row.quota_overrides = {"contacts": 0, "seats": 3}
+    db.commit()
+    contact_url = f"/api/v1/tenants/{tenant_a.tenant_id}/contacts"
+    payload = {"display_name": "Quota contact", "email": "quota@example.com"}
+    assert tenant_a.call("viewer", "POST", contact_url, json=payload).status_code == 403
+    assert tenant_b.call("admin", "POST", contact_url, json=payload).status_code == 404
+    assert tenant_a.call("admin", "POST", contact_url, json=payload).status_code == 429
+
+    invite_url = f"/api/v1/tenants/{tenant_a.tenant_id}/invitations"
+    invite_payload = {"email": "new-seat@example.com", "role": "viewer"}
+    assert tenant_a.call("viewer", "POST", invite_url, json=invite_payload).status_code == 403
+    assert tenant_b.call("admin", "POST", invite_url, json=invite_payload).status_code == 404
+    assert tenant_a.call("admin", "POST", invite_url, json=invite_payload).status_code == 429
+    tenant_a.cleanup()
+    tenant_b.cleanup()
+
+
+def test_sentiment_is_queued_for_resolved_conversation_with_tenant_and_role_guards(
+    app: Any, db: Any
+) -> None:
+    tenant_a = seeded_tenant(app, db, prefix="sentiment-a")
+    tenant_b = seeded_tenant(app, db, prefix="sentiment-b")
+    bot = make_bot(tenant_a)
+    conversation = Conversation(
+        tenant_id=tenant_a.tenant_id,
+        bot_id=bot["id"],
+        channel="website",
+        source="website",
+        mode="ai",
+        status="open",
+    )
+    db.add(conversation)
+    db.commit()
+    url = f"/api/v1/tenants/{tenant_a.tenant_id}/conversations/{conversation.id}/resolve"
+    assert tenant_a.call("viewer", "POST", url).status_code == 403
+    assert tenant_b.call("editor", "POST", url).status_code == 404
+    resolved = tenant_a.call("editor", "POST", url)
+    assert resolved.status_code == 200, resolved.text
+    db.expire_all()
+    jobs = (
+        db.execute(
+            select(Job).where(
+                Job.tenant_id == tenant_a.tenant_id,
+                Job.type == "sentiment_classify",
+            )
+        )
+        .scalars()
+        .all()
+    )
+    assert len(jobs) == 1
+    assert jobs[0].payload["conversation_id"] == str(conversation.id)
+    tenant_a.cleanup()
+    tenant_b.cleanup()
+
+
+def test_sentiment_worker_records_one_measured_classification(db: Any, monkeypatch: Any) -> None:
+    import app.chat.providers as providers
+    from app.chat.providers import FakeChatModel
+    from app.quotas.sentiment import run_sentiment_job
+
+    tenant = Tenant(id=uuid4(), name="Sentiment", slug="sentiment-worker", plan_label="starter")
+    db.add(tenant)
+    db.flush()  # composite tenant FKs need the tenant row first
+    # A membership is unnecessary for worker-owned rows; create a bot and conversation directly.
+    bot = Bot(id=uuid4(), tenant_id=tenant.id, name="Sentiment bot", status="active", config={})
+    db.add(bot)
+    db.flush()  # composite (tenant_id, bot_id) FK needs the bot row first
+    conversation = Conversation(
+        tenant_id=tenant.id,
+        bot_id=bot.id,
+        status="resolved",
+        channel="website",
+        source="website",
+    )
+    db.add(conversation)
+    db.flush()
+    db.add(
+        Message(
+            tenant_id=tenant.id,
+            bot_id=bot.id,
+            conversation_id=conversation.id,
+            sender_type="visitor",
+            text="Thank you, this was helpful.",
+        )
+    )
+    job = Job(
+        tenant_id=tenant.id,
+        bot_id=bot.id,
+        type="sentiment_classify",
+        status="running",
+        payload={"conversation_id": str(conversation.id)},
+    )
+    db.add(job)
+    db.commit()
+    fake = FakeChatModel(['{"sentiment":"positive"}'])
+    monkeypatch.setattr(providers, "OpenAICompatibleModel", lambda **_kwargs: fake)
+    settings = Settings.model_construct(
+        chat_stub_model=False,
+        chat_openrouter_api_key=SecretStr("test-key"),
+        chat_free_model_chain=["test-model:free"],
+        chat_openrouter_base_url="https://example.invalid",
+    )
+    assert run_sentiment_job(db, job, settings) is None
+    db.expire_all()
+    assert db.get(Conversation, conversation.id).sentiment == "positive"
+    assert (
+        len(
+            db.execute(
+                select(UsageEvent).where(
+                    UsageEvent.tenant_id == tenant.id, UsageEvent.kind == "sentiment_run"
+                )
+            )
+            .scalars()
+            .all()
+        )
+        == 1
+    )
+
+
+def _resolved_sentiment_job(db: Any, slug: str) -> tuple[Any, Any]:
+    tenant = Tenant(id=uuid4(), name="Sentiment", slug=slug, plan_label="starter")
+    db.add(tenant)
+    db.flush()
+    bot = Bot(id=uuid4(), tenant_id=tenant.id, name="Sentiment bot", status="active", config={})
+    db.add(bot)
+    db.flush()
+    conversation = Conversation(
+        tenant_id=tenant.id, bot_id=bot.id, status="resolved", channel="website", source="website"
+    )
+    db.add(conversation)
+    db.flush()
+    db.add(
+        Message(
+            tenant_id=tenant.id,
+            bot_id=bot.id,
+            conversation_id=conversation.id,
+            sender_type="visitor",
+            text="Thank you, this was helpful.",
+        )
+    )
+    job = Job(
+        tenant_id=tenant.id,
+        bot_id=bot.id,
+        type="sentiment_classify",
+        status="running",
+        payload={"conversation_id": str(conversation.id)},
+    )
+    db.add(job)
+    db.commit()
+    return conversation, job
+
+
+def test_sentiment_is_skipped_and_logged_without_a_key(db: Any, caplog: Any) -> None:
+    from app.quotas.sentiment import run_sentiment_job
+
+    conversation, job = _resolved_sentiment_job(db, "sentiment-nokey")
+    settings = Settings.model_construct(
+        chat_stub_model=False, chat_openrouter_api_key=None, chat_free_model_chain=[]
+    )
+    with caplog.at_level("WARNING"):
+        assert run_sentiment_job(db, job, settings) is None
+    assert "sentiment skipped" in caplog.text
+    db.expire_all()
+    assert db.get(Conversation, conversation.id).sentiment is None
+
+
+def test_sentiment_model_failure_is_logged_and_skipped(
+    db: Any, monkeypatch: Any, caplog: Any
+) -> None:
+    import app.chat.providers as providers
+    from app.quotas.sentiment import run_sentiment_job
+
+    class Exploding:
+        def complete(self, *_args: Any, **_kwargs: Any) -> str:
+            raise RuntimeError("provider down sk-secret-value")
+
+    conversation, job = _resolved_sentiment_job(db, "sentiment-fail")
+    monkeypatch.setattr(providers, "OpenAICompatibleModel", lambda **_kwargs: Exploding())
+    settings = Settings.model_construct(
+        chat_stub_model=False,
+        chat_openrouter_api_key=SecretStr("test-key"),
+        chat_free_model_chain=["test-model:free"],
+        chat_openrouter_base_url="https://example.invalid",
+    )
+    with caplog.at_level("WARNING"):
+        assert run_sentiment_job(db, job, settings) is None
+    assert "sentiment skipped" in caplog.text
+    assert "sk-secret-value" not in caplog.text  # only the exception type is logged
+    db.expire_all()
+    assert db.get(Conversation, conversation.id).sentiment is None
+    assert (
+        not db.execute(select(UsageEvent).where(UsageEvent.kind == "sentiment_run")).scalars().all()
+    )
+
+
+def test_accepting_invitation_at_seat_limit_succeeds_but_new_invite_is_refused(
+    app: Any, db: Any
+) -> None:
+    from tests.helpers import accept_invitation, logged_in, make_invitation
+
+    users = seeded_tenant(app, db, prefix="quota-accept")
+    # Three client seats; the invite below reserves the fourth.
+    token, _ = make_invitation(users, "seat-holder@example.com", "viewer")
+    row = db.execute(select(Tenant).where(Tenant.id == users.tenant_id)).scalar_one()
+    row.quota_overrides = {"seats": 4}
+    db.commit()
+
+    # At the limit, a further invitation is still refused.
+    refused = users.call(
+        "admin",
+        "POST",
+        f"/api/v1/tenants/{users.tenant_id}/invitations",
+        json={"email": "one-too-many@example.com", "role": "viewer"},
+    )
+    assert refused.status_code == 429
+    assert refused.json()["error"]["code"] == "QUOTA_EXCEEDED"
+
+    # The pending invitation already holds its seat, so accepting it must succeed.
+    invitee, _ = logged_in(app, "seat-holder@example.com")
+    try:
+        accepted = accept_invitation(invitee, token)
+        assert accepted.status_code == 200, accepted.text
+    finally:
+        invitee.close()
+    users.cleanup()
