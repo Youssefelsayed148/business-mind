@@ -1,0 +1,5 @@
+PASS: standalone 0028 creates tables; repeated upgrade validates correct existing schema
+PASS: incompatible existing column type/length fails closed
+PASS: wrong named upsert constraint fails closed
+PASS: existing table missing lookup index is repaired before downgrade
+PASS: standalone 0028 downgrade and upgrade/downgrade round trip

@@ -1,0 +1,29 @@
+============================= test session starts ==============================
+platform linux -- Python 3.11.18, pytest-9.2.0, pluggy-1.7.0 -- /var/tmp/many-t0-20261028/venv/bin/python
+cachedir: .pytest_cache
+rootdir: /var/tmp/many-t1-20261028/backend
+configfile: pyproject.toml
+plugins: anyio-4.15.1
+collecting ... collected 18 items
+
+tests/test_saas_contract_vectors.py::test_vector_file_has_the_agreed_inputs PASSED [  5%]
+tests/test_saas_contract_vectors.py::test_compute_signature_matches_the_shared_vectors[arabic-and-symbol-body] PASSED [ 11%]
+tests/test_saas_contract_vectors.py::test_compute_signature_matches_the_shared_vectors[empty-body] PASSED [ 16%]
+tests/test_saas_contract_vectors.py::test_empty_body_vector_is_hmac_over_timestamp_and_dot PASSED [ 22%]
+tests/test_saas_contract_vectors.py::test_message_received_text_and_unsupported_satisfy_the_rules[whatsapp] PASSED [ 27%]
+tests/test_saas_contract_vectors.py::test_message_received_text_and_unsupported_satisfy_the_rules[facebook] PASSED [ 33%]
+tests/test_saas_contract_vectors.py::test_message_received_text_and_unsupported_satisfy_the_rules[instagram] PASSED [ 38%]
+tests/test_saas_contract_vectors.py::test_message_received_oversized_inputs_are_trimmed_to_the_caps PASSED [ 44%]
+tests/test_saas_contract_vectors.py::test_text_type_without_text_is_sent_as_unsupported PASSED [ 50%]
+tests/test_saas_contract_vectors.py::test_message_received_with_no_contact_details_has_an_empty_contact_object PASSED [ 55%]
+tests/test_saas_contract_vectors.py::test_real_forwarded_events_satisfy_the_rules PASSED [ 61%]
+tests/test_saas_signing.py::test_signature_format_matches_contract PASSED [ 66%]
+tests/test_saas_signing.py::test_empty_body_signs_timestamp_and_dot PASSED [ 72%]
+tests/test_saas_signing.py::test_valid_signature_accepted PASSED         [ 77%]
+tests/test_saas_signing.py::test_rejection_matrix PASSED                 [ 83%]
+tests/test_saas_signing.py::test_body_over_64kb_rejected PASSED          [ 88%]
+tests/test_saas_signing.py::test_dual_secret_rotation_accepts_either PASSED [ 94%]
+tests/test_saas_signing.py::test_non_ascii_signature_header_does_not_raise PASSED [100%]
+
+- generated xml file: /mnt/d/Projects/Work Projects/The Osiris Labs/ManyOsirisChat/docs/saas-delegation/t1-evidence/tests.xml -
+============================== 18 passed in 0.35s ==============================

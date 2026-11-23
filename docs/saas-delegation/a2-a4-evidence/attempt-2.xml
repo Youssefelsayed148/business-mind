@@ -1,0 +1,188 @@
+<?xml version="1.0" encoding="utf-8"?><testsuites name="pytest tests"><testsuite name="pytest" errors="0" failures="2" skipped="0" tests="13" time="1.772" timestamp="2026-10-28T11:24:54.696705+03:00" hostname="LAPTOP-SU9MG22P"><testcase classname="tests.test_instagram_routes" name="test_reconnect_restores_account_and_token_without_reactivating_campaigns" time="0.481"><failure message="assert None is not None">client = &lt;starlette.testclient.TestClient object at 0x7cb21baf7010&gt;
+db_session = &lt;sqlalchemy.orm.session.Session object at 0x7cb222171c50&gt;
+monkeypatch = &lt;_pytest.monkeypatch.MonkeyPatch object at 0x7cb21a96a050&gt;
+
+    @skip_if_no_db
+    def test_reconnect_restores_account_and_token_without_reactivating_campaigns(
+        client: TestClient, db_session: Session, monkeypatch
+    ):
+        ws = Workspace(id=uuid4(), name="Default", slug="default")
+        db_session.add(ws)
+        user = User(
+            id=uuid4(),
+            email="igreconnect@test.com",
+            name="IG Reconnect",
+            password_hash=hash_password("secret"),
+            role="admin",
+            is_active=True,
+        )
+        db_session.add(user)
+        db_session.commit()
+    
+        acc = InstagramAccount(
+            workspace_id=ws.id,
+            ig_user_id="707808909",
+            ig_username="testcompany",
+            status="disconnected",
+        )
+        db_session.add(acc)
+        db_session.flush()
+    
+        campaign = Campaign(
+            workspace_id=ws.id,
+            instagram_account_id=acc.id,
+            name="Paused campaign",
+            media_id="media_1",
+            message_template="Hi",
+            status="paused",
+        )
+        db_session.add(campaign)
+        db_session.commit()
+    
+        token_row = MetaToken(
+            instagram_account_id=acc.id,
+            access_token="encrypted-placeholder",
+            token_type="long_lived",
+            status="expired",
+        )
+        db_session.add(token_row)
+        db_session.commit()
+    
+        token_resp = client.post(
+            "/auth/login",
+            data={"username": "igreconnect@test.com", "password": "secret"},
+        )
+        token = token_resp.json()["access_token"]
+    
+        response = client.post(
+            f"/instagram/accounts/{acc.id}/reconnect",
+            headers={"Authorization": f"Bearer {token}"},
+        )
+        assert response.status_code == 200
+        from unittest.mock import AsyncMock
+        from urllib.parse import parse_qs, urlparse
+        from app.api import routes_meta
+    
+        state = parse_qs(urlparse(response.json()["oauth_url"]).query)["state"][0]
+        db_session.refresh(acc)
+        db_session.refresh(token_row)
+        assert acc.status == "disconnected"
+        assert token_row.status == "expired"
+        monkeypatch.setattr(routes_meta, "exchange_code_for_short_lived_token", AsyncMock(return_value={"access_token": "short-test-token"}))
+        monkeypatch.setattr(routes_meta, "exchange_for_long_lived_token", AsyncMock(return_value={"access_token": "long-test-token", "expires_in": 5184000}))
+        monkeypatch.setattr(routes_meta, "fetch_instagram_account_metadata", AsyncMock(return_value={"ig_user_id": acc.ig_user_id, "username": "testcompany", "account_type": "BUSINESS"}))
+        callback = client.get("/meta/connect/callback", params={"code": "test-code", "state": state}, follow_redirects=False)
+        assert callback.status_code == 307
+        assert "reconnected=true" in callback.headers["location"]
+    
+        db_session.refresh(acc)
+        db_session.refresh(token_row)
+        db_session.refresh(campaign)
+        assert acc.status == "connected"
+        assert acc.ig_username == "testcompany"
+        # Reconnect stores a new token; the expired historical row stays expired.
+        from app.services.token_service import get_decrypted_token
+        assert token_row.status == "expired"
+        active_token = db_session.query(MetaToken).filter(
+            MetaToken.instagram_account_id == acc.id, MetaToken.status == "active"
+        ).one()
+        assert active_token.id != token_row.id
+        assert get_decrypted_token(db_session, acc.id) == "long-test-token"
+        assert campaign.status == "paused"
+    
+        log = (
+            db_session.query(AutomationLog)
+            .filter(
+                AutomationLog.instagram_account_id == acc.id,
+                AutomationLog.action == "account_reconnect_initiated",
+            )
+            .first()
+        )
+&gt;       assert log is not None
+E       assert None is not None
+
+tests/test_instagram_routes.py:367: AssertionError</failure></testcase><testcase classname="tests.test_send_private_reply" name="test_send_private_reply_success" time="0.062" /><testcase classname="tests.test_send_private_reply" name="test_send_private_reply_expired_private_reply" time="0.030" /><testcase classname="tests.test_send_private_reply" name="test_send_private_reply_token_error_no_retry" time="0.031" /><testcase classname="tests.test_send_private_reply" name="test_send_private_reply_retryable_500" time="0.039"><failure message="assert False is True&#10; +  where False = &lt;app.models.message.Message object at 0x7cb219c46210&gt;.retryable">db_session = &lt;sqlalchemy.orm.session.Session object at 0x7cb21a3ae790&gt;
+
+    @skip_if_no_db
+    def test_send_private_reply_retryable_500(db_session: Session):
+        ws = Workspace(id=uuid4(), name="Default", slug="default")
+        db_session.add(ws)
+        db_session.commit()
+    
+        acc = InstagramAccount(
+            workspace_id=ws.id,
+            ig_user_id="ig_retry",
+            ig_username="retryacc",
+        )
+        db_session.add(acc)
+        db_session.commit()
+    
+        store_encrypted_token(db_session, ws.id, acc.id, "fake_token")
+    
+        campaign = Campaign(
+            id=uuid4(),
+            workspace_id=ws.id,
+            instagram_account_id=acc.id,
+            name="Retry",
+            media_id="m1",
+            message_template="Hi",
+            match_type="contains",
+            status="active",
+        )
+        db_session.add(campaign)
+        db_session.commit()
+    
+        lead = Lead(
+            id=uuid4(),
+            workspace_id=ws.id,
+            instagram_account_id=acc.id,
+            ig_user_id="u1",
+        )
+        db_session.add(lead)
+        db_session.commit()
+    
+        comment = Comment(
+            id=uuid4(),
+            instagram_account_id=acc.id,
+            comment_id="c_retry",
+            ig_user_id="u1",
+        )
+        db_session.add(comment)
+        db_session.commit()
+    
+        msg = Message(
+            id=uuid4(),
+            campaign_id=campaign.id,
+            lead_id=lead.id,
+            comment_id=comment.id,
+            status="queued",
+            rendered_body="Hello",
+        )
+        db_session.add(msg)
+        db_session.commit()
+    
+        mock_result = MagicMock()
+        mock_result.success = False
+        mock_result.error_code = "retryable"
+        mock_result.error_message = "Internal server error"
+        mock_result.retryable = True
+    
+        with patch(
+            "app.workers.tasks.MetaMessagingClient.send_private_reply",
+            new_callable=MagicMock,
+            return_value=mock_result,
+        ), patch("app.workers.tasks.MetaMessagingClient.close", new_callable=MagicMock):
+            # The task will raise self.retry, which we need to catch
+            try:
+                send_private_reply(str(msg.id))
+            except Exception as exc:
+                exc_name = type(exc).__name__
+                assert exc_name in ("Retry", "MaxRetriesExceededError")
+    
+        db_session.refresh(msg)
+        assert msg.status == "failed"
+&gt;       assert msg.retryable is True
+E       assert False is True
+E        +  where False = &lt;app.models.message.Message object at 0x7cb219c46210&gt;.retryable
+
+tests/test_send_private_reply.py:336: AssertionError</failure></testcase><testcase classname="tests.test_webhook_processing" name="test_webhook_event_enqueues_processing" time="0.017" /><testcase classname="tests.test_webhook_processing" name="test_duplicate_webhook_does_not_duplicate_message" time="0.069" /><testcase classname="tests.test_webhook_processing" name="test_comment_creates_comment_row" time="0.038" /><testcase classname="tests.test_webhook_processing" name="test_matching_active_campaign_creates_queued_message" time="0.049" /><testcase classname="tests.test_webhook_processing" name="test_message_type_allows_follow_prompt_and_final_delivery" time="0.013" /><testcase classname="tests.test_webhook_processing" name="test_duplicate_comment_does_not_duplicate_message" time="0.047" /><testcase classname="tests.test_webhook_processing" name="test_lead_is_created_from_comment" time="0.038" /><testcase classname="tests.test_webhook_processing" name="test_cooldown_prevents_message_queue" time="0.086" /></testsuite></testsuites>

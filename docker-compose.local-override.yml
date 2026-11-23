@@ -1,0 +1,11 @@
+# Local dev/test port override for ManyOsirisChat only. Needed because host
+# ports 5432/6379 are already taken by an unrelated Docker Desktop project
+# (mo4table) on this machine. Publishes this repo's postgres on 5433 and
+# redis on 6380 instead.
+services:
+  postgres:
+    ports: !override
+      - "5434:5432"
+  redis:
+    ports: !override
+      - "6380:6379"

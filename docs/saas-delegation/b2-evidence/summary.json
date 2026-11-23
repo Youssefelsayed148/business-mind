@@ -1,0 +1,409 @@
+{
+  "runs": [
+    {
+      "file": "attempt-1.xml",
+      "tests": 69,
+      "passed": 68,
+      "failed": 1,
+      "errors": 0,
+      "skipped": 0
+    },
+    {
+      "file": "attempt-2.xml",
+      "tests": 8,
+      "passed": 4,
+      "failed": 4,
+      "errors": 0,
+      "skipped": 0
+    },
+    {
+      "file": "attempt-3.xml",
+      "tests": 4,
+      "passed": 4,
+      "failed": 0,
+      "errors": 0,
+      "skipped": 0
+    },
+    {
+      "file": "attempt-4.xml",
+      "tests": 2,
+      "passed": 2,
+      "failed": 0,
+      "errors": 0,
+      "skipped": 0
+    },
+    {
+      "file": "attempt-5.xml",
+      "tests": 10,
+      "passed": 10,
+      "failed": 0,
+      "errors": 0,
+      "skipped": 0
+    },
+    {
+      "file": "tests.xml",
+      "tests": 3,
+      "passed": 3,
+      "failed": 0,
+      "errors": 0,
+      "skipped": 0
+    }
+  ],
+  "unique_cases": 87,
+  "latest_results": {
+    "tests.test_contact_erasure::test_erasure_is_scoped_atomic_and_durably_queued[instagram]": {
+      "status": "passed",
+      "evidence": "attempt-1.xml"
+    },
+    "tests.test_contact_erasure::test_erasure_is_scoped_atomic_and_durably_queued[facebook]": {
+      "status": "passed",
+      "evidence": "attempt-1.xml"
+    },
+    "tests.test_contact_erasure::test_erasure_is_scoped_atomic_and_durably_queued[whatsapp]": {
+      "status": "passed",
+      "evidence": "attempt-1.xml"
+    },
+    "tests.test_contact_erasure::test_workspace_and_admin_authorization": {
+      "status": "passed",
+      "evidence": "attempt-1.xml"
+    },
+    "tests.test_contact_erasure::test_invalid_identity_is_rejected[]": {
+      "status": "passed",
+      "evidence": "attempt-1.xml"
+    },
+    "tests.test_contact_erasure::test_invalid_identity_is_rejected[ ]": {
+      "status": "passed",
+      "evidence": "attempt-1.xml"
+    },
+    "tests.test_contact_erasure::test_invalid_identity_is_rejected[ trailing]": {
+      "status": "passed",
+      "evidence": "attempt-1.xml"
+    },
+    "tests.test_contact_erasure::test_invalid_identity_is_rejected[trailing ]": {
+      "status": "passed",
+      "evidence": "attempt-1.xml"
+    },
+    "tests.test_contact_erasure::test_invalid_identity_is_rejected[control\\n]": {
+      "status": "passed",
+      "evidence": "attempt-1.xml"
+    },
+    "tests.test_contact_erasure::test_invalid_identity_is_rejected[identity5]": {
+      "status": "passed",
+      "evidence": "attempt-1.xml"
+    },
+    "tests.test_contact_erasure::test_queue_failure_rolls_back_every_local_change": {
+      "status": "passed",
+      "evidence": "attempt-2.xml"
+    },
+    "tests.test_contact_erasure::test_repeat_request_and_missing_identity_are_idempotent": {
+      "status": "passed",
+      "evidence": "attempt-1.xml"
+    },
+    "tests.test_contact_erasure::test_missing_signing_config_requires_operator_and_status_is_scoped": {
+      "status": "passed",
+      "evidence": "attempt-1.xml"
+    },
+    "tests.test_contact_erasure::test_disabled_delegation_does_not_block_explicit_erasure_replay": {
+      "status": "passed",
+      "evidence": "attempt-1.xml"
+    },
+    "tests.test_contact_erasure::test_raw_payload_scrubbing_preserves_other_account_and_customer[instagram]": {
+      "status": "passed",
+      "evidence": "attempt-1.xml"
+    },
+    "tests.test_contact_erasure::test_raw_payload_scrubbing_preserves_other_account_and_customer[facebook]": {
+      "status": "passed",
+      "evidence": "attempt-1.xml"
+    },
+    "tests.test_contact_erasure::test_raw_payload_scrubbing_preserves_other_account_and_customer[whatsapp]": {
+      "status": "passed",
+      "evidence": "attempt-1.xml"
+    },
+    "tests.test_contact_erasure::test_whatsapp_contact_without_lead_is_erased": {
+      "status": "passed",
+      "evidence": "attempt-1.xml"
+    },
+    "tests.test_contact_erasure::test_facebook_psid_erases_campaign_asid_alias": {
+      "status": "passed",
+      "evidence": "attempt-1.xml"
+    },
+    "tests.test_webhook_retention::test_raw_payload_purge_is_thirty_days_idempotent_and_preserves_dedupe": {
+      "status": "passed",
+      "evidence": "attempt-1.xml"
+    },
+    "tests.test_webhook_retention::test_existing_daily_task_reports_only_counts_and_keeps_four_beat_tasks": {
+      "status": "passed",
+      "evidence": "attempt-1.xml"
+    },
+    "tests.test_saas_forwarder::test_success_is_signed_to_the_contract_url_and_clears_payload": {
+      "status": "passed",
+      "evidence": "attempt-1.xml"
+    },
+    "tests.test_saas_forwarder::test_retryable_failures_back_off_keep_event_id_and_mark_degraded[failure0]": {
+      "status": "passed",
+      "evidence": "attempt-1.xml"
+    },
+    "tests.test_saas_forwarder::test_retryable_failures_back_off_keep_event_id_and_mark_degraded[failure1]": {
+      "status": "passed",
+      "evidence": "attempt-1.xml"
+    },
+    "tests.test_saas_forwarder::test_retryable_failures_back_off_keep_event_id_and_mark_degraded[failure2]": {
+      "status": "passed",
+      "evidence": "attempt-1.xml"
+    },
+    "tests.test_saas_forwarder::test_retryable_failures_back_off_keep_event_id_and_mark_degraded[failure3]": {
+      "status": "passed",
+      "evidence": "attempt-1.xml"
+    },
+    "tests.test_saas_forwarder::test_retryable_failures_back_off_keep_event_id_and_mark_degraded[failure4]": {
+      "status": "passed",
+      "evidence": "attempt-1.xml"
+    },
+    "tests.test_saas_forwarder::test_retry_after_is_honoured_on_429": {
+      "status": "passed",
+      "evidence": "attempt-1.xml"
+    },
+    "tests.test_saas_forwarder::test_other_4xx_are_permanent_and_not_retried[400]": {
+      "status": "passed",
+      "evidence": "attempt-1.xml"
+    },
+    "tests.test_saas_forwarder::test_other_4xx_are_permanent_and_not_retried[403]": {
+      "status": "passed",
+      "evidence": "attempt-1.xml"
+    },
+    "tests.test_saas_forwarder::test_other_4xx_are_permanent_and_not_retried[404]": {
+      "status": "passed",
+      "evidence": "attempt-1.xml"
+    },
+    "tests.test_saas_forwarder::test_other_4xx_are_permanent_and_not_retried[422]": {
+      "status": "passed",
+      "evidence": "attempt-1.xml"
+    },
+    "tests.test_saas_forwarder::test_401_is_retried_with_backoff_marks_auth_rejected_and_keeps_payload": {
+      "status": "passed",
+      "evidence": "attempt-1.xml"
+    },
+    "tests.test_saas_forwarder::test_401_then_202_succeeds_after_the_secret_is_fixed": {
+      "status": "passed",
+      "evidence": "attempt-1.xml"
+    },
+    "tests.test_saas_forwarder::test_401_until_the_24h_budget_ends_fails_and_keeps_payload": {
+      "status": "passed",
+      "evidence": "attempt-1.xml"
+    },
+    "tests.test_saas_forwarder::test_401_blocks_later_events_of_the_conversation_like_any_retry": {
+      "status": "passed",
+      "evidence": "attempt-1.xml"
+    },
+    "tests.test_saas_forwarder::test_redirect_is_not_followed_and_is_permanent": {
+      "status": "passed",
+      "evidence": "attempt-1.xml"
+    },
+    "tests.test_saas_forwarder::test_earlier_event_blocks_later_ones_of_the_same_conversation": {
+      "status": "passed",
+      "evidence": "attempt-1.xml"
+    },
+    "tests.test_saas_forwarder::test_event_older_than_24h_fails_and_the_queue_continues": {
+      "status": "passed",
+      "evidence": "attempt-1.xml"
+    },
+    "tests.test_saas_forwarder::test_disabling_drops_queued_events_and_nothing_is_sent": {
+      "status": "passed",
+      "evidence": "attempt-1.xml"
+    },
+    "tests.test_saas_forwarder::test_drop_pending_leaves_sent_rows_alone": {
+      "status": "passed",
+      "evidence": "attempt-1.xml"
+    },
+    "tests.test_saas_forwarder::test_enqueue_is_idempotent_on_event_id": {
+      "status": "passed",
+      "evidence": "attempt-1.xml"
+    },
+    "tests.test_saas_forwarder::test_private_base_url_in_production_fails_event_without_a_request": {
+      "status": "passed",
+      "evidence": "attempt-1.xml"
+    },
+    "tests.test_saas_forwarder::test_backoff_grows_and_is_capped": {
+      "status": "passed",
+      "evidence": "attempt-1.xml"
+    },
+    "tests.test_saas_forwarder::test_expired_event_is_not_delivered_even_if_the_saas_would_accept": {
+      "status": "passed",
+      "evidence": "attempt-1.xml"
+    },
+    "tests.test_saas_forwarder::test_wait_is_capped_at_the_deadline_then_the_event_fails_without_sending": {
+      "status": "passed",
+      "evidence": "attempt-1.xml"
+    },
+    "tests.test_saas_forwarder::test_retry_after_over_an_hour_is_honoured": {
+      "status": "passed",
+      "evidence": "attempt-1.xml"
+    },
+    "tests.test_saas_forwarder::test_retry_after_http_date_and_503_are_honoured": {
+      "status": "passed",
+      "evidence": "attempt-1.xml"
+    },
+    "tests.test_saas_forwarder::test_retry_after_parsing": {
+      "status": "passed",
+      "evidence": "attempt-1.xml"
+    },
+    "tests.test_saas_forwarder::test_a16_disable_drops_ordinary_forward_but_preserves_and_sends_erasure": {
+      "status": "passed",
+      "evidence": "attempt-1.xml"
+    },
+    "tests.test_saas_forwarder::test_a16_missing_or_changed_signing_config_fails_without_sending[missing_channel]": {
+      "status": "passed",
+      "evidence": "attempt-1.xml"
+    },
+    "tests.test_saas_forwarder::test_a16_missing_or_changed_signing_config_fails_without_sending[missing_secret]": {
+      "status": "passed",
+      "evidence": "attempt-1.xml"
+    },
+    "tests.test_saas_forwarder::test_a16_missing_or_changed_signing_config_fails_without_sending[changed_connection]": {
+      "status": "passed",
+      "evidence": "attempt-1.xml"
+    },
+    "tests.test_saas_forwarder::test_a16_revoked_401_retries_then_expiry_remains_operator_failure": {
+      "status": "passed",
+      "evidence": "attempt-1.xml"
+    },
+    "tests.test_saas_retention::test_permanent_4xx_failure_keeps_payload[400]": {
+      "status": "passed",
+      "evidence": "attempt-1.xml"
+    },
+    "tests.test_saas_retention::test_permanent_4xx_failure_keeps_payload[403]": {
+      "status": "passed",
+      "evidence": "attempt-1.xml"
+    },
+    "tests.test_saas_retention::test_permanent_4xx_failure_keeps_payload[404]": {
+      "status": "passed",
+      "evidence": "attempt-1.xml"
+    },
+    "tests.test_saas_retention::test_permanent_4xx_failure_keeps_payload[422]": {
+      "status": "passed",
+      "evidence": "attempt-1.xml"
+    },
+    "tests.test_saas_retention::test_budget_exhaustion_and_config_error_keep_payload": {
+      "status": "passed",
+      "evidence": "attempt-1.xml"
+    },
+    "tests.test_saas_retention::test_sent_and_dropped_rows_still_clear_their_payload": {
+      "status": "passed",
+      "evidence": "attempt-1.xml"
+    },
+    "tests.test_saas_retention::test_purge_clears_old_failed_payloads_and_deletes_old_terminal_rows": {
+      "status": "passed",
+      "evidence": "attempt-1.xml"
+    },
+    "tests.test_saas_retention::test_purge_deletes_outbound_records_older_than_30_days_only": {
+      "status": "passed",
+      "evidence": "attempt-1.xml"
+    },
+    "tests.test_saas_retention::test_retention_task_is_on_the_beat_schedule": {
+      "status": "passed",
+      "evidence": "attempt-1.xml"
+    },
+    "tests.test_saas_retention::test_requeue_restores_failed_rows_with_payload_and_same_event_id": {
+      "status": "passed",
+      "evidence": "attempt-1.xml"
+    },
+    "tests.test_saas_retention::test_requeued_event_gets_a_fresh_24h_budget": {
+      "status": "passed",
+      "evidence": "attempt-1.xml"
+    },
+    "tests.test_saas_retention::test_requeue_only_touches_the_given_channel": {
+      "status": "passed",
+      "evidence": "attempt-1.xml"
+    },
+    "tests.test_saas_retention::test_api_reports_failed_event_counts": {
+      "status": "passed",
+      "evidence": "attempt-1.xml"
+    },
+    "tests.test_saas_retention::test_api_retry_requeues_and_is_admin_only": {
+      "status": "passed",
+      "evidence": "attempt-1.xml"
+    },
+    "tests.test_saas_retention::test_api_retry_needs_delegation_enabled_and_correct_workspace": {
+      "status": "passed",
+      "evidence": "attempt-1.xml"
+    },
+    "tests.test_contact_erasure::test_same_identity_on_second_channel_in_same_workspace_is_preserved[instagram]": {
+      "status": "passed",
+      "evidence": "attempt-3.xml"
+    },
+    "tests.test_contact_erasure::test_same_identity_on_second_channel_in_same_workspace_is_preserved[facebook]": {
+      "status": "passed",
+      "evidence": "attempt-3.xml"
+    },
+    "tests.test_contact_erasure::test_same_identity_on_second_channel_in_same_workspace_is_preserved[whatsapp]": {
+      "status": "passed",
+      "evidence": "attempt-3.xml"
+    },
+    "tests.test_contact_erasure::test_comments_cooldowns_and_identifiable_automation_logs_are_erased[instagram]": {
+      "status": "passed",
+      "evidence": "attempt-4.xml"
+    },
+    "tests.test_contact_erasure::test_comments_cooldowns_and_identifiable_automation_logs_are_erased[facebook]": {
+      "status": "passed",
+      "evidence": "attempt-4.xml"
+    },
+    "tests.test_contact_erasure::test_whatsapp_outreach_messages_recipients_and_consent_are_erased": {
+      "status": "passed",
+      "evidence": "attempt-3.xml"
+    },
+    "tests.test_contact_erasure::test_only_customer_webhook_body_is_sql_null_and_pending_work_is_skipped": {
+      "status": "passed",
+      "evidence": "attempt-2.xml"
+    },
+    "tests.test_processed_event_service::test_storage_key_is_versioned_deterministic_and_not_double_hashed": {
+      "status": "passed",
+      "evidence": "attempt-5.xml"
+    },
+    "tests.test_processed_event_service::test_new_markers_and_duplicate_logs_have_no_raw_metadata": {
+      "status": "passed",
+      "evidence": "attempt-5.xml"
+    },
+    "tests.test_processed_event_service::test_legacy_duplicate_is_normalized_without_reprocessing": {
+      "status": "passed",
+      "evidence": "attempt-5.xml"
+    },
+    "tests.test_processed_event_service::test_raw_plus_hashed_collision_keeps_one_oldest_tombstone": {
+      "status": "passed",
+      "evidence": "attempt-5.xml"
+    },
+    "tests.test_processed_event_service::test_platform_and_provider_namespaces_remain_distinct": {
+      "status": "passed",
+      "evidence": "attempt-5.xml"
+    },
+    "tests.test_processed_event_service::test_duplicate_does_not_roll_back_unrelated_caller_changes": {
+      "status": "passed",
+      "evidence": "attempt-5.xml"
+    },
+    "tests.test_processed_event_service::test_concurrent_duplicate_claims_process_at_most_once": {
+      "status": "passed",
+      "evidence": "tests.xml"
+    },
+    "tests.test_processed_event_migration::test_migration_hashes_existing_keys_merges_collision_and_never_restores_raw_data": {
+      "status": "passed",
+      "evidence": "tests.xml"
+    },
+    "tests.test_webhook_processed_logging::test_whatsapp_success_is_logged": {
+      "status": "passed",
+      "evidence": "attempt-5.xml"
+    },
+    "tests.test_webhook_processed_logging::test_facebook_success_is_logged": {
+      "status": "passed",
+      "evidence": "attempt-5.xml"
+    },
+    "tests.test_processed_event_service::test_database_refuses_personal_event_type_even_with_an_opaque_key": {
+      "status": "passed",
+      "evidence": "tests.xml"
+    }
+  },
+  "source_overlay_sha256": {
+    "a3-conftest.py": "c50478ce83a18767d6a47c12d110d9f0db34211da0a04ffc5fdbd27754b2c8cf",
+    "a2-0019-overlay.py": "0fb43e018106ef43033be56ca23e09a06d410bc621fc1415671729bfa906340d",
+    "b1-0028-overlay.py": "77cd03ff234bc14ee280064413bd2c3f49e9cc74b12f04cfc3227a24c32a4d77"
+  },
+  "note": "Iterative focused evidence, not one all-green full suite. Full testing explicitly deferred by owner to a new session. Companion A2/A3/B1 overlays exist only in disposable source snapshot, not B2 checkout."
+}

@@ -1,0 +1,12 @@
+ImportError while loading conftest '/var/tmp/many-t1-20261028/backend/tests/conftest.py'.
+tests/conftest.py:7: in <module>
+    from app.core.config import settings
+app/core/config.py:136: in <module>
+    settings = Settings()
+               ^^^^^^^^^^
+../../many-t0-20261028/venv/lib/python3.11/site-packages/pydantic_settings/main.py:292: in __init__
+    super().__init__(**__pydantic_self__.__class__._settings_build_values(sources, init_kwargs))
+E   pydantic_core._pydantic_core.ValidationError: 1 validation error for Settings
+E   DATABASE_URL
+E     Field required [type=missing, input_value={'APP_ENV': 'test', 'APP_...', 'OPENAI_API_KEY': ''}, input_type=dict]
+E       For further information visit https://errors.pydantic.dev/2.14/v/missing

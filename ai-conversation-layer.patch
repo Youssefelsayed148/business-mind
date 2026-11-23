@@ -1,0 +1,1842 @@
+diff --git a/backend/alembic/versions/0009_ai_conversation_layer.py b/backend/alembic/versions/0009_ai_conversation_layer.py
+new file mode 100644
+index 0000000..374e28d
+--- /dev/null
++++ b/backend/alembic/versions/0009_ai_conversation_layer.py
+@@ -0,0 +1,161 @@
++"""Add AI conversation continuation layer
++
++Adds:
++- conversations table (per lead+campaign AI thread tracking)
++- messages.direction, messages.conversation_id
++- campaigns.ai_enabled, campaigns.ai_handoff_after_turns
++- instagram_accounts AI scope/budget fields (business_vertical,
++  ai_enabled, ai_business_profile, ai_tone_instructions,
++  ai_daily_message_cap, ai_messages_sent_today, ai_budget_reset_at)
++
++Revision ID: 0009_ai_conversation_layer
++Revises: 0008_campaign_comment_reply
++Create Date: 2026-08-19 00:00:00.000000
++"""
++
++from alembic import op
++import sqlalchemy as sa
++from sqlalchemy.dialects import postgresql
++
++
++revision = "0009_ai_conversation_layer"
++down_revision = "0008_campaign_comment_reply"
++branch_labels = None
++depends_on = None
++
++
++def _add_column_if_missing(table: str, column: sa.Column) -> None:
++    bind = op.get_bind()
++    columns = {col["name"] for col in sa.inspect(bind).get_columns(table)}
++    if column.name not in columns:
++        op.add_column(table, column)
++
++
++def _drop_column_if_present(table: str, column_name: str) -> None:
++    bind = op.get_bind()
++    columns = {col["name"] for col in sa.inspect(bind).get_columns(table)}
++    if column_name in columns:
++        op.drop_column(table, column_name)
++
++
++def upgrade() -> None:
++    bind = op.get_bind()
++    existing_tables = sa.inspect(bind).get_table_names()
++
++    if "conversations" not in existing_tables:
++        op.create_table(
++            "conversations",
++            sa.Column("id", postgresql.UUID(as_uuid=True), primary_key=True),
++            sa.Column(
++                "workspace_id",
++                postgresql.UUID(as_uuid=True),
++                sa.ForeignKey("workspaces.id"),
++                nullable=False,
++            ),
++            sa.Column(
++                "lead_id", postgresql.UUID(as_uuid=True), sa.ForeignKey("leads.id"), nullable=False
++            ),
++            sa.Column(
++                "campaign_id",
++                postgresql.UUID(as_uuid=True),
++                sa.ForeignKey("campaigns.id"),
++                nullable=False,
++            ),
++            sa.Column(
++                "instagram_account_id",
++                postgresql.UUID(as_uuid=True),
++                sa.ForeignKey("instagram_accounts.id"),
++                nullable=False,
++            ),
++            sa.Column("status", sa.String(50), nullable=False, server_default="bot_active"),
++            sa.Column("handoff_reason", sa.String(50), nullable=True),
++            sa.Column("turn_count", sa.Integer(), nullable=False, server_default="0"),
++            sa.Column("last_message_at", sa.DateTime(timezone=True), nullable=True),
++            sa.Column("created_at", sa.DateTime(timezone=True), server_default=sa.func.now()),
++            sa.Column(
++                "updated_at",
++                sa.DateTime(timezone=True),
++                server_default=sa.func.now(),
++                onupdate=sa.func.now(),
++            ),
++            sa.UniqueConstraint("lead_id", "campaign_id", name="uq_conversation_lead_campaign"),
++        )
++        op.create_index("ix_conversations_status", "conversations", ["status"])
++        op.create_index(
++            "ix_conversations_instagram_account_id", "conversations", ["instagram_account_id"]
++        )
++
++    # messages: direction + conversation_id
++    _add_column_if_missing(
++        "messages",
++        sa.Column("direction", sa.String(20), nullable=False, server_default="outbound"),
++    )
++    _add_column_if_missing(
++        "messages",
++        sa.Column(
++            "conversation_id",
++            postgresql.UUID(as_uuid=True),
++            sa.ForeignKey("conversations.id"),
++            nullable=True,
++        ),
++    )
++
++    # campaigns: AI opt-in + handoff limit
++    _add_column_if_missing(
++        "campaigns",
++        sa.Column("ai_enabled", sa.Boolean(), nullable=False, server_default=sa.false()),
++    )
++    _add_column_if_missing(
++        "campaigns",
++        sa.Column("ai_handoff_after_turns", sa.Integer(), nullable=False, server_default="8"),
++    )
++
++    # instagram_accounts: AI scope + shared budget
++    _add_column_if_missing(
++        "instagram_accounts",
++        sa.Column("business_vertical", sa.String(50), nullable=False, server_default="general"),
++    )
++    _add_column_if_missing(
++        "instagram_accounts",
++        sa.Column("ai_enabled", sa.Boolean(), nullable=False, server_default=sa.false()),
++    )
++    _add_column_if_missing(
++        "instagram_accounts", sa.Column("ai_business_profile", sa.Text(), nullable=True)
++    )
++    _add_column_if_missing(
++        "instagram_accounts", sa.Column("ai_tone_instructions", sa.Text(), nullable=True)
++    )
++    _add_column_if_missing(
++        "instagram_accounts",
++        sa.Column("ai_daily_message_cap", sa.Integer(), nullable=False, server_default="100"),
++    )
++    _add_column_if_missing(
++        "instagram_accounts",
++        sa.Column("ai_messages_sent_today", sa.Integer(), nullable=False, server_default="0"),
++    )
++    _add_column_if_missing(
++        "instagram_accounts",
++        sa.Column("ai_budget_reset_at", sa.DateTime(timezone=True), nullable=True),
++    )
++
++
++def downgrade() -> None:
++    _drop_column_if_present("instagram_accounts", "ai_budget_reset_at")
++    _drop_column_if_present("instagram_accounts", "ai_messages_sent_today")
++    _drop_column_if_present("instagram_accounts", "ai_daily_message_cap")
++    _drop_column_if_present("instagram_accounts", "ai_tone_instructions")
++    _drop_column_if_present("instagram_accounts", "ai_business_profile")
++    _drop_column_if_present("instagram_accounts", "ai_enabled")
++    _drop_column_if_present("instagram_accounts", "business_vertical")
++
++    _drop_column_if_present("campaigns", "ai_handoff_after_turns")
++    _drop_column_if_present("campaigns", "ai_enabled")
++
++    _drop_column_if_present("messages", "conversation_id")
++    _drop_column_if_present("messages", "direction")
++
++    bind = op.get_bind()
++    if "conversations" in sa.inspect(bind).get_table_names():
++        op.drop_index("ix_conversations_instagram_account_id", table_name="conversations")
++        op.drop_index("ix_conversations_status", table_name="conversations")
++        op.drop_table("conversations")
+diff --git a/backend/app/api/routes_conversations.py b/backend/app/api/routes_conversations.py
+new file mode 100644
+index 0000000..2574724
+--- /dev/null
++++ b/backend/app/api/routes_conversations.py
+@@ -0,0 +1,119 @@
++import logging
++from uuid import UUID
++
++from fastapi import APIRouter, Depends, HTTPException
++from sqlalchemy.orm import Session
++
++from app.api.routes_auth import get_current_user
++from app.authz import require_permission
++from app.db.session import get_db
++from app.models.campaign import Campaign
++from app.models.conversation import Conversation
++from app.models.lead import Lead
++from app.models.message import Message
++from app.models.user import User
++from app.services import conversation_service
++
++logger = logging.getLogger(__name__)
++
++router = APIRouter()
++
++
++def _conversation_response(db: Session, conversation: Conversation) -> dict:
++    lead = db.query(Lead).filter(Lead.id == conversation.lead_id).first()
++    campaign = db.query(Campaign).filter(Campaign.id == conversation.campaign_id).first()
++    last_message = (
++        db.query(Message)
++        .filter(Message.conversation_id == conversation.id)
++        .order_by(Message.created_at.desc())
++        .first()
++    )
++    return {
++        "id": str(conversation.id),
++        "lead_id": str(conversation.lead_id),
++        "lead_username": lead.ig_username or lead.ig_user_id if lead else None,
++        "campaign_id": str(conversation.campaign_id),
++        "campaign_name": campaign.name if campaign else None,
++        "instagram_account_id": str(conversation.instagram_account_id),
++        "status": conversation.status,
++        "handoff_reason": conversation.handoff_reason,
++        "turn_count": conversation.turn_count,
++        "last_message_at": conversation.last_message_at.isoformat() if conversation.last_message_at else None,
++        "last_message_preview": (last_message.rendered_body or last_message.content or "")[:140] if last_message else None,
++        "created_at": conversation.created_at.isoformat() if conversation.created_at else None,
++    }
++
++
++def _message_response(message: Message) -> dict:
++    return {
++        "id": str(message.id),
++        "direction": message.direction,
++        "content": message.rendered_body or message.content,
++        "status": message.status,
++        "error_message": message.error_message,
++        "created_at": message.created_at.isoformat() if message.created_at else None,
++    }
++
++
++@router.get("/conversations")
++async def list_conversations(
++    db: Session = Depends(get_db),
++    current_user: User = Depends(get_current_user),
++):
++    conversations = db.query(Conversation).order_by(Conversation.last_message_at.desc().nullslast()).all()
++    return [_conversation_response(db, c) for c in conversations]
++
++
++@router.get("/conversations/{conversation_id}")
++async def get_conversation(
++    conversation_id: UUID,
++    db: Session = Depends(get_db),
++    current_user: User = Depends(get_current_user),
++):
++    conversation = db.query(Conversation).filter(Conversation.id == conversation_id).first()
++    if not conversation:
++        raise HTTPException(status_code=404, detail="Conversation not found")
++
++    messages = (
++        db.query(Message)
++        .filter(Message.conversation_id == conversation.id)
++        .order_by(Message.created_at.asc())
++        .all()
++    )
++    response = _conversation_response(db, conversation)
++    response["messages"] = [_message_response(m) for m in messages]
++    return response
++
++
++@router.post("/conversations/{conversation_id}/take-over")
++async def take_over_conversation(
++    conversation_id: UUID,
++    db: Session = Depends(get_db),
++    current_user: User = Depends(require_permission("manage_accounts")),
++):
++    """Manually stop the AI from replying in this conversation. Independent
++    of the automatic handoff triggers (turn limit, daily cap) — this is the
++    dashboard's emergency-stop / human-takeover action."""
++    conversation = db.query(Conversation).filter(Conversation.id == conversation_id).first()
++    if not conversation:
++        raise HTTPException(status_code=404, detail="Conversation not found")
++
++    conversation_service.hand_off(db, conversation, "manual")
++    logger.info("Conversation manually taken over", extra={"conversation_id": str(conversation_id), "user_id": str(current_user.id)})
++    return _conversation_response(db, conversation)
++
++
++@router.post("/conversations/{conversation_id}/resume-bot")
++async def resume_bot_conversation(
++    conversation_id: UUID,
++    db: Session = Depends(get_db),
++    current_user: User = Depends(require_permission("manage_accounts")),
++):
++    """Hand a conversation back to the AI after a manual take-over."""
++    conversation = db.query(Conversation).filter(Conversation.id == conversation_id).first()
++    if not conversation:
++        raise HTTPException(status_code=404, detail="Conversation not found")
++
++    conversation_service.resume_bot(db, conversation)
++    logger.info("Conversation bot resumed", extra={"conversation_id": str(conversation_id), "user_id": str(current_user.id)})
++    return _conversation_response(db, conversation)
+diff --git a/backend/app/api/routes_instagram.py b/backend/app/api/routes_instagram.py
+index 8efedf8..e80a256 100644
+--- a/backend/app/api/routes_instagram.py
++++ b/backend/app/api/routes_instagram.py
+@@ -1,9 +1,11 @@
+ import logging
+ import uuid
+ from datetime import datetime, timezone
++from typing import Literal
+ from uuid import UUID
+ 
+ from fastapi import APIRouter, Depends, HTTPException
++from pydantic import BaseModel, Field
+ from redis import Redis
+ from redis.exceptions import RedisError
+ from sqlalchemy.orm import Session
+@@ -59,6 +61,12 @@ def _account_response(account: InstagramAccount) -> dict:
+         "ig_user_id": account.ig_user_id,
+         "username": account.ig_username,
+         "status": account.status,
++        "business_vertical": account.business_vertical,
++        "ai_enabled": account.ai_enabled,
++        "ai_business_profile": account.ai_business_profile,
++        "ai_tone_instructions": account.ai_tone_instructions,
++        "ai_daily_message_cap": account.ai_daily_message_cap,
++        "ai_messages_sent_today": account.ai_messages_sent_today,
+         "created_at": account.created_at.isoformat() if account.created_at else None,
+         "updated_at": account.updated_at.isoformat() if account.updated_at else None,
+     }
+@@ -107,6 +115,38 @@ async def get_account(
+     return _account_response(account)
+ 
+ 
++class AISettingsUpdate(BaseModel):
++    business_vertical: Literal["general", "restaurant", "real_estate", "clinical"] | None = None
++    ai_enabled: bool | None = None
++    ai_business_profile: str | None = Field(default=None, max_length=4000)
++    ai_tone_instructions: str | None = Field(default=None, max_length=1000)
++    ai_daily_message_cap: int | None = Field(default=None, ge=0, le=5000)
++
++
++@router.patch("/accounts/{account_id}/ai-settings")
++async def update_ai_settings(
++    account_id: UUID,
++    payload: AISettingsUpdate,
++    db: Session = Depends(get_db),
++    current_user: User = Depends(require_permission("manage_accounts")),
++):
++    _limit_account_mutation(current_user)
++    account = db.query(InstagramAccount).filter(InstagramAccount.id == account_id).first()
++    if not account:
++        raise HTTPException(status_code=404, detail="Account not found")
++
++    update_data = payload.model_dump(exclude_unset=True)
++    for field, value in update_data.items():
++        setattr(account, field, value)
++    db.commit()
++    db.refresh(account)
++
++    _add_account_log(db, "ai_settings_updated", account, details=update_data)
++    db.commit()
++
++    return _account_response(account)
++
++
+ @router.post("/accounts/{account_id}/reconnect")
+ async def reconnect_account(
+     account_id: UUID,
+diff --git a/backend/app/core/config.py b/backend/app/core/config.py
+index 5624f77..38cf994 100644
+--- a/backend/app/core/config.py
++++ b/backend/app/core/config.py
+@@ -54,6 +54,13 @@ class Settings(BaseSettings):
+ 
+     TOKEN_ENCRYPTION_KEY: str = ""
+ 
++    # --- AI conversation-continuation layer ---
++    AI_ENABLED_GLOBAL: bool = True  # kill switch, independent of per-account toggles
++    OPENAI_API_KEY: str = ""
++    AI_MODEL_NAME: str = "gpt-4o-mini"
++    AI_REQUEST_TIMEOUT_SECONDS: float = 15.0
++    AI_MAX_CONTEXT_TURNS: int = 10
++
+ 
+ settings = Settings()
+ 
+diff --git a/backend/app/integrations/meta/webhooks.py b/backend/app/integrations/meta/webhooks.py
+index 455bfc4..c593fd9 100644
+--- a/backend/app/integrations/meta/webhooks.py
++++ b/backend/app/integrations/meta/webhooks.py
+@@ -29,6 +29,22 @@ class ParsedPostbackEvent:
+     raw_event: dict
+ 
+ 
++@dataclass
++class ParsedMessageEvent:
++    """A plain-text inbound DM (not a postback/quick-reply tap).
++
++    This is the event type the AI conversation-continuation layer acts on:
++    a lead replying with free text inside an existing DM thread.
++    """
++
++    instagram_account_ig_user_id: str
++    sender_ig_id: str
++    text: str
++    mid: str | None
++    timestamp: str | None
++    raw_event: dict
++
++
+ def verify_meta_signature(raw_body: bytes, signature_header: str | None, app_secret: str) -> bool:
+     if not signature_header:
+         return False
+@@ -192,6 +208,74 @@ def parse_instagram_postback_events(payload: dict) -> list[ParsedPostbackEvent]:
+     return events
+ 
+ 
++def parse_instagram_message_events(payload: dict) -> list[ParsedMessageEvent]:
++    """Parse plain-text inbound DM events from a Meta webhook payload.
++
++    Mirrors parse_instagram_postback_events' entry[].messaging[] traversal,
++    but picks up exactly the case that function ignores: a message.text
++    with no postback and no quick_reply payload. This is what the AI
++    conversation-continuation layer responds to.
++
++    Echoes of our own outbound messages (message.is_echo) are skipped,
++    same guard as the postback parser, to avoid the bot replying to itself.
++    """
++    events: list[ParsedMessageEvent] = []
++    if not isinstance(payload, dict):
++        return events
++    entries = payload.get("entry", [])
++    if not isinstance(entries, list):
++        return events
++
++    for entry in entries:
++        if not isinstance(entry, dict):
++            continue
++        messaging = entry.get("messaging", [])
++        if not isinstance(messaging, list):
++            continue
++
++        ig_user_id = str(entry.get("id", ""))
++
++        for item in messaging:
++            if not isinstance(item, dict):
++                continue
++
++            sender = item.get("sender", {})
++            sender_id = str(sender.get("id", "")) if isinstance(sender, dict) else ""
++            if not sender_id:
++                continue
++
++            # Postback/quick-reply taps are handled by parse_instagram_postback_events.
++            if isinstance(item.get("postback"), dict) and item["postback"].get("payload"):
++                continue
++
++            message = item.get("message")
++            if not isinstance(message, dict):
++                continue
++            if message.get("is_echo"):
++                continue
++            if isinstance(message.get("quick_reply"), dict) and message["quick_reply"].get("payload"):
++                continue
++
++            text = message.get("text")
++            if not text or not isinstance(text, str):
++                # Attachments (images/stickers) with no text — not handled by
++                # the AI layer yet; ignore rather than guess.
++                continue
++
++            events.append(
++                ParsedMessageEvent(
++                    instagram_account_ig_user_id=ig_user_id,
++                    sender_ig_id=sender_id,
++                    text=text,
++                    mid=message.get("mid"),
++                    timestamp=item.get("timestamp"),
++                    raw_event=item,
++                )
++            )
++
++    return events
++
++
+ def _extract_media_id(value: dict) -> str | None:
+     media_id = value.get("media_id")
+     if media_id:
+diff --git a/backend/app/main.py b/backend/app/main.py
+index 3a10046..04a006d 100644
+--- a/backend/app/main.py
++++ b/backend/app/main.py
+@@ -3,7 +3,17 @@ import logging
+ from fastapi import FastAPI
+ from fastapi.middleware.cors import CORSMiddleware
+ 
+-from app.api import routes_auth, routes_campaigns, routes_dashboard, routes_health, routes_instagram, routes_meta, routes_messages, routes_webhooks
++from app.api import (
++    routes_auth,
++    routes_campaigns,
++    routes_conversations,
++    routes_dashboard,
++    routes_health,
++    routes_instagram,
++    routes_meta,
++    routes_messages,
++    routes_webhooks,
++)
+ from app.core.config import get_allowed_origins, settings
+ from app.core.logging import setup_logging
+ 
+@@ -47,6 +57,7 @@ app.include_router(routes_meta.router)
+ app.include_router(routes_instagram.router)
+ app.include_router(routes_campaigns.router)
+ app.include_router(routes_messages.router)
++app.include_router(routes_conversations.router)
+ app.include_router(routes_dashboard.router)
+ 
+ 
+diff --git a/backend/app/models/__init__.py b/backend/app/models/__init__.py
+index 51c0f8d..a8665b3 100644
+--- a/backend/app/models/__init__.py
++++ b/backend/app/models/__init__.py
+@@ -3,6 +3,7 @@ from app.models.audit_log import AuditLog
+ from app.models.campaign import Campaign
+ from app.models.campaign_keyword import CampaignKeyword
+ from app.models.comment import Comment
++from app.models.conversation import Conversation
+ from app.models.instagram_account import InstagramAccount
+ from app.models.lead import Lead
+ from app.models.message import Message
+@@ -19,6 +20,7 @@ __all__ = [
+     "Campaign",
+     "CampaignKeyword",
+     "Comment",
++    "Conversation",
+     "InstagramAccount",
+     "Lead",
+     "Message",
+diff --git a/backend/app/models/campaign.py b/backend/app/models/campaign.py
+index 2912e42..d52859a 100644
+--- a/backend/app/models/campaign.py
++++ b/backend/app/models/campaign.py
+@@ -41,6 +41,8 @@ class Campaign(Base):
+     follow_prompt_profile_url: Mapped[str | None] = mapped_column(Text, nullable=True)
+     comment_reply_enabled: Mapped[bool] = mapped_column(Boolean, default=False)
+     comment_reply_text: Mapped[str | None] = mapped_column(Text, nullable=True)
++    ai_enabled: Mapped[bool] = mapped_column(Boolean, default=False)
++    ai_handoff_after_turns: Mapped[int] = mapped_column(Integer, default=8)
+     total_triggers: Mapped[int] = mapped_column(Integer, default=0)
+     successful_sends: Mapped[int] = mapped_column(Integer, default=0)
+     failed_sends: Mapped[int] = mapped_column(Integer, default=0)
+diff --git a/backend/app/models/conversation.py b/backend/app/models/conversation.py
+new file mode 100644
+index 0000000..e30d88a
+--- /dev/null
++++ b/backend/app/models/conversation.py
+@@ -0,0 +1,54 @@
++import uuid
++from datetime import datetime
++
++from sqlalchemy import DateTime, ForeignKey, Integer, String, UniqueConstraint, func
++from sqlalchemy.dialects.postgresql import UUID as PGUUID
++from sqlalchemy.orm import Mapped, mapped_column
++
++from app.db.base import Base
++
++
++class Conversation(Base):
++    """Tracks an ongoing AI-assisted DM conversation with a lead.
++
++    Created the first time a lead replies inside a DM thread after an
++    AI-enabled campaign delivered them a message. One conversation per
++    (lead, campaign) pair.
++    """
++
++    __tablename__ = "conversations"
++    __table_args__ = (
++        UniqueConstraint("lead_id", "campaign_id", name="uq_conversation_lead_campaign"),
++    )
++
++    id: Mapped[uuid.UUID] = mapped_column(
++        PGUUID(as_uuid=True), primary_key=True, default=uuid.uuid4
++    )
++    workspace_id: Mapped[uuid.UUID] = mapped_column(
++        PGUUID(as_uuid=True), ForeignKey("workspaces.id"), nullable=False
++    )
++    lead_id: Mapped[uuid.UUID] = mapped_column(
++        PGUUID(as_uuid=True), ForeignKey("leads.id"), nullable=False
++    )
++    campaign_id: Mapped[uuid.UUID] = mapped_column(
++        PGUUID(as_uuid=True), ForeignKey("campaigns.id"), nullable=False
++    )
++    instagram_account_id: Mapped[uuid.UUID] = mapped_column(
++        PGUUID(as_uuid=True), ForeignKey("instagram_accounts.id"), nullable=False
++    )
++    # bot_active | handed_off | closed
++    status: Mapped[str] = mapped_column(String(50), default="bot_active")
++    # turn_limit | daily_cap_reached | manual | user_requested_human | ai_error | None
++    handoff_reason: Mapped[str | None] = mapped_column(String(50), nullable=True)
++    turn_count: Mapped[int] = mapped_column(Integer, default=0)
++    last_message_at: Mapped[datetime | None] = mapped_column(
++        DateTime(timezone=True), nullable=True
++    )
++    created_at: Mapped[datetime] = mapped_column(
++        DateTime(timezone=True), server_default=func.now()
++    )
++    updated_at: Mapped[datetime] = mapped_column(
++        DateTime(timezone=True),
++        server_default=func.now(),
++        onupdate=func.now(),
++    )
+diff --git a/backend/app/models/instagram_account.py b/backend/app/models/instagram_account.py
+index 5f2c7af..664bd4a 100644
+--- a/backend/app/models/instagram_account.py
++++ b/backend/app/models/instagram_account.py
+@@ -1,7 +1,7 @@
+ import uuid
+ from datetime import datetime
+ 
+-from sqlalchemy import DateTime, ForeignKey, String, func
++from sqlalchemy import Boolean, DateTime, ForeignKey, Integer, String, Text, func
+ from sqlalchemy.dialects.postgresql import UUID as PGUUID
+ from sqlalchemy.orm import Mapped, mapped_column
+ 
+@@ -20,6 +20,18 @@ class InstagramAccount(Base):
+     ig_user_id: Mapped[str] = mapped_column(String(255), unique=True, index=True)
+     ig_username: Mapped[str | None] = mapped_column(String(255), nullable=True)
+     status: Mapped[str] = mapped_column(String(50), default="connected")
++
++    # --- AI continuation layer: scoped per account, shared across its campaigns ---
++    # general | restaurant | real_estate | clinical
++    business_vertical: Mapped[str] = mapped_column(String(50), default="general")
++    ai_enabled: Mapped[bool] = mapped_column(Boolean, default=False)
++    ai_business_profile: Mapped[str | None] = mapped_column(Text, nullable=True)
++    ai_tone_instructions: Mapped[str | None] = mapped_column(Text, nullable=True)
++    ai_daily_message_cap: Mapped[int] = mapped_column(Integer, default=100)
++    ai_messages_sent_today: Mapped[int] = mapped_column(Integer, default=0)
++    ai_budget_reset_at: Mapped[datetime | None] = mapped_column(
++        DateTime(timezone=True), nullable=True
++    )
+     created_at: Mapped[datetime] = mapped_column(
+         DateTime(timezone=True), server_default=func.now()
+     )
+diff --git a/backend/app/models/message.py b/backend/app/models/message.py
+index f668b08..db46c79 100644
+--- a/backend/app/models/message.py
++++ b/backend/app/models/message.py
+@@ -28,6 +28,11 @@ class Message(Base):
+     comment_id: Mapped[uuid.UUID | None] = mapped_column(
+         PGUUID(as_uuid=True), ForeignKey("comments.id"), nullable=True
+     )
++    conversation_id: Mapped[uuid.UUID | None] = mapped_column(
++        PGUUID(as_uuid=True), ForeignKey("conversations.id"), nullable=True
++    )
++    # inbound (from lead) | outbound (from us, includes AI replies)
++    direction: Mapped[str] = mapped_column(String(20), default="outbound")
+     source_media_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
+     source_media_type: Mapped[str | None] = mapped_column(String(50), nullable=True)
+     source_media_label: Mapped[str | None] = mapped_column(String(255), nullable=True)
+diff --git a/backend/app/schemas/campaign.py b/backend/app/schemas/campaign.py
+index 4d783ac..f41b6c5 100644
+--- a/backend/app/schemas/campaign.py
++++ b/backend/app/schemas/campaign.py
+@@ -155,6 +155,8 @@ class CampaignUpdate(BaseModel):
+     follow_prompt_profile_url: str | None = None
+     comment_reply_enabled: bool | None = None
+     comment_reply_text: str | None = None
++    ai_enabled: bool | None = None
++    ai_handoff_after_turns: int | None = Field(default=None, ge=1, le=50)
+ 
+     @field_validator("message_template")
+     @classmethod
+@@ -222,6 +224,8 @@ class CampaignResponse(BaseModel):
+     follow_prompt_profile_url: str | None = None
+     comment_reply_enabled: bool = False
+     comment_reply_text: str | None = None
++    ai_enabled: bool = False
++    ai_handoff_after_turns: int = 8
+     total_triggers: int = 0
+     successful_sends: int = 0
+     failed_sends: int = 0
+diff --git a/backend/app/services/ai_service.py b/backend/app/services/ai_service.py
+new file mode 100644
+index 0000000..152b776
+--- /dev/null
++++ b/backend/app/services/ai_service.py
+@@ -0,0 +1,129 @@
++import logging
++import uuid
++
++from openai import OpenAI
++from sqlalchemy.orm import Session
++
++from app.core.config import settings
++from app.models.campaign import Campaign
++from app.models.instagram_account import InstagramAccount
++from app.models.message import Message
++
++logger = logging.getLogger(__name__)
++
++# Non-overridable safety instructions per vertical. These are appended
++# regardless of what a client fills into their business profile, so a
++# misconfigured or sparse profile can't accidentally leave out a hard
++# safety boundary for a sensitive vertical.
++_VERTICAL_SAFETY_INSTRUCTIONS = {
++    "clinical": (
++        "You must never provide medical advice, diagnoses, treatment "
++        "recommendations, or medication guidance, even if asked directly. "
++        "For any medical question, tell the user you can't advise on that "
++        "and offer to help them book an appointment or connect with staff."
++    ),
++    "real_estate": (
++        "You must never quote a final price, commit to availability, or "
++        "confirm a legal/contractual term as final — always frame pricing "
++        "and availability as needing confirmation from the team."
++    ),
++    "restaurant": (
++        "Be careful with allergen and ingredient questions: if you are not "
++        "certain the business profile covers the specific allergen or "
++        "ingredient asked about, say you're not sure and offer to connect "
++        "the user with staff rather than guessing."
++    ),
++    "general": "",
++}
++
++_HANDOFF_INSTRUCTION = (
++    "If the user asks to speak to a human, seems frustrated, or asks "
++    "something clearly outside what you've been told about this business, "
++    "say you'll get a team member to help and do not attempt to answer."
++)
++
++
++class AIReplyResult:
++    def __init__(self, success: bool, text: str | None = None, error: str | None = None):
++        self.success = success
++        self.text = text
++        self.error = error
++
++
++def build_system_prompt(account: InstagramAccount, campaign: Campaign) -> str:
++    vertical = account.business_vertical or "general"
++    safety = _VERTICAL_SAFETY_INSTRUCTIONS.get(vertical, "")
++
++    parts = [
++        f"You are a helpful assistant messaging on behalf of an Instagram business account (vertical: {vertical}).",
++        f"Business profile:\n{account.ai_business_profile.strip()}" if account.ai_business_profile else "No business profile has been configured yet — keep responses brief and generic.",
++    ]
++    if account.ai_tone_instructions:
++        parts.append(f"Tone/style: {account.ai_tone_instructions.strip()}")
++    parts.append(f"This conversation started from the campaign: {campaign.name}.")
++    if safety:
++        parts.append(safety)
++    parts.append(_HANDOFF_INSTRUCTION)
++    parts.append("Keep replies short and conversational, suitable for an Instagram DM.")
++
++    return "\n\n".join(p for p in parts if p)
++
++
++def build_conversation_history(db: Session, conversation_id: uuid.UUID, max_turns: int) -> list[dict]:
++    """Return the last `max_turns` messages for this conversation as
++    OpenAI-style chat messages, oldest first."""
++    rows = (
++        db.query(Message)
++        .filter(Message.conversation_id == conversation_id)
++        .order_by(Message.created_at.desc())
++        .limit(max_turns)
++        .all()
++    )
++    rows.reverse()
++
++    history = []
++    for row in rows:
++        role = "user" if row.direction == "inbound" else "assistant"
++        content = row.rendered_body or row.content or ""
++        if content:
++            history.append({"role": role, "content": content})
++    return history
++
++
++def generate_reply(
++    db: Session,
++    account: InstagramAccount,
++    campaign: Campaign,
++    conversation_id: uuid.UUID,
++) -> AIReplyResult:
++    if not settings.AI_ENABLED_GLOBAL:
++        return AIReplyResult(success=False, error="ai_disabled_globally")
++    if not settings.OPENAI_API_KEY:
++        return AIReplyResult(success=False, error="no_api_key_configured")
++
++    system_prompt = build_system_prompt(account, campaign)
++    history = build_conversation_history(db, conversation_id, settings.AI_MAX_CONTEXT_TURNS)
++
++    messages = [{"role": "system", "content": system_prompt}] + history
++
++    try:
++        client = OpenAI(api_key=settings.OPENAI_API_KEY, timeout=settings.AI_REQUEST_TIMEOUT_SECONDS)
++        response = client.chat.completions.create(
++            model=settings.AI_MODEL_NAME,
++            messages=messages,
++            max_tokens=300,
++        )
++    except Exception as exc:
++        # Fail closed: any error here means no reply gets sent, not a retry
++        # storm. Caller is responsible for logging/handoff on failure.
++        logger.warning("AI model call failed", extra={"conversation_id": str(conversation_id), "error": str(exc)})
++        return AIReplyResult(success=False, error=str(exc))
++
++    text = None
++    if response.choices:
++        text = (response.choices[0].message.content or "").strip()
++
++    if not text:
++        return AIReplyResult(success=False, error="empty_response")
++
++    return AIReplyResult(success=True, text=text)
+diff --git a/backend/app/services/conversation_service.py b/backend/app/services/conversation_service.py
+new file mode 100644
+index 0000000..40635d5
+--- /dev/null
++++ b/backend/app/services/conversation_service.py
+@@ -0,0 +1,94 @@
++import logging
++import uuid
++from datetime import datetime, timezone
++
++from sqlalchemy.orm import Session
++
++from app.models.conversation import Conversation
++from app.models.instagram_account import InstagramAccount
++
++logger = logging.getLogger(__name__)
++
++
++def get_or_create_conversation(
++    db: Session,
++    workspace_id: uuid.UUID,
++    lead_id: uuid.UUID,
++    campaign_id: uuid.UUID,
++    instagram_account_id: uuid.UUID,
++) -> Conversation:
++    conversation = (
++        db.query(Conversation)
++        .filter(Conversation.lead_id == lead_id, Conversation.campaign_id == campaign_id)
++        .first()
++    )
++    if conversation:
++        return conversation
++
++    conversation = Conversation(
++        id=uuid.uuid4(),
++        workspace_id=workspace_id,
++        lead_id=lead_id,
++        campaign_id=campaign_id,
++        instagram_account_id=instagram_account_id,
++        status="bot_active",
++        turn_count=0,
++    )
++    db.add(conversation)
++    db.commit()
++    db.refresh(conversation)
++    logger.info("Conversation created", extra={"conversation_id": str(conversation.id)})
++    return conversation
++
++
++def touch_conversation(db: Session, conversation: Conversation) -> None:
++    conversation.last_message_at = datetime.now(timezone.utc)
++    db.commit()
++
++
++def increment_turn(db: Session, conversation: Conversation) -> None:
++    conversation.turn_count += 1
++    db.commit()
++    db.refresh(conversation)
++
++
++def hand_off(db: Session, conversation: Conversation, reason: str) -> None:
++    """Stop the AI from replying in this conversation. Idempotent — safe to
++    call even if already handed off."""
++    if conversation.status == "handed_off":
++        return
++    conversation.status = "handed_off"
++    conversation.handoff_reason = reason
++    db.commit()
++    logger.info(
++        "Conversation handed off",
++        extra={"conversation_id": str(conversation.id), "reason": reason},
++    )
++
++
++def resume_bot(db: Session, conversation: Conversation) -> None:
++    """Manual dashboard action: let the bot take conversations back over."""
++    conversation.status = "bot_active"
++    conversation.handoff_reason = None
++    db.commit()
++
++
++# --- Per-account shared AI budget -----------------------------------------
++
++def reset_daily_budget_if_needed(db: Session, account: InstagramAccount) -> None:
++    now = datetime.now(timezone.utc)
++    if account.ai_budget_reset_at is None or account.ai_budget_reset_at.date() < now.date():
++        account.ai_messages_sent_today = 0
++        account.ai_budget_reset_at = now
++        db.commit()
++
++
++def is_budget_exhausted(db: Session, account: InstagramAccount) -> bool:
++    reset_daily_budget_if_needed(db, account)
++    return account.ai_messages_sent_today >= account.ai_daily_message_cap
++
++
++def record_ai_send(db: Session, account: InstagramAccount) -> None:
++    reset_daily_budget_if_needed(db, account)
++    account.ai_messages_sent_today += 1
++    db.commit()
+diff --git a/backend/app/workers/tasks.py b/backend/app/workers/tasks.py
+index 9789bfc..a34982a 100644
+--- a/backend/app/workers/tasks.py
++++ b/backend/app/workers/tasks.py
+@@ -4,13 +4,20 @@ from sqlalchemy.orm import Session
+ 
+ from app.db.session import SessionLocal
+ from app.integrations.meta.messaging import MetaMessagingClient
+-from app.integrations.meta.webhooks import parse_instagram_comment_events, parse_instagram_postback_events
++from app.integrations.meta.webhooks import (
++    parse_instagram_comment_events,
++    parse_instagram_message_events,
++    parse_instagram_postback_events,
++)
+ from app.models.automation_log import AutomationLog
+ from app.models.campaign import Campaign
+ from app.models.comment import Comment
++from app.models.conversation import Conversation
+ from app.models.instagram_account import InstagramAccount
++from app.models.lead import Lead
+ from app.models.message import Message
+ from app.models.webhook_event import WebhookEvent
++from app.services import ai_service, conversation_service
+ from app.services.campaign_matcher import find_matching_campaigns, find_matching_keyword
+ from app.services.comment_service import upsert_comment
+ from app.services.cooldown_service import is_in_cooldown, record_cooldown
+@@ -96,10 +103,11 @@ def process_webhook_event(webhook_event_id: str):
+ 
+         comment_events = parse_instagram_comment_events(event.payload or {})
+         postback_events = parse_instagram_postback_events(event.payload or {})
+-        if not comment_events and not postback_events:
++        message_events = parse_instagram_message_events(event.payload or {})
++        if not comment_events and not postback_events and not message_events:
+             event.processing_status = "skipped"
+             db.commit()
+-            log_action(db, "webhook_skipped", details={"reason": "no_comment_or_postback_events", "event_id": webhook_event_id})
++            log_action(db, "webhook_skipped", details={"reason": "no_comment_postback_or_message_events", "event_id": webhook_event_id})
+             return
+ 
+         for parsed in comment_events:
+@@ -379,6 +387,100 @@ def process_webhook_event(webhook_event_id: str):
+             )
+             check_follow_and_deliver.delay(follow_prompt_message_id, pb.sender_ig_id)
+ 
++        for msg_evt in message_events:
++            # Dedup on mid if present, else fall back to timestamp+sender so
++            # Meta re-deliveries of the same DM don't trigger duplicate AI turns.
++            dedup_suffix = msg_evt.mid or str(msg_evt.timestamp or "")
++            msg_event_key = (
++                f"ig_message:{msg_evt.sender_ig_id}:{dedup_suffix}"
++                if dedup_suffix
++                else f"ig_message:{msg_evt.sender_ig_id}:{msg_evt.text[:50]}"
++            )
++            is_new_msg = check_and_mark_processed(
++                db,
++                event_key=msg_event_key,
++                event_type="ig_message",
++                metadata={"sender_ig_id": msg_evt.sender_ig_id, "text": msg_evt.text[:200]},
++            )
++            if not is_new_msg:
++                logger.debug("Duplicate inbound message event skipped", extra={"event_key": msg_event_key})
++                continue
++
++            account = (
++                db.query(InstagramAccount)
++                .filter(InstagramAccount.ig_user_id == msg_evt.instagram_account_ig_user_id)
++                .first()
++            )
++            if not account:
++                logger.warning(
++                    "Instagram account not found for inbound message",
++                    extra={"ig_user_id": msg_evt.instagram_account_ig_user_id},
++                )
++                continue
++
++            if not account.ai_enabled:
++                # AI layer is opt-in at the account level. Without it, an
++                # inbound DM reply is simply not actioned automatically —
++                # this is intentional, not a bug: no campaign context exists
++                # to reply from without a human or the AI layer involved.
++                continue
++
++            lead = (
++                db.query(Lead)
++                .filter(
++                    Lead.workspace_id == account.workspace_id,
++                    Lead.instagram_account_id == account.id,
++                    Lead.ig_user_id == msg_evt.sender_ig_id,
++                )
++                .first()
++            )
++            if not lead or not lead.source_campaign_id:
++                # No known lead / originating campaign for this sender —
++                # nothing to continue. Do not guess which campaign applies.
++                logger.info(
++                    "Inbound message from unknown lead, skipping AI reply",
++                    extra={"sender_ig_id": msg_evt.sender_ig_id, "instagram_account_id": str(account.id)},
++                )
++                continue
++
++            campaign = db.query(Campaign).filter(Campaign.id == lead.source_campaign_id).first()
++            if not campaign or not campaign.ai_enabled:
++                continue
++
++            conversation = conversation_service.get_or_create_conversation(
++                db,
++                workspace_id=account.workspace_id,
++                lead_id=lead.id,
++                campaign_id=campaign.id,
++                instagram_account_id=account.id,
++            )
++
++            # Store the inbound message regardless of conversation status,
++            # so a human taking over still sees the full thread.
++            inbound_message = Message(
++                campaign_id=campaign.id,
++                lead_id=lead.id,
++                conversation_id=conversation.id,
++                direction="inbound",
++                content=msg_evt.text,
++                rendered_body=msg_evt.text,
++                message_type="ai_conversation",
++                status="received",
++            )
++            db.add(inbound_message)
++            conversation_service.touch_conversation(db, conversation)
++            db.commit()
++            db.refresh(inbound_message)
++
++            if conversation.status != "bot_active":
++                logger.debug(
++                    "Conversation not bot_active, skipping AI reply",
++                    extra={"conversation_id": str(conversation.id), "status": conversation.status},
++                )
++                continue
++
++            process_ai_conversation_turn.delay(str(conversation.id), str(inbound_message.id))
++
+         event.processing_status = "processed"
+         db.commit()
+         log_action(db, "webhook_processed", details={"event_id": webhook_event_id})
+@@ -968,5 +1070,163 @@ def check_follow_and_deliver(message_id: str, sender_ig_id: str | None = None):
+             )
+     except Exception:
+         logger.exception("check_follow_and_deliver failed", extra={"message_id": message_id})
++    finally:
++        db.close()
++
++
++@celery_app.task
++def process_ai_conversation_turn(conversation_id: str, inbound_message_id: str):
++    """Take one AI conversation turn: check handoff/budget conditions,
++    generate a reply, send it, and log the result.
++
++    Fails closed: any error here (API failure, timeout, missing token)
++    stops this turn without retrying and without sending anything. It does
++    NOT hand the conversation off automatically — a transient failure
++    should not permanently kill the bot for that lead — but it also never
++    silently retries in a way that could spam the user or the AI API.
++    """
++    # Celery serializes task args to JSON, so these normally arrive as str.
++    # Normalize anyway: `details` is written to a JSONB column and a raw UUID
++    # object is not JSON-serializable, which would raise *after* the reply was
++    # already sent to the user.
++    conversation_id = str(conversation_id)
++    inbound_message_id = str(inbound_message_id)
++
++    db = _get_db()
++    try:
++        conversation = db.query(Conversation).filter(Conversation.id == conversation_id).first()
++        if not conversation:
++            logger.warning("Conversation not found for AI turn", extra={"conversation_id": conversation_id})
++            return
++
++        if conversation.status != "bot_active":
++            logger.debug(
++                "Conversation no longer bot_active, aborting AI turn",
++                extra={"conversation_id": conversation_id, "status": conversation.status},
++            )
++            return
++
++        campaign = db.query(Campaign).filter(Campaign.id == conversation.campaign_id).first()
++        if not campaign or not campaign.ai_enabled or campaign.status != "active":
++            conversation_service.hand_off(db, conversation, "campaign_inactive")
++            return
++
++        account = (
++            db.query(InstagramAccount).filter(InstagramAccount.id == conversation.instagram_account_id).first()
++        )
++        if not account or not account.ai_enabled:
++            conversation_service.hand_off(db, conversation, "ai_disabled")
++            return
++
++        # --- Handoff conditions, checked before any model call ---
++        if conversation.turn_count >= campaign.ai_handoff_after_turns:
++            conversation_service.hand_off(db, conversation, "turn_limit")
++            log_action(
++                db,
++                "ai_conversation_handed_off",
++                campaign_id=campaign.id,
++                lead_id=conversation.lead_id,
++                instagram_account_id=account.id,
++                details={"conversation_id": conversation_id, "reason": "turn_limit"},
++            )
++            return
++
++        if conversation_service.is_budget_exhausted(db, account):
++            conversation_service.hand_off(db, conversation, "daily_cap_reached")
++            log_action(
++                db,
++                "ai_conversation_handed_off",
++                campaign_id=campaign.id,
++                lead_id=conversation.lead_id,
++                instagram_account_id=account.id,
++                details={"conversation_id": conversation_id, "reason": "daily_cap_reached"},
++            )
++            return
++
++        access_token = get_decrypted_token(db, account.id)
++        if not access_token:
++            # Don't hand off — this is an infra problem, not a conversation
++            # problem. Leave bot_active so the next inbound message retries.
++            logger.warning("No access token for AI reply", extra={"instagram_account_id": str(account.id)})
++            return
++
++        lead = db.query(Lead).filter(Lead.id == conversation.lead_id).first()
++        if not lead:
++            logger.warning("Lead not found for AI turn", extra={"conversation_id": conversation_id})
++            return
++
++        result = ai_service.generate_reply(db, account, campaign, conversation.id)
++        if not result.success:
++            logger.warning(
++                "AI reply generation failed, no message sent",
++                extra={"conversation_id": conversation_id, "error": result.error},
++            )
++            log_action(
++                db,
++                "ai_reply_failed",
++                campaign_id=campaign.id,
++                lead_id=lead.id,
++                instagram_account_id=account.id,
++                details={"conversation_id": conversation_id, "error": result.error},
++            )
++            return
++
++        client = MetaMessagingClient()
++        try:
++            send_result = client.send_direct_message(
++                access_token=access_token,
++                ig_user_id=account.ig_user_id,
++                recipient_id=lead.ig_user_id,
++                text=result.text,
++            )
++        finally:
++            client.close()
++
++        outbound_message = Message(
++            campaign_id=campaign.id,
++            lead_id=lead.id,
++            conversation_id=conversation.id,
++            direction="outbound",
++            content=result.text,
++            rendered_body=result.text,
++            message_type="ai_conversation",
++            status="sent" if send_result.success else "failed",
++            provider_message_id=send_result.provider_message_id,
++            error_code=send_result.error_code,
++            error_message=send_result.error_message,
++        )
++        db.add(outbound_message)
++        db.commit()
++
++        if send_result.success:
++            conversation_service.increment_turn(db, conversation)
++            conversation_service.touch_conversation(db, conversation)
++            conversation_service.record_ai_send(db, account)
++            log_action(
++                db,
++                "ai_reply_sent",
++                campaign_id=campaign.id,
++                lead_id=lead.id,
++                instagram_account_id=account.id,
++                details={"conversation_id": conversation_id, "turn_count": conversation.turn_count},
++            )
++        else:
++            # Fail closed: do not retry automatically. Leave conversation
++            # bot_active so the next inbound message from the user gives
++            # the bot another chance, rather than looping on the same send.
++            logger.warning(
++                "AI reply send failed",
++                extra={"conversation_id": conversation_id, "error": send_result.error_message},
++            )
++            log_action(
++                db,
++                "ai_reply_send_failed",
++                campaign_id=campaign.id,
++                lead_id=lead.id,
++                instagram_account_id=account.id,
++                details={"conversation_id": conversation_id, "error": send_result.error_message},
++            )
++    except Exception:
++        logger.exception("process_ai_conversation_turn failed", extra={"conversation_id": conversation_id})
+     finally:
+         db.close()
+\ No newline at end of file
+diff --git a/backend/requirements.txt b/backend/requirements.txt
+index 99259b4..910a2d4 100644
+--- a/backend/requirements.txt
++++ b/backend/requirements.txt
+@@ -15,3 +15,4 @@ email-validator
+ cryptography
+ celery
+ sentry-sdk[fastapi]
++openai>=1.40,<4
+diff --git a/dashboard/app/(dashboard)/accounts/page.tsx b/dashboard/app/(dashboard)/accounts/page.tsx
+index c85c7ea..87baaed 100644
+--- a/dashboard/app/(dashboard)/accounts/page.tsx
++++ b/dashboard/app/(dashboard)/accounts/page.tsx
+@@ -1,13 +1,14 @@
+ "use client";
+ 
+ import { useEffect, useState } from "react";
+-import { Link2, Trash2 } from "lucide-react";
++import { Bot, Link2, Trash2 } from "lucide-react";
+ import { MockConnect } from "@/components/accounts/MockConnect";
+ import { Avatar } from "@/components/ui/Avatar";
+ import { Badge } from "@/components/ui/Badge";
+ import { Button } from "@/components/ui/Button";
+ import { DataState } from "@/components/ui/DataState";
+ import { EmptyState } from "@/components/ui/EmptyState";
++import { Field, Select, TextArea } from "@/components/ui/Field";
+ import { PageHeader } from "@/components/ui/PageHeader";
+ import { Panel } from "@/components/ui/Panel";
+ import { LiveStatusDot } from "@/components/ui/LiveStatusDot";
+@@ -16,7 +17,114 @@ import { TableWrap, tableClass, tdClass, thClass, theadRowClass, trClass } from
+ import { api } from "@/lib/api";
+ import { useCan } from "@/lib/permissions";
+ import { useToast } from "@/components/ToastProvider";
+-import type { InstagramAccount } from "@/lib/types";
++import type { AISettingsPayload, InstagramAccount } from "@/lib/types";
++
++function AISettingsPanel({
++  account,
++  canManage,
++  onSaved,
++}: {
++  account: InstagramAccount;
++  canManage: boolean;
++  onSaved: (updated: InstagramAccount) => void;
++}) {
++  const [form, setForm] = useState<AISettingsPayload>({
++    business_vertical: (account.business_vertical as AISettingsPayload["business_vertical"]) || "general",
++    ai_enabled: account.ai_enabled || false,
++    ai_business_profile: account.ai_business_profile || "",
++    ai_tone_instructions: account.ai_tone_instructions || "",
++    ai_daily_message_cap: account.ai_daily_message_cap ?? 100,
++  });
++  const [saving, setSaving] = useState(false);
++  const toast = useToast();
++
++  async function save() {
++    setSaving(true);
++    try {
++      const updated = await api.patch<InstagramAccount>(`/instagram/accounts/${account.id}/ai-settings`, form);
++      toast.success("AI settings saved.");
++      onSaved(updated);
++    } catch (err) {
++      toast.error(err instanceof Error ? err.message : "Failed to save AI settings");
++    } finally {
++      setSaving(false);
++    }
++  }
++
++  return (
++    <div className="grid gap-4 rounded-lg border border-line/70 bg-slate-50/60 p-4">
++      <div className="flex items-center justify-between">
++        <div>
++          <h4 className="text-sm font-bold text-ink">AI conversation assistant</h4>
++          <p className="text-xs text-muted">
++            Shared across all campaigns on this account. Used only once a lead replies inside a DM thread.
++          </p>
++        </div>
++        <label className="inline-flex items-center gap-2 text-sm font-semibold text-ink">
++          <input
++            type="checkbox"
++            checked={form.ai_enabled}
++            disabled={!canManage}
++            onChange={(e) => setForm((f) => ({ ...f, ai_enabled: e.target.checked }))}
++            className="h-4 w-4 rounded border-line accent-accent"
++          />
++          Enabled
++        </label>
++      </div>
++
++      <div className="grid gap-4 sm:grid-cols-2">
++        <Select
++          label="Business vertical"
++          hint="Applies non-overridable safety rules (e.g. clinics never give medical advice)."
++          value={form.business_vertical}
++          disabled={!canManage}
++          onChange={(e) => setForm((f) => ({ ...f, business_vertical: e.target.value as AISettingsPayload["business_vertical"] }))}
++        >
++          <option value="general">General</option>
++          <option value="restaurant">Restaurant</option>
++          <option value="real_estate">Real estate</option>
++          <option value="clinical">Clinical</option>
++        </Select>
++        <Field
++          label="Daily message cap"
++          type="number"
++          min={0}
++          max={5000}
++          hint={`Shared budget across all campaigns on this account. Sent today: ${account.ai_messages_sent_today ?? 0}.`}
++          value={form.ai_daily_message_cap}
++          disabled={!canManage}
++          onChange={(e) => setForm((f) => ({ ...f, ai_daily_message_cap: Number(e.target.value) }))}
++        />
++      </div>
++
++      <TextArea
++        label="Business profile"
++        hint="Facts the AI should know: what the business offers, hours, delivery area, contact for humans. Be specific — a sparse profile leads to vague or unsafe answers."
++        rows={5}
++        value={form.ai_business_profile || ""}
++        disabled={!canManage}
++        onChange={(e) => setForm((f) => ({ ...f, ai_business_profile: e.target.value }))}
++      />
++
++      <TextArea
++        label="Tone / style (optional)"
++        hint="e.g. 'Friendly and casual, use emojis sparingly.'"
++        rows={2}
++        value={form.ai_tone_instructions || ""}
++        disabled={!canManage}
++        onChange={(e) => setForm((f) => ({ ...f, ai_tone_instructions: e.target.value }))}
++      />
++
++      {canManage ? (
++        <div className="flex justify-end">
++          <Button type="button" disabled={saving} onClick={save}>
++            {saving ? "Saving..." : "Save AI settings"}
++          </Button>
++        </div>
++      ) : null}
++    </div>
++  );
++}
+ 
+ function expiryStatus(account: InstagramAccount) {
+   if (account.status === "disconnected") return "Disconnected";
+@@ -36,6 +144,7 @@ export default function AccountsPage() {
+   const [reconnectingId, setReconnectingId] = useState<string | null>(null);
+   const [deletingId, setDeletingId] = useState<string | null>(null);
+   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
++  const [expandedId, setExpandedId] = useState<string | null>(null);
+ 
+   const canManageAccounts = useCan("manage_accounts");
+   const canDisconnectAccounts = useCan("disconnect_accounts");
+@@ -222,6 +331,7 @@ export default function AccountsPage() {
+                   const isDeleting = deletingId === account.id;
+ 
+                   return (
++                    <>
+                     <tr key={account.id} className={trClass}>
+                       <td className={`${tdClass} font-semibold text-ink`}>
+                         <span className="inline-flex items-center gap-2">
+@@ -248,7 +358,16 @@ export default function AccountsPage() {
+                             ).toLocaleString()
+                           : "Not available"}
+                       </td>
+-                      <td className={`${tdClass} flex gap-2`}>
++                      <td className={`${tdClass} flex flex-wrap gap-2`}>
++                        <Button
++                          type="button"
++                          variant="secondary"
++                          className="gap-2"
++                          onClick={() => setExpandedId(expandedId === account.id ? null : account.id)}
++                        >
++                          <Bot className="h-4 w-4" aria-hidden="true" />
++                          {account.ai_enabled ? "AI Settings" : "Enable AI"}
++                        </Button>
+                         {canManageAccounts ? (
+                           <Button
+                             type="button"
+@@ -286,6 +405,20 @@ export default function AccountsPage() {
+                         ) : null}
+                       </td>
+                     </tr>
++                    {expandedId === account.id ? (
++                      <tr>
++                        <td colSpan={6} className="bg-white px-5 pb-4">
++                          <AISettingsPanel
++                            account={account}
++                            canManage={canManageAccounts}
++                            onSaved={(updated) => {
++                              setAccounts((prev) => prev.map((a) => (a.id === updated.id ? updated : a)));
++                            }}
++                          />
++                        </td>
++                      </tr>
++                    ) : null}
++                    </>
+                   );
+                 })}
+               </tbody>
+diff --git a/dashboard/app/(dashboard)/conversations/page.tsx b/dashboard/app/(dashboard)/conversations/page.tsx
+new file mode 100644
+index 0000000..c3d1ecb
+--- /dev/null
++++ b/dashboard/app/(dashboard)/conversations/page.tsx
+@@ -0,0 +1,217 @@
++"use client";
++
++import { useEffect, useState } from "react";
++import { Bot, UserCheck } from "lucide-react";
++import { Badge } from "@/components/ui/Badge";
++import { Button } from "@/components/ui/Button";
++import { DataState } from "@/components/ui/DataState";
++import { EmptyState } from "@/components/ui/EmptyState";
++import { PageHeader } from "@/components/ui/PageHeader";
++import { Panel } from "@/components/ui/Panel";
++import { TableSkeleton } from "@/components/ui/Skeleton";
++import { TableWrap, tableClass, tdClass, thClass, theadRowClass, trClass } from "@/components/ui/Table";
++import { api } from "@/lib/api";
++import { useCan } from "@/lib/permissions";
++import { useToast } from "@/components/ToastProvider";
++import type { Conversation, ConversationDetail } from "@/lib/types";
++
++const STATUS_FILTERS = ["all", "bot_active", "handed_off", "closed"] as const;
++
++export default function ConversationsPage() {
++  const [conversations, setConversations] = useState<Conversation[]>([]);
++  const [selected, setSelected] = useState<ConversationDetail | null>(null);
++  const [loading, setLoading] = useState(true);
++  const [detailLoading, setDetailLoading] = useState(false);
++  const [actionPending, setActionPending] = useState(false);
++  const [error, setError] = useState<string | null>(null);
++  const [statusFilter, setStatusFilter] = useState<(typeof STATUS_FILTERS)[number]>("all");
++  const canManage = useCan("manage_accounts");
++  const toast = useToast();
++
++  async function load() {
++    setLoading(true);
++    try {
++      const data = await api.get<Conversation[]>("/conversations");
++      setConversations(data);
++    } catch (err) {
++      setError(err instanceof Error ? err.message : "Failed to load conversations");
++    } finally {
++      setLoading(false);
++    }
++  }
++
++  useEffect(() => {
++    load();
++  }, []);
++
++  async function openThread(id: string) {
++    setDetailLoading(true);
++    try {
++      const detail = await api.get<ConversationDetail>(`/conversations/${id}`);
++      setSelected(detail);
++    } catch (err) {
++      toast.error(err instanceof Error ? err.message : "Failed to load conversation");
++    } finally {
++      setDetailLoading(false);
++    }
++  }
++
++  async function takeOver(id: string) {
++    setActionPending(true);
++    try {
++      await api.post(`/conversations/${id}/take-over`);
++      toast.success("Bot paused. You've taken over this conversation.");
++      await Promise.all([load(), openThread(id)]);
++    } catch (err) {
++      toast.error(err instanceof Error ? err.message : "Failed to take over conversation");
++    } finally {
++      setActionPending(false);
++    }
++  }
++
++  async function resumeBot(id: string) {
++    setActionPending(true);
++    try {
++      await api.post(`/conversations/${id}/resume-bot`);
++      toast.success("Bot resumed for this conversation.");
++      await Promise.all([load(), openThread(id)]);
++    } catch (err) {
++      toast.error(err instanceof Error ? err.message : "Failed to resume bot");
++    } finally {
++      setActionPending(false);
++    }
++  }
++
++  const filtered = statusFilter === "all" ? conversations : conversations.filter((c) => c.status === statusFilter);
++
++  return (
++    <div className="grid gap-6">
++      <PageHeader title="Conversations" description="Monitor and, when needed, take over AI-assisted DM conversations." />
++
++      <div className="grid gap-6 lg:grid-cols-[1.4fr_1fr]">
++        <Panel>
++          <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
++            <div>
++              <h2 className="text-lg font-bold text-ink">Active threads</h2>
++              <p className="mt-1 text-sm text-muted">Leads currently in an AI-continued DM conversation.</p>
++            </div>
++            <div className="flex gap-1.5">
++              {STATUS_FILTERS.map((status) => (
++                <button
++                  key={status}
++                  type="button"
++                  onClick={() => setStatusFilter(status)}
++                  className={`rounded-full border px-3 py-1 text-xs font-semibold transition ${statusFilter === status ? "border-accent bg-accent text-white" : "border-line bg-white text-slate-600 hover:border-slate-300"}`}
++                >
++                  {status === "all" ? "All" : status.replaceAll("_", " ")}
++                </button>
++              ))}
++            </div>
++          </div>
++
++          <DataState loading={loading} error={error} />
++          {loading ? <TableSkeleton rows={5} columns={5} /> : null}
++          {!loading && !error && filtered.length === 0 ? (
++            <EmptyState title="No conversations yet" message="Conversations appear once a lead replies after an AI-enabled campaign message." />
++          ) : null}
++          {filtered.length > 0 ? (
++            <TableWrap>
++              <table className={`${tableClass} min-w-[720px] border-separate border-spacing-y-2`}>
++                <thead>
++                  <tr className={theadRowClass}>
++                    <th className={thClass}>Status</th>
++                    <th className={thClass}>Lead</th>
++                    <th className={thClass}>Campaign</th>
++                    <th className={thClass}>Turns</th>
++                    <th className={thClass}>Last activity</th>
++                  </tr>
++                </thead>
++                <tbody>
++                  {filtered.map((conversation) => (
++                    <tr
++                      key={conversation.id}
++                      onClick={() => openThread(conversation.id)}
++                      className={`${trClass} cursor-pointer rounded-xl bg-white shadow-sm shadow-slate-200/50 hover:bg-slate-50 hover:shadow-md ${selected?.id === conversation.id ? "ring-2 ring-accent/40" : ""}`}
++                    >
++                      <td className={`${tdClass} rounded-l-xl border-y border-l border-line/80`}>
++                        <Badge value={conversation.status} />
++                      </td>
++                      <td className={`${tdClass} border-y border-line/80 font-semibold text-ink`}>
++                        {conversation.lead_username || conversation.lead_id}
++                      </td>
++                      <td className={`${tdClass} border-y border-line/80`}>{conversation.campaign_name || conversation.campaign_id}</td>
++                      <td className={`${tdClass} border-y border-line/80`}>{conversation.turn_count}</td>
++                      <td className={`${tdClass} rounded-r-xl border-y border-r border-line/80 text-sm text-muted`}>
++                        {conversation.last_message_at ? new Date(conversation.last_message_at).toLocaleString() : "—"}
++                      </td>
++                    </tr>
++                  ))}
++                </tbody>
++              </table>
++            </TableWrap>
++          ) : null}
++        </Panel>
++
++        <Panel className="h-fit">
++          <div className="mb-4">
++            <h2 className="text-lg font-bold text-ink">Thread</h2>
++            <p className="mt-1 text-sm text-muted">Select a conversation to view the full back-and-forth.</p>
++          </div>
++
++          {detailLoading ? <TableSkeleton rows={4} columns={1} /> : null}
++
++          {!detailLoading && !selected ? (
++            <EmptyState title="No conversation selected" message="Click a row on the left to open its thread." />
++          ) : null}
++
++          {!detailLoading && selected ? (
++            <div className="grid gap-4">
++              <div className="flex flex-wrap items-center justify-between gap-2 border-b border-line/70 pb-3">
++                <div>
++                  <div className="text-sm font-bold text-ink">{selected.lead_username || selected.lead_id}</div>
++                  <div className="text-xs text-muted">{selected.campaign_name}</div>
++                </div>
++                <Badge value={selected.status} />
++              </div>
++
++              <div className="grid max-h-[420px] gap-2 overflow-y-auto pr-1">
++                {selected.messages.length === 0 ? (
++                  <p className="text-sm text-muted">No messages yet.</p>
++                ) : (
++                  selected.messages.map((message) => (
++                    <div
++                      key={message.id}
++                      className={`max-w-[85%] rounded-xl px-3 py-2 text-sm ${message.direction === "inbound" ? "self-start bg-slate-100 text-ink" : "self-end ml-auto bg-accent/10 text-ink"}`}
++                    >
++                      <p className="whitespace-pre-wrap">{message.content}</p>
++                      <div className="mt-1 flex items-center gap-2 text-[11px] text-muted">
++                        {message.created_at ? new Date(message.created_at).toLocaleTimeString() : ""}
++                        {message.status === "failed" ? <span className="font-semibold text-danger">Failed to send</span> : null}
++                      </div>
++                    </div>
++                  ))
++                )}
++              </div>
++
++              {canManage ? (
++                <div className="flex gap-2 border-t border-line/70 pt-3">
++                  {selected.status === "bot_active" ? (
++                    <Button type="button" variant="secondary" disabled={actionPending} className="gap-2" onClick={() => takeOver(selected.id)}>
++                      <UserCheck className="h-3.5 w-3.5" aria-hidden="true" />
++                      Take over
++                    </Button>
++                  ) : (
++                    <Button type="button" variant="secondary" disabled={actionPending} className="gap-2" onClick={() => resumeBot(selected.id)}>
++                      <Bot className="h-3.5 w-3.5" aria-hidden="true" />
++                      Resume bot
++                    </Button>
++                  )}
++                </div>
++              ) : null}
++            </div>
++          ) : null}
++        </Panel>
++      </div>
++    </div>
++  );
++}
+diff --git a/dashboard/components/campaigns/CampaignForm.tsx b/dashboard/components/campaigns/CampaignForm.tsx
+index 33dc0dd..2a14aac 100644
+--- a/dashboard/components/campaigns/CampaignForm.tsx
++++ b/dashboard/components/campaigns/CampaignForm.tsx
+@@ -38,6 +38,8 @@ type FormState = {
+   follow_prompt_profile_url: string;
+   comment_reply_enabled: boolean;
+   comment_reply_text: string;
++  ai_enabled: boolean;
++  ai_handoff_after_turns: number;
+ };
+ 
+ function extractInstagramShortcode(value: string): string {
+@@ -74,6 +76,8 @@ function fromCampaign(campaign?: Campaign): FormState {
+     follow_prompt_profile_url: campaign?.follow_prompt_profile_url || "",
+     comment_reply_enabled: campaign?.comment_reply_enabled ?? false,
+     comment_reply_text: campaign?.comment_reply_text || "Check your DMs \u{1F4E9}",
++    ai_enabled: campaign?.ai_enabled ?? false,
++    ai_handoff_after_turns: campaign?.ai_handoff_after_turns ?? 8,
+   };
+ }
+ 
+@@ -126,6 +130,8 @@ export function CampaignForm({ campaign }: { campaign?: Campaign }) {
+       follow_prompt_profile_url: form.delivery_mode === "follow_prompt" ? form.follow_prompt_profile_url : null,
+       comment_reply_enabled: form.comment_reply_enabled,
+       comment_reply_text: form.comment_reply_enabled ? form.comment_reply_text || null : null,
++      ai_enabled: form.ai_enabled,
++      ai_handoff_after_turns: Number(form.ai_handoff_after_turns) || 8,
+     };
+   }, [form, savedCampaign?.status]);
+ 
+@@ -431,6 +437,39 @@ export function CampaignForm({ campaign }: { campaign?: Campaign }) {
+         ) : null}
+       </Panel>
+ 
++      <Panel>
++        <h2 className="mb-4 text-lg font-bold text-ink">AI conversation continuation</h2>
++        <label className="flex gap-3 rounded-lg border border-line bg-white p-3">
++          <input
++            type="checkbox"
++            checked={form.ai_enabled}
++            onChange={(e) => setForm({ ...form, ai_enabled: e.target.checked })}
++            className="mt-1 h-4 w-4 rounded border-slate-300 text-accent focus:ring-accent/30"
++          />
++          <span className="grid gap-1">
++            <span className="text-sm font-bold text-ink">Let AI continue this campaign&apos;s conversations</span>
++            <span className="text-sm font-medium text-muted">
++              If a lead replies inside the DM after receiving this campaign&apos;s message, the AI assistant
++              takes over and keeps the conversation going using the business profile configured on the
++              connected account. Requires AI to also be enabled on the account in the Accounts tab.
++            </span>
++          </span>
++        </label>
++        {form.ai_enabled ? (
++          <div className="mt-4">
++            <Field
++              label="Hand off to a human after"
++              type="number"
++              min={1}
++              max={50}
++              hint="Number of AI turns before the conversation is automatically handed off and shows up for manual reply."
++              value={form.ai_handoff_after_turns}
++              onChange={(e) => setForm({ ...form, ai_handoff_after_turns: Number(e.target.value) })}
++            />
++          </div>
++        ) : null}
++      </Panel>
++
+       <Panel>
+         <h2 className="mb-4 text-lg font-bold text-ink">Step 6: Publishing controls</h2>
+         <div className="grid gap-4 md:grid-cols-2">
+diff --git a/dashboard/components/layout/Sidebar.tsx b/dashboard/components/layout/Sidebar.tsx
+index 2fd0134..c623082 100644
+--- a/dashboard/components/layout/Sidebar.tsx
++++ b/dashboard/components/layout/Sidebar.tsx
+@@ -3,7 +3,7 @@
+ import Image from "next/image";
+ import Link from "next/link";
+ import { usePathname, useRouter } from "next/navigation";
+-import { Activity, LayoutDashboard, Link as LinkIcon, Megaphone, MessageSquare, UserPlus } from "lucide-react";
++import { Activity, Bot, LayoutDashboard, Link as LinkIcon, Megaphone, MessageSquare, UserPlus } from "lucide-react";
+ import { clearAccessToken } from "@/lib/auth";
+ import { Button } from "@/components/ui/Button";
+ 
+@@ -12,6 +12,7 @@ const nav = [
+   { href: "/accounts", label: "Accounts", icon: LinkIcon },
+   { href: "/campaigns", label: "Campaigns", icon: Megaphone },
+   { href: "/leads", label: "Leads", icon: UserPlus },
++  { href: "/conversations", label: "Conversations", icon: Bot },
+   { href: "/logs", label: "Logs", icon: Activity },
+   { href: "/messages", label: "Messages", icon: MessageSquare },
+ ];
+diff --git a/dashboard/components/ui/Badge.tsx b/dashboard/components/ui/Badge.tsx
+index 3a969da..0eb54e0 100644
+--- a/dashboard/components/ui/Badge.tsx
++++ b/dashboard/components/ui/Badge.tsx
+@@ -23,6 +23,11 @@ const labelMap: Record<string, string> = {
+   starts_with: "Starts With",
+   final_delivery: "Final Delivery",
+   follow_prompt_message: "Follow Prompt",
++  bot_active: "Bot Active",
++  handed_off: "Handed Off",
++  closed: "Closed",
++  ai_conversation: "AI Reply",
++  received: "Received",
+ };
+ 
+ const toneMap: Record<string, string> = {
+@@ -43,6 +48,9 @@ const toneMap: Record<string, string> = {
+   skipped: "border-amber-200 bg-amber-50 text-amber-700",
+   draft: "border-slate-200 bg-slate-50 text-slate-600",
+   archived: "border-slate-200 bg-slate-50 text-slate-600",
++  bot_active: "border-emerald-200 bg-mint text-emerald-700",
++  handed_off: "border-amber-200 bg-amber-50 text-amber-700",
++  closed: "border-slate-200 bg-slate-50 text-slate-600",
+   info: "border-blue-200 bg-blue-50 text-blue-700",
+   warning: "border-amber-200 bg-amber-50 text-amber-700",
+   error: "border-red-200 bg-red-50 text-danger",
+diff --git a/dashboard/lib/types.ts b/dashboard/lib/types.ts
+index 526eb0e..58bd800 100644
+--- a/dashboard/lib/types.ts
++++ b/dashboard/lib/types.ts
+@@ -42,6 +42,8 @@ export type Campaign = {
+   total_triggers: number;
+   successful_sends: number;
+   failed_sends: number;
++  ai_enabled?: boolean;
++  ai_handoff_after_turns?: number;
+   created_at: string;
+   updated_at: string;
+   keywords: CampaignKeyword[];
+@@ -71,6 +73,8 @@ export type CampaignPayload = {
+   follow_prompt_profile_url?: string | null;
+   comment_reply_enabled?: boolean;
+   comment_reply_text?: string | null;
++  ai_enabled?: boolean;
++  ai_handoff_after_turns?: number;
+ };
+ 
+ export type InstagramAccount = {
+@@ -80,10 +84,52 @@ export type InstagramAccount = {
+   account_type?: string | null;
+   status?: string | null;
+   expires_at?: string | null;
++  business_vertical?: "general" | "restaurant" | "real_estate" | "clinical" | string;
++  ai_enabled?: boolean;
++  ai_business_profile?: string | null;
++  ai_tone_instructions?: string | null;
++  ai_daily_message_cap?: number;
++  ai_messages_sent_today?: number;
+   created_at?: string | null;
+   updated_at?: string | null;
+ };
+ 
++export type AISettingsPayload = {
++  business_vertical?: "general" | "restaurant" | "real_estate" | "clinical";
++  ai_enabled?: boolean;
++  ai_business_profile?: string | null;
++  ai_tone_instructions?: string | null;
++  ai_daily_message_cap?: number;
++};
++
++export type Conversation = {
++  id: Id;
++  lead_id: Id;
++  lead_username?: string | null;
++  campaign_id: Id;
++  campaign_name?: string | null;
++  instagram_account_id: Id;
++  status: "bot_active" | "handed_off" | "closed" | string;
++  handoff_reason?: string | null;
++  turn_count: number;
++  last_message_at?: string | null;
++  last_message_preview?: string | null;
++  created_at?: string | null;
++};
++
++export type ConversationMessage = {
++  id: Id;
++  direction: "inbound" | "outbound" | null;
++  content?: string | null;
++  status: string;
++  error_message?: string | null;
++  created_at?: string | null;
++};
++
++export type ConversationDetail = Conversation & {
++  messages: ConversationMessage[];
++};
++
+ export type OverviewStats = {
+   active_campaigns: number;
+   triggers_today: number;
+@@ -135,7 +181,9 @@ export type Message = {
+   source_media_label?: string | null;
+   status: string;
+   rendered_body?: string | null;
+-  message_type?: "follow_prompt" | "final_delivery" | string | null;
++  message_type?: "follow_prompt" | "final_delivery" | "ai_conversation" | string | null;
++  direction?: "inbound" | "outbound" | null;
++  conversation_id?: Id | null;
+   provider_message_id?: string | null;
+   error_code?: string | null;
+   error_message?: string | null;

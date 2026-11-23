@@ -1,0 +1,12 @@
+ImportError while loading conftest '/var/tmp/many-closeout-t-20261028-02/source/backend/tests/conftest.py'.
+tests/conftest.py:7: in <module>
+    from app.core.config import settings
+app/core/config.py:137: in <module>
+    settings = Settings()
+               ^^^^^^^^^^
+/var/tmp/many-t0-20261028/venv/lib/python3.11/site-packages/pydantic_settings/main.py:292: in __init__
+    super().__init__(**__pydantic_self__.__class__._settings_build_values(sources, init_kwargs))
+E   pydantic_core._pydantic_core.ValidationError: 1 validation error for Settings
+E   META_WEBHOOK_VERIFY_TOKEN
+E     Field required [type=missing, input_value=[synthetic settings redacted], input_type=dict]
+E       For further information visit https://errors.pydantic.dev/2.14/v/missing
