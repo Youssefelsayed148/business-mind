@@ -12,19 +12,30 @@
   - [x] gitleaks 8.30.1 scan of the branch history: 34 findings, all fake test fixtures (see IMPORT-NOTES).
 
 ## In progress
-- Phase 1 task 6 (test runs in new repo vs originals): **BLOCKED, not run.** Application Control blocks compiled
-  extensions (e.g. SQLAlchemy `_immutabledict_cy`) in the venv created under the scratch folder in `%TEMP%`.
-  No test result exists yet for either suite. SaaS DB-backed API tests will be NOT RUN regardless (no pgvector:
-  no C compiler, not admin, PG17 extension dir not writable). Many on this machine: PG 17 (not 15), no Redis.
-- Draft PR: not opened yet (waiting for the test decision).
+- **Phase 1 is incomplete.** Import, history proofs, docs, compose and secret scan are done; the test suites were NOT RUN.
+- Draft PR open on `phase-1/foundation` (title starts "DRAFT: Phase 1 incomplete (test suites NOT RUN)").
+- Phase 1b: verification (separate session, Linux environment, on the pushed branch). No more test runs on the Windows laptop.
+
+### NOT RUN on the Windows laptop (no result exists for any of these; nothing was substituted)
+| Item | Reason |
+|---|---|
+| Many backend pytest (original and new repo) | Application Control blocks compiled extensions (e.g. SQLAlchemy `_immutabledict_cy`) in a venv under `%TEMP%`; both runs exited 4 at import, 0 tests collected. Decision: no relocation of venvs to get around the policy. |
+| Many tests that need Redis | No Redis on the machine (also Many targets Postgres 15; only 17.11 is installed here). |
+| Many scripts unittest / dashboard tsc / dashboard lint | Not attempted (same Application Control / Node-modules constraint). |
+| SaaS API pytest (all DB-backed tests) | Needs pgvector (migrations `CREATE EXTENSION vector`). Not installable here: no C compiler, not admin, PG17 extension dir not writable. |
+| SaaS web lint and typecheck | Not attempted (node_modules install blocked by the same decision). Node on this machine is v26.13.0 vs the SaaS pin `>=24 <25`. |
+| SaaS web Playwright e2e | Out of scope for Phase 1. |
+| `docker-compose.merge-dev.yml` start-up | Docker daemon not running; only `docker compose config` (exit 0) was run. |
+
+Reference baseline (not a result of this phase): Many's own record `docs/saas-delegation/many-full-test-evidence/README.md`
+reports backend 1007 passed / 0 failed / 0 skipped on Postgres 15 + Redis (2026-10-29). Phase 1b must reproduce and compare, not assume.
 
 ## Next
-- Decide how to run the suites (see "Decisions needed"), run baselines and new-repo suites, record exact results.
-- Then: push `phase-1/foundation`, open a DRAFT PR, final Phase 1 report.
+- Phase 1b: on Linux with Postgres 15, Postgres 17 + pgvector and Redis: run Many backend, Many scripts/dashboard checks, SaaS API, SaaS web lint/typecheck, in the original repos (clean clones) and in this branch; compare and explain differences. Then mark Phase 1 exit criteria.
 - Phase 2: One infrastructure (also: re-home SaaS CI from `modules/saas/.github/`, which is inactive; the SaaS has no CI here until then).
 
 ## Decisions needed
-- Where may the Python venvs / Node dependencies live so that Application Control allows their compiled files?
+- (none open) Owner decided: tests move to Linux (Phase 1b); no relocation of venvs / node_modules on Windows; Application Control policy left alone.
 
 ## Open choices
 - SaaS Next 16 as dashboard shell [default yes]
@@ -41,4 +52,6 @@
 - Root `.gitignore` does not ignore a root-level `.env.local` (only `dashboard/.env.local`).
 
 ## Last session
-- 2026-11-23, Claude Code: Phase 1 import done and committed locally on `phase-1/foundation`; nothing pushed; tests blocked as above.
+- 2026-11-23, Claude Code: Phase 1 import done on `phase-1/foundation`, pushed with a DRAFT PR; test suites NOT RUN (list above). Stopped before Phase 1b.
+- Scratch artifacts (outside the repo, nothing deleted): throwaway Postgres 17 data dir and baseline clones under the session scratchpad, see the final report for the path. The scratch Postgres was stopped.
+- Owner check done: the JWT tail in `docs/saas-delegation/b2-evidence/*.log` is an elided fragment (no `exp` visible, no complete token): expiry cannot be determined from the file; it came from a test run with a fixture signing secret.
