@@ -29,3 +29,6 @@ backend/app/workers/tasks.py.server
 .r1-validation/
 
 .r19-validation/
+
+# merge-dev local compose env (real file; only .example is tracked)
+.env.merge-dev
