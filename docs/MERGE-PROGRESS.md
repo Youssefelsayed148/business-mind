@@ -12,26 +12,25 @@
   - [x] gitleaks 8.30.1 scan of the branch history: 34 findings, all fake test fixtures (see IMPORT-NOTES).
 
 ## In progress
-- **Phase 1 is incomplete.** Import, history proofs, docs, compose and secret scan are done; the test suites were NOT RUN.
-- Draft PR open on `phase-1/foundation` (title starts "DRAFT: Phase 1 incomplete (test suites NOT RUN)").
-- Phase 1b: verification (separate session, Linux environment, on the pushed branch). No more test runs on the Windows laptop.
+- **Phase 1b (verification) done on branch `phase-1b/verification`**: for every suite present in both trees the merged repo equals the original; see `docs/PHASE-1B-RESULTS.md` (draft PR against `phase-1/foundation`).
+- Phase 1 exit criteria: history yes; suites match originals yes (with the caveats in PHASE-1B-RESULTS); draft PR #1 yes; no secrets yes. Pending: owner review/merge of PR #1 and the Phase 1b PR.
 
-### NOT RUN on the Windows laptop (no result exists for any of these; nothing was substituted)
-| Item | Reason |
-|---|---|
-| Many backend pytest (original and new repo) | Application Control blocks compiled extensions (e.g. SQLAlchemy `_immutabledict_cy`) in a venv under `%TEMP%`; both runs exited 4 at import, 0 tests collected. Decision: no relocation of venvs to get around the policy. |
-| Many tests that need Redis | No Redis on the machine (also Many targets Postgres 15; only 17.11 is installed here). |
-| Many scripts unittest / dashboard tsc / dashboard lint | Not attempted (same Application Control / Node-modules constraint). |
-| SaaS API pytest (all DB-backed tests) | Needs pgvector (migrations `CREATE EXTENSION vector`). Not installable here: no C compiler, not admin, PG17 extension dir not writable. |
-| SaaS web lint and typecheck | Not attempted (node_modules install blocked by the same decision). Node on this machine is v26.13.0 vs the SaaS pin `>=24 <25`. |
-| SaaS web Playwright e2e | Out of scope for Phase 1. |
-| `docker-compose.merge-dev.yml` start-up | Docker daemon not running; only `docker compose config` (exit 0) was run. |
+### Phase 1b result summary (WSL Ubuntu, Docker pg15 / pg17+pgvector / redis7; same for original and new)
+| Suite | Original | New |
+|---|---|---|
+| Many backend pytest | 1007 passed / 0 / 0 skipped | 1007 passed / 0 / 0 skipped (= recorded baseline) |
+| Many scripts unittest | 29 OK | 29 OK |
+| Many dashboard tsc / lint | exit 0 / exit 0 (1 known warning) | same |
+| SaaS API pytest | 1215 passed, 1 failed (env: PGHOST socket) | identical; the 1 test passes in both when its env is supplied |
+| SaaS ruff / mypy | pass / pass | pass / pass |
+| SaaS web unit / lint / typecheck | 8 pass / exit 0 / exit 0 | same |
+| SaaS web format:check | exit 2 (4 files) | exit 2, same 4 files (pre-existing) |
+| Contract copies (Many root, SaaS root) | OK / OK | OK / OK (no path broken by the move) |
 
-Reference baseline (not a result of this phase): Many's own record `docs/saas-delegation/many-full-test-evidence/README.md`
-reports backend 1007 passed / 0 failed / 0 skipped on Postgres 15 + Redis (2026-10-29). Phase 1b must reproduce and compare, not assume.
+NOT RUN: SaaS Playwright e2e, npm audit, next build, full SaaS pytest re-run with PGHOST (reasons in PHASE-1B-RESULTS).
 
 ## Next
-- Phase 1b: on Linux with Postgres 15, Postgres 17 + pgvector and Redis: run Many backend, Many scripts/dashboard checks, SaaS API, SaaS web lint/typecheck, in the original repos (clean clones) and in this branch; compare and explain differences. Then mark Phase 1 exit criteria.
+- Review/merge PR #1 and the Phase 1b PR (owner).
 - Phase 2: One infrastructure (also: re-home SaaS CI from `modules/saas/.github/`, which is inactive; the SaaS has no CI here until then).
 
 ## Decisions needed
@@ -52,6 +51,7 @@ reports backend 1007 passed / 0 failed / 0 skipped on Postgres 15 + Redis (2026-
 - Root `.gitignore` does not ignore a root-level `.env.local` (only `dashboard/.env.local`).
 
 ## Last session
-- 2026-11-23, Claude Code: Phase 1 import done on `phase-1/foundation`, pushed with a DRAFT PR; test suites NOT RUN (list above). Stopped before Phase 1b.
-- Scratch artifacts (outside the repo, nothing deleted): throwaway Postgres 17 data dir and baseline clones under the session scratchpad, see the final report for the path. The scratch Postgres was stopped.
-- Owner check done: the JWT tail in `docs/saas-delegation/b2-evidence/*.log` is an elided fragment (no `exp` visible, no complete token): expiry cannot be determined from the file; it came from a test run with a fixture signing secret.
+- 2026-11-23, Claude Code: Phase 1b verification (branch `phase-1b/verification`). All results in `docs/PHASE-1B-RESULTS.md`. Stopped before Phase 2.
+- Docker objects created by this session and removed: containers `merge-dev-pg15-1`, `merge-dev-pg17_vector-1`, `merge-dev-redis-1`; volumes `merge-dev_pg15_data`, `merge-dev_pg17_data`; network `merge-dev_default` (`docker compose down -v`). Pulled images (`postgres:15`, `pgvector/pgvector:pg17`, `redis:7-alpine`) were left in place.
+- Scratch (outside the repo): WSL `~/phase1b/` (clones, venvs, results logs) and `~/tools/` (node 24.22.3, uv 0.13.9). Windows scratchpad from Phase 1 (incl. Postgres data dir) untouched.
+- Findings for later phases: (1) Many tests assume a local-socket Postgres under /var/tmp or /tmp and DB name `many_test_r1`; (2) one SaaS test needs `PGHOST` socket + `ENVIRONMENT=test`; (3) a SaaS test rewrites tracked `implementation/PHASE-03/EVAL-REPORT.md`; (4) SaaS web `format:check` fails on 4 files in the original too.
