@@ -1,0 +1,40 @@
+============================= test session starts ==============================
+platform linux -- Python 3.11.18, pytest-9.2.0, pluggy-1.7.0
+rootdir: /var/tmp/many-t2-20261028/backend
+configfile: pyproject.toml
+plugins: anyio-4.15.1
+collected 413 items
+
+backend/tests/test_saas_contract.py ...................................  [  8%]
+backend/tests/test_saas_contract_vectors.py ...........                  [ 11%]
+backend/tests/test_saas_delegation_config.py ........................... [ 17%]
+...................                                                      [ 22%]
+backend/tests/test_saas_delegation_dispatch.py ................          [ 26%]
+backend/tests/test_saas_error_mapping.py ............................... [ 33%]
+....................                                                     [ 38%]
+backend/tests/test_saas_forwarder.py .......................             [ 44%]
+backend/tests/test_saas_health.py ....................                   [ 48%]
+backend/tests/test_saas_messages.py ..................................   [ 57%]
+backend/tests/test_saas_retention.py ...............                     [ 60%]
+backend/tests/test_saas_send_retry.py .................................. [ 69%]
+...........                                                              [ 71%]
+backend/tests/test_saas_signing.py .......                               [ 73%]
+backend/tests/test_saas_status.py ........................               [ 79%]
+backend/tests/test_saas_takeover_guard.py ..............                 [ 82%]
+backend/tests/test_saas_unsupported.py ................................. [ 90%]
+.......                                                                  [ 92%]
+backend/tests/test_saas_unsupported_instagram.py .............           [ 95%]
+backend/tests/test_saas_whatsapp_replies.py ...................          [100%]
+
+=============================== warnings summary ===============================
+../many-t0-20261028/venv/lib/python3.11/site-packages/passlib/utils/__init__.py:854
+  /var/tmp/many-t0-20261028/venv/lib/python3.11/site-packages/passlib/utils/__init__.py:854: DeprecationWarning: 'crypt' is deprecated and slated for removal in Python 3.13
+    from crypt import crypt as _crypt
+
+tests/test_saas_contract.py::test_take_over_is_blocked_on_a_delegated_channel
+  /var/tmp/many-t0-20261028/venv/lib/python3.11/site-packages/passlib/handlers/argon2.py:716: DeprecationWarning: Accessing argon2.__version__ is deprecated and will be removed in a future release. Use importlib.metadata directly to query for argon2-cffi's packaging metadata.
+    _argon2_cffi.__version__, max_version)
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+- generated xml file: /mnt/d/Projects/Work Projects/The Osiris Labs/ManyOsirisChat/docs/saas-delegation/t2-evidence/tests.xml -
+================== 413 passed, 2 warnings in 90.34s (0:01:30) ==================

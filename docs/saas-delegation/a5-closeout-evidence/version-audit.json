@@ -1,0 +1,205 @@
+[
+  {
+    "path": ".env.example",
+    "review": "placeholder template uses v26.0"
+  },
+  {
+    "path": ".env.production.example",
+    "review": "placeholder template uses v26.0"
+  },
+  {
+    "path": "README.md",
+    "line": 215,
+    "text": "3. Exchanges the short-lived token via `GET https://graph.instagram.com/access_token?grant_type=ig_exchange_token`; expiry comes from the provider response (60-day fallback)."
+  },
+  {
+    "path": "README.md",
+    "line": 216,
+    "text": "4. Calls `GET https://graph.instagram.com/{META_GRAPH_API_VERSION}/me` to fetch the connected Instagram professional account profile. This Instagram Login flow does not use a Facebook Page lookup."
+  },
+  {
+    "path": "README.md",
+    "line": 749,
+    "text": "| `META_GRAPH_API_VERSION` | Meta Graph API version (owner-approved upgrade target; live compatibility pending) | `v26.0` |"
+  },
+  {
+    "path": "backend/app/core/config.py",
+    "line": 41,
+    "text": "    META_GRAPH_API_VERSION: str = \"v26.0\""
+  },
+  {
+    "path": "backend/app/integrations/meta/accounts.py",
+    "line": 25,
+    "text": "    client = MetaGraphClient(base_url=f\"https://graph.instagram.com/{settings.META_GRAPH_API_VERSION}\")"
+  },
+  {
+    "path": "backend/app/integrations/meta/accounts.py",
+    "line": 68,
+    "text": "    account, so a single GET to graph.instagram.com/{version}/me suffices \u2014 no"
+  },
+  {
+    "path": "backend/app/integrations/meta/accounts.py",
+    "line": 75,
+    "text": "    client = MetaGraphClient(base_url=f\"https://graph.instagram.com/{settings.META_GRAPH_API_VERSION}\")"
+  },
+  {
+    "path": "backend/app/integrations/meta/facebook_client.py",
+    "line": 20,
+    "text": "    hardcoded to graph.instagram.com; Facebook Pages live on"
+  },
+  {
+    "path": "backend/app/integrations/meta/messaging.py",
+    "line": 38,
+    "text": "        # graph.instagram.com, not graph.facebook.com. Tokens issued by the"
+  },
+  {
+    "path": "backend/app/integrations/meta/messaging.py",
+    "line": 40,
+    "text": "        self.base_url = base_url or f\"https://graph.instagram.com/{settings.META_GRAPH_API_VERSION}\""
+  },
+  {
+    "path": "backend/app/integrations/meta/oauth.py",
+    "line": 14,
+    "text": "META_LONG_LIVED_TOKEN_URL = \"https://graph.instagram.com/access_token\""
+  },
+  {
+    "path": "backend/app/integrations/meta/oauth.py",
+    "line": 34,
+    "text": "    graph.instagram.com rejects with {\"error\": {\"message\", ...}}."
+  },
+  {
+    "path": "backend/app/integrations/meta/token_refresh.py",
+    "line": 14,
+    "text": "META_REFRESH_TOKEN_URL = \"https://graph.instagram.com/refresh_access_token\""
+  },
+  {
+    "path": "backend/app/integrations/meta/whatsapp_client.py",
+    "line": 61,
+    "text": "    graph.instagram.com and Instagram's recipient-object message shape."
+  },
+  {
+    "path": "backend/app/integrations/meta/whatsapp_oauth.py",
+    "line": 11,
+    "text": "# unlike Instagram Login (graph.instagram.com / api.instagram.com), there is"
+  },
+  {
+    "path": "backend/tests/test_instagram_token_refresh.py",
+    "line": 87,
+    "text": "    assert url == \"https://graph.instagram.com/refresh_access_token\""
+  },
+  {
+    "path": "backend/tests/test_instagram_token_refresh.py",
+    "line": 100,
+    "text": "            raise httpx.ConnectError(\"GET https://graph.instagram.com/refresh_access_token?access_token=SECRET\")"
+  },
+  {
+    "path": "backend/tests/test_meta_graph_version.py",
+    "line": 18,
+    "text": "    assert Settings.model_fields['META_GRAPH_API_VERSION'].default == 'v26.0'"
+  },
+  {
+    "path": "backend/tests/test_meta_graph_version.py",
+    "line": 21,
+    "text": "@pytest.mark.parametrize('version', ['v26.0', 'v99.0'])"
+  },
+  {
+    "path": "backend/tests/test_meta_graph_version.py",
+    "line": 23,
+    "text": "    (MetaMessagingClient, 'graph.instagram.com'),"
+  },
+  {
+    "path": "backend/tests/test_meta_graph_version.py",
+    "line": 37,
+    "text": "@pytest.mark.parametrize('version', ['v26.0', 'v99.0'])"
+  },
+  {
+    "path": "backend/tests/test_meta_graph_version.py",
+    "line": 51,
+    "text": "@pytest.mark.parametrize('version', ['v26.0', 'v99.0'])"
+  },
+  {
+    "path": "backend/tests/test_meta_graph_version.py",
+    "line": 61,
+    "text": "    (accounts.fetch_instagram_account_metadata, ('synthetic-token',), 'graph.instagram.com', '/me'),"
+  },
+  {
+    "path": "backend/tests/test_meta_graph_version.py",
+    "line": 62,
+    "text": "    (accounts.fetch_instagram_media, ('synthetic-token',), 'graph.instagram.com', '/me/media'),"
+  },
+  {
+    "path": "backend/tests/test_meta_graph_version.py",
+    "line": 92,
+    "text": "    assert oauth.META_LONG_LIVED_TOKEN_URL == 'https://graph.instagram.com/access_token'"
+  },
+  {
+    "path": "backend/tests/test_meta_graph_version.py",
+    "line": 93,
+    "text": "    assert META_REFRESH_TOKEN_URL == 'https://graph.instagram.com/refresh_access_token'"
+  },
+  {
+    "path": "backend/tests/test_whatsapp_cloud_client.py",
+    "line": 31,
+    "text": "    client = WhatsappClient(base_url=\"https://graph.test/v99.0\")"
+  },
+  {
+    "path": "backend/tests/test_whatsapp_cloud_client.py",
+    "line": 50,
+    "text": "    assert request.url.path == \"/v99.0/phone-number-id/messages\""
+  },
+  {
+    "path": "backend/tests/test_whatsapp_cloud_client.py",
+    "line": 85,
+    "text": "    client = WhatsappClient(base_url=\"https://graph.test/v99.0\")"
+  },
+  {
+    "path": "backend/tests/test_whatsapp_cloud_client.py",
+    "line": 112,
+    "text": "    client = WhatsappClient(base_url=\"https://graph.test/v99.0\")"
+  },
+  {
+    "path": "backend/tests/test_whatsapp_cloud_client.py",
+    "line": 141,
+    "text": "    client = WhatsappClient(base_url=\"https://graph.test/v99.0\")"
+  },
+  {
+    "path": "backend/tests/test_whatsapp_cloud_client.py",
+    "line": 164,
+    "text": "    client = WhatsappClient(base_url=\"https://graph.test/v99.0\")"
+  },
+  {
+    "path": "backend/tests/test_whatsapp_management_client.py",
+    "line": 12,
+    "text": "    client = WhatsappManagementClient(base_url=\"https://graph.test/v99.0\")"
+  },
+  {
+    "path": "backend/tests/test_whatsapp_management_client.py",
+    "line": 38,
+    "text": "    assert request.url.path == \"/v99.0/waba-id/message_templates\""
+  },
+  {
+    "path": "backend/tests/test_whatsapp_management_client.py",
+    "line": 132,
+    "text": "    assert captured[\"request\"].url.path == \"/v99.0/waba-id/phone_numbers\""
+  },
+  {
+    "path": "docs/meta-app-review-submission.md",
+    "line": 55,
+    "text": "`v26.0`, approved by the owner on 2026-10-28). Meta's official Node SDK currently"
+  },
+  {
+    "path": "docs/meta-app-review-submission.md",
+    "line": 56,
+    "text": "pins v26.0: https://github.com/facebook/facebook-nodejs-business-sdk/blob/main/src/api.js."
+  },
+  {
+    "path": "docs/saas-delegation/CLOSEOUT-PLAN.md",
+    "line": 54,
+    "text": "| R8 | P0 | Graph `v21.0` possibly sunset: check changelog, bump, retest | Many | A |"
+  },
+  {
+    "path": "docs/whatsapp-outreach-implementation.md",
+    "line": 51,
+    "text": "means (META_GRAPH_API_VERSION defaults to owner-approved v26.0 \u2014 check Meta's current supported versions"
+  }
+]

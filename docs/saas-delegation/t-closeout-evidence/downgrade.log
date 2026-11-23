@@ -1,0 +1,9 @@
+INFO  [alembic.runtime.migration] Context impl PostgresqlImpl.
+INFO  [alembic.runtime.migration] Will assume transactional DDL.
+INFO  [alembic.runtime.migration] Running downgrade 0029_hash_processed_event_keys -> 0028_meta_compliance, Hash historical webhook dedupe keys and remove diagnostic personal data.
+INFO  [alembic.runtime.migration] Running downgrade 0028_meta_compliance -> 0027_saas_conn_id_lowercase, Durable Meta callback receipts and explicitly verified authorization ownership.
+INFO  [alembic.runtime.migration] Running downgrade 0027_saas_conn_id_lowercase -> 0026_saas_channel_health, Normalise stored SaaS connection ids to canonical lowercase UUIDs.
+INFO  [alembic.runtime.migration] Running downgrade 0026_saas_channel_health -> 0025_saas_outbound_messages, Track the last channel.status pushed to the SaaS.
+INFO  [alembic.runtime.migration] Running downgrade 0025_saas_outbound_messages -> 0024_saas_forward_events, Add the SaaS outbound message idempotency table.
+INFO  [alembic.runtime.migration] Running downgrade 0024_saas_forward_events -> 0023_saas_delegation, Add the SaaS forwarding outbox.
+INFO  [alembic.runtime.migration] Running downgrade 0023_saas_delegation -> 0022_whatsapp_opt_in, Add per-channel SaaS delegation settings.

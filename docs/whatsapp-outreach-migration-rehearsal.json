@@ -1,0 +1,3832 @@
+{
+  "started_at": "2026-10-04T02:19:48.609872+00:00",
+  "database": "wa_rehearsal_481b05ff5b0b4b0e8fd39eb86e7a8f39",
+  "source": "synthetic",
+  "postgres_version": "15.19 (Debian 15.19-1.pgdg13+2)",
+  "steps": [
+    {
+      "operation": "upgrade",
+      "target": "0017_workspace_membership",
+      "seconds": 0.827
+    },
+    {
+      "operation": "upgrade",
+      "target": "head",
+      "seconds": 43.69
+    },
+    {
+      "operation": "downgrade",
+      "target": "-1",
+      "seconds": 0.147
+    },
+    {
+      "operation": "downgrade",
+      "target": "-1",
+      "seconds": 0.226
+    },
+    {
+      "operation": "downgrade",
+      "target": "-1",
+      "seconds": 0.305
+    },
+    {
+      "operation": "downgrade",
+      "target": "-1",
+      "seconds": 0.199
+    },
+    {
+      "operation": "downgrade",
+      "target": "-1",
+      "seconds": 0.242
+    },
+    {
+      "operation": "upgrade",
+      "target": "head",
+      "seconds": 40.382
+    }
+  ],
+  "statements": [
+    "ALTER TABLE whatsapp_accounts ADD COLUMN quality_rating VARCHAR(20)",
+    "ALTER TABLE whatsapp_accounts ADD COLUMN messaging_limit_tier VARCHAR(30)",
+    "ALTER TABLE whatsapp_accounts ADD COLUMN outreach_paused BOOLEAN DEFAULT false NOT NULL",
+    "ALTER TABLE whatsapp_accounts ADD COLUMN outreach_paused_reason TEXT",
+    "ALTER TABLE whatsapp_accounts ADD COLUMN health_checked_at TIMESTAMP WITH TIME ZONE",
+    "ALTER TABLE messages ADD COLUMN whatsapp_campaign_id UUID",
+    "ALTER TABLE messages ADD COLUMN whatsapp_template_id UUID",
+    "ALTER TABLE messages ADD COLUMN delivered_at TIMESTAMP WITH TIME ZONE",
+    "ALTER TABLE messages ADD COLUMN read_at TIMESTAMP WITH TIME ZONE",
+    "ALTER TABLE whatsapp_contacts ADD CONSTRAINT fk_whatsapp_contacts_workspace_id FOREIGN KEY(workspace_id) REFERENCES workspaces (id)",
+    "ALTER TABLE whatsapp_contacts ADD CONSTRAINT fk_whatsapp_contacts_whatsapp_account_id FOREIGN KEY(whatsapp_account_id) REFERENCES whatsapp_accounts (id)",
+    "ALTER TABLE whatsapp_contacts ADD CONSTRAINT fk_whatsapp_contacts_lead_id FOREIGN KEY(lead_id) REFERENCES leads (id) ON DELETE SET NULL",
+    "ALTER TABLE whatsapp_contacts ADD CONSTRAINT uq_whatsapp_contacts_account_wa_id UNIQUE (whatsapp_account_id, wa_id)",
+    "ALTER TABLE whatsapp_contacts ADD CONSTRAINT ck_whatsapp_contacts_marketing_consent CHECK (marketing_consent IN ('unknown', 'opted_in', 'opted_out'))",
+    "ALTER TABLE whatsapp_contacts ADD CONSTRAINT ck_whatsapp_contacts_consent_source CHECK (consent_source IS NULL OR consent_source IN ('web_form', 'click_to_whatsapp', 'inbound_keyword', 'in_store', 'imported_attested', 'manual'))",
+    "ALTER TABLE whatsapp_contacts ADD CONSTRAINT ck_whatsapp_contacts_wa_id CHECK (wa_id ~ '^[0-9]{6,20}$')",
+    "CREATE INDEX ix_whatsapp_contacts_workspace_consent ON whatsapp_contacts (workspace_id, marketing_consent)",
+    "ALTER TABLE whatsapp_consent_events ADD CONSTRAINT fk_whatsapp_consent_events_contact_id FOREIGN KEY(contact_id) REFERENCES whatsapp_contacts (id)",
+    "ALTER TABLE whatsapp_consent_events ADD CONSTRAINT fk_whatsapp_consent_events_workspace_id FOREIGN KEY(workspace_id) REFERENCES workspaces (id)",
+    "ALTER TABLE whatsapp_consent_events ADD CONSTRAINT fk_whatsapp_consent_events_actor_user_id FOREIGN KEY(actor_user_id) REFERENCES users (id)",
+    "ALTER TABLE whatsapp_consent_events ADD CONSTRAINT ck_whatsapp_consent_events_event_type CHECK (event_type IN ('opt_in', 'opt_out', 'import', 'revoke'))",
+    "CREATE INDEX ix_whatsapp_consent_events_contact_created ON whatsapp_consent_events (contact_id, created_at)",
+    "ALTER TABLE whatsapp_templates ADD CONSTRAINT fk_whatsapp_templates_workspace_id FOREIGN KEY(workspace_id) REFERENCES workspaces (id)",
+    "ALTER TABLE whatsapp_templates ADD CONSTRAINT fk_whatsapp_templates_whatsapp_account_id FOREIGN KEY(whatsapp_account_id) REFERENCES whatsapp_accounts (id)",
+    "ALTER TABLE whatsapp_templates ADD CONSTRAINT uq_whatsapp_templates_account_name_language UNIQUE (whatsapp_account_id, name, language)",
+    "ALTER TABLE whatsapp_templates ADD CONSTRAINT ck_whatsapp_templates_category CHECK (category IN ('marketing', 'utility', 'authentication'))",
+    "ALTER TABLE whatsapp_templates ADD CONSTRAINT ck_whatsapp_templates_status CHECK (status IN ('draft', 'pending', 'approved', 'rejected', 'paused', 'disabled'))",
+    "ALTER TABLE whatsapp_campaigns ADD CONSTRAINT fk_whatsapp_campaigns_workspace_id FOREIGN KEY(workspace_id) REFERENCES workspaces (id)",
+    "ALTER TABLE whatsapp_campaigns ADD CONSTRAINT fk_whatsapp_campaigns_whatsapp_account_id FOREIGN KEY(whatsapp_account_id) REFERENCES whatsapp_accounts (id)",
+    "ALTER TABLE whatsapp_campaigns ADD CONSTRAINT fk_whatsapp_campaigns_template_id FOREIGN KEY(template_id) REFERENCES whatsapp_templates (id)",
+    "ALTER TABLE whatsapp_campaigns ADD CONSTRAINT fk_whatsapp_campaigns_created_by FOREIGN KEY(created_by) REFERENCES users (id)",
+    "ALTER TABLE whatsapp_campaigns ADD CONSTRAINT ck_whatsapp_campaigns_status CHECK (status IN ('draft', 'scheduled', 'running', 'paused', 'completed', 'cancelled', 'failed'))",
+    "ALTER TABLE whatsapp_campaign_recipients ADD CONSTRAINT fk_whatsapp_campaign_recipients_campaign_id FOREIGN KEY(campaign_id) REFERENCES whatsapp_campaigns (id) ON DELETE CASCADE",
+    "ALTER TABLE whatsapp_campaign_recipients ADD CONSTRAINT fk_whatsapp_campaign_recipients_contact_id FOREIGN KEY(contact_id) REFERENCES whatsapp_contacts (id)",
+    "ALTER TABLE whatsapp_campaign_recipients ADD CONSTRAINT fk_whatsapp_campaign_recipients_message_id FOREIGN KEY(message_id) REFERENCES messages (id)",
+    "ALTER TABLE whatsapp_campaign_recipients ADD CONSTRAINT uq_whatsapp_campaign_recipients_campaign_contact UNIQUE (campaign_id, contact_id)",
+    "ALTER TABLE whatsapp_campaign_recipients ADD CONSTRAINT ck_whatsapp_campaign_recipients_status CHECK (status IN ('queued', 'sent', 'delivered', 'read', 'failed', 'skipped_no_consent', 'skipped_opted_out', 'skipped_not_eligible'))",
+    "CREATE INDEX ix_whatsapp_campaign_recipients_campaign_status ON whatsapp_campaign_recipients (campaign_id, status)",
+    "ALTER TABLE whatsapp_accounts ADD CONSTRAINT ck_whatsapp_accounts_quality_rating CHECK (quality_rating IS NULL OR quality_rating IN ('GREEN', 'YELLOW', 'RED'))",
+    "ALTER TABLE messages ADD CONSTRAINT fk_messages_whatsapp_campaign_id FOREIGN KEY(whatsapp_campaign_id) REFERENCES whatsapp_campaigns (id)",
+    "ALTER TABLE messages ADD CONSTRAINT fk_messages_whatsapp_template_id FOREIGN KEY(whatsapp_template_id) REFERENCES whatsapp_templates (id)",
+    "ALTER TABLE whatsapp_accounts ADD COLUMN ctwa_counts_as_consent BOOLEAN DEFAULT false NOT NULL",
+    "ALTER TABLE whatsapp_accounts ADD COLUMN transactional_utility_attested BOOLEAN DEFAULT false NOT NULL",
+    "ALTER TABLE whatsapp_accounts ADD COLUMN opt_out_keywords JSONB",
+    "ALTER TABLE whatsapp_accounts ADD COLUMN opt_in_keywords JSONB",
+    "ALTER TABLE whatsapp_accounts ADD COLUMN outreach_daily_cap INTEGER DEFAULT '250' NOT NULL",
+    "ALTER TABLE whatsapp_accounts ADD CONSTRAINT ck_whatsapp_accounts_opt_out_keywords_array CHECK (opt_out_keywords IS NULL OR jsonb_typeof(opt_out_keywords) = 'array')",
+    "ALTER TABLE whatsapp_accounts ADD CONSTRAINT ck_whatsapp_accounts_opt_in_keywords_array CHECK (opt_in_keywords IS NULL OR jsonb_typeof(opt_in_keywords) = 'array')",
+    "ALTER TABLE whatsapp_accounts ADD CONSTRAINT ck_whatsapp_accounts_outreach_daily_cap CHECK (outreach_daily_cap > 0)",
+    "ALTER TABLE messages ALTER COLUMN lead_id DROP NOT NULL",
+    "ALTER TABLE whatsapp_campaign_recipients DROP CONSTRAINT ck_whatsapp_campaign_recipients_status",
+    "UPDATE whatsapp_campaign_recipients SET status = 'pending' WHERE status = 'queued'",
+    "ALTER TABLE whatsapp_campaign_recipients ALTER COLUMN status SET DEFAULT 'pending'",
+    "ALTER TABLE whatsapp_campaign_recipients ADD CONSTRAINT ck_whatsapp_campaign_recipients_status CHECK (status IN ('queued', 'pending', 'sending', 'sent', 'delivered', 'read', 'failed', 'skipped_no_consent', 'skipped_opted_out', 'skipped_not_eligible'))",
+    "ALTER TABLE whatsapp_consent_events DROP CONSTRAINT ck_whatsapp_consent_events_event_type",
+    "ALTER TABLE whatsapp_consent_events ADD CONSTRAINT ck_whatsapp_consent_events_event_type CHECK (event_type IN ('opt_in', 'opt_out', 'import', 'revoke', 'resubscribe'))",
+    "ALTER TABLE whatsapp_templates DROP CONSTRAINT ck_whatsapp_templates_status",
+    "ALTER TABLE whatsapp_templates ADD CONSTRAINT ck_whatsapp_templates_status CHECK (status IN ('draft', 'pending', 'approved', 'rejected', 'paused', 'disabled', 'deleted'))",
+    "ALTER TABLE whatsapp_campaigns ADD COLUMN completed_at TIMESTAMP WITH TIME ZONE",
+    "ALTER TABLE whatsapp_accounts ADD COLUMN opt_in_link_salt UUID DEFAULT gen_random_uuid() NOT NULL",
+    "ALTER TABLE whatsapp_accounts ADD COLUMN outreach_paused_at TIMESTAMP WITH TIME ZONE",
+    "UPDATE whatsapp_accounts SET outreach_paused_at = COALESCE(health_checked_at, now()) WHERE outreach_paused = true AND outreach_paused_at IS NULL",
+    "ALTER TABLE whatsapp_consent_events DROP CONSTRAINT ck_whatsapp_consent_events_event_type",
+    "ALTER TABLE whatsapp_consent_events ADD CONSTRAINT ck_whatsapp_consent_events_event_type CHECK (event_type IN ('opt_in', 'opt_out', 'import', 'revoke', 'resubscribe', 'opt_in_unverified'))",
+    "UPDATE whatsapp_accounts SET outreach_daily_cap=0",
+    "UPDATE whatsapp_contacts SET wa_id='invalid'",
+    "UPDATE whatsapp_contacts SET marketing_consent='invalid'",
+    "DELETE FROM whatsapp_consent_events WHERE event_type = 'opt_in_unverified'",
+    "ALTER TABLE whatsapp_consent_events DROP CONSTRAINT ck_whatsapp_consent_events_event_type",
+    "ALTER TABLE whatsapp_consent_events ADD CONSTRAINT ck_whatsapp_consent_events_event_type CHECK (event_type IN ('opt_in', 'opt_out', 'import', 'revoke', 'resubscribe'))",
+    "ALTER TABLE whatsapp_accounts DROP COLUMN opt_in_link_salt",
+    "ALTER TABLE whatsapp_accounts DROP COLUMN outreach_paused_at",
+    "ALTER TABLE whatsapp_campaigns DROP COLUMN completed_at",
+    "UPDATE whatsapp_consent_events SET event_type = 'opt_in' WHERE event_type = 'resubscribe'",
+    "ALTER TABLE whatsapp_consent_events DROP CONSTRAINT ck_whatsapp_consent_events_event_type",
+    "ALTER TABLE whatsapp_consent_events ADD CONSTRAINT ck_whatsapp_consent_events_event_type CHECK (event_type IN ('opt_in', 'opt_out', 'import', 'revoke'))",
+    "UPDATE whatsapp_templates SET status = 'disabled' WHERE status = 'deleted'",
+    "ALTER TABLE whatsapp_templates DROP CONSTRAINT ck_whatsapp_templates_status",
+    "ALTER TABLE whatsapp_templates ADD CONSTRAINT ck_whatsapp_templates_status CHECK (status IN ('draft', 'pending', 'approved', 'rejected', 'paused', 'disabled'))",
+    "UPDATE whatsapp_campaign_recipients SET status = 'queued' WHERE status IN ('pending', 'sending')",
+    "ALTER TABLE whatsapp_campaign_recipients DROP CONSTRAINT ck_whatsapp_campaign_recipients_status",
+    "ALTER TABLE whatsapp_campaign_recipients ALTER COLUMN status SET DEFAULT 'queued'",
+    "ALTER TABLE whatsapp_campaign_recipients ADD CONSTRAINT ck_whatsapp_campaign_recipients_status CHECK (status IN ('queued', 'sent', 'delivered', 'read', 'failed', 'skipped_no_consent', 'skipped_opted_out', 'skipped_not_eligible'))",
+    "ALTER TABLE messages ALTER COLUMN lead_id SET NOT NULL",
+    "ALTER TABLE whatsapp_accounts DROP CONSTRAINT ck_whatsapp_accounts_outreach_daily_cap",
+    "ALTER TABLE whatsapp_accounts DROP CONSTRAINT ck_whatsapp_accounts_opt_in_keywords_array",
+    "ALTER TABLE whatsapp_accounts DROP CONSTRAINT ck_whatsapp_accounts_opt_out_keywords_array",
+    "ALTER TABLE whatsapp_accounts DROP COLUMN outreach_daily_cap",
+    "ALTER TABLE whatsapp_accounts DROP COLUMN opt_in_keywords",
+    "ALTER TABLE whatsapp_accounts DROP COLUMN opt_out_keywords",
+    "ALTER TABLE whatsapp_accounts DROP COLUMN transactional_utility_attested",
+    "ALTER TABLE whatsapp_accounts DROP COLUMN ctwa_counts_as_consent",
+    "ALTER TABLE messages DROP CONSTRAINT fk_messages_whatsapp_campaign_id",
+    "ALTER TABLE messages DROP CONSTRAINT fk_messages_whatsapp_template_id",
+    "ALTER TABLE messages DROP COLUMN read_at",
+    "ALTER TABLE messages DROP COLUMN delivered_at",
+    "ALTER TABLE messages DROP COLUMN whatsapp_template_id",
+    "ALTER TABLE messages DROP COLUMN whatsapp_campaign_id",
+    "ALTER TABLE whatsapp_accounts DROP CONSTRAINT ck_whatsapp_accounts_quality_rating",
+    "ALTER TABLE whatsapp_accounts DROP COLUMN health_checked_at",
+    "ALTER TABLE whatsapp_accounts DROP COLUMN outreach_paused_reason",
+    "ALTER TABLE whatsapp_accounts DROP COLUMN outreach_paused",
+    "ALTER TABLE whatsapp_accounts DROP COLUMN messaging_limit_tier",
+    "ALTER TABLE whatsapp_accounts DROP COLUMN quality_rating",
+    "DROP TABLE whatsapp_campaign_recipients",
+    "DROP TABLE whatsapp_campaigns",
+    "DROP TABLE whatsapp_templates",
+    "DROP TABLE whatsapp_consent_events",
+    "DROP TABLE whatsapp_contacts",
+    "ALTER TABLE whatsapp_accounts ADD COLUMN quality_rating VARCHAR(20)",
+    "ALTER TABLE whatsapp_accounts ADD COLUMN messaging_limit_tier VARCHAR(30)",
+    "ALTER TABLE whatsapp_accounts ADD COLUMN outreach_paused BOOLEAN DEFAULT false NOT NULL",
+    "ALTER TABLE whatsapp_accounts ADD COLUMN outreach_paused_reason TEXT",
+    "ALTER TABLE whatsapp_accounts ADD COLUMN health_checked_at TIMESTAMP WITH TIME ZONE",
+    "ALTER TABLE messages ADD COLUMN whatsapp_campaign_id UUID",
+    "ALTER TABLE messages ADD COLUMN whatsapp_template_id UUID",
+    "ALTER TABLE messages ADD COLUMN delivered_at TIMESTAMP WITH TIME ZONE",
+    "ALTER TABLE messages ADD COLUMN read_at TIMESTAMP WITH TIME ZONE",
+    "ALTER TABLE whatsapp_contacts ADD CONSTRAINT fk_whatsapp_contacts_workspace_id FOREIGN KEY(workspace_id) REFERENCES workspaces (id)",
+    "ALTER TABLE whatsapp_contacts ADD CONSTRAINT fk_whatsapp_contacts_whatsapp_account_id FOREIGN KEY(whatsapp_account_id) REFERENCES whatsapp_accounts (id)",
+    "ALTER TABLE whatsapp_contacts ADD CONSTRAINT fk_whatsapp_contacts_lead_id FOREIGN KEY(lead_id) REFERENCES leads (id) ON DELETE SET NULL",
+    "ALTER TABLE whatsapp_contacts ADD CONSTRAINT uq_whatsapp_contacts_account_wa_id UNIQUE (whatsapp_account_id, wa_id)",
+    "ALTER TABLE whatsapp_contacts ADD CONSTRAINT ck_whatsapp_contacts_marketing_consent CHECK (marketing_consent IN ('unknown', 'opted_in', 'opted_out'))",
+    "ALTER TABLE whatsapp_contacts ADD CONSTRAINT ck_whatsapp_contacts_consent_source CHECK (consent_source IS NULL OR consent_source IN ('web_form', 'click_to_whatsapp', 'inbound_keyword', 'in_store', 'imported_attested', 'manual'))",
+    "ALTER TABLE whatsapp_contacts ADD CONSTRAINT ck_whatsapp_contacts_wa_id CHECK (wa_id ~ '^[0-9]{6,20}$')",
+    "CREATE INDEX ix_whatsapp_contacts_workspace_consent ON whatsapp_contacts (workspace_id, marketing_consent)",
+    "ALTER TABLE whatsapp_consent_events ADD CONSTRAINT fk_whatsapp_consent_events_contact_id FOREIGN KEY(contact_id) REFERENCES whatsapp_contacts (id)",
+    "ALTER TABLE whatsapp_consent_events ADD CONSTRAINT fk_whatsapp_consent_events_workspace_id FOREIGN KEY(workspace_id) REFERENCES workspaces (id)",
+    "ALTER TABLE whatsapp_consent_events ADD CONSTRAINT fk_whatsapp_consent_events_actor_user_id FOREIGN KEY(actor_user_id) REFERENCES users (id)",
+    "ALTER TABLE whatsapp_consent_events ADD CONSTRAINT ck_whatsapp_consent_events_event_type CHECK (event_type IN ('opt_in', 'opt_out', 'import', 'revoke'))",
+    "CREATE INDEX ix_whatsapp_consent_events_contact_created ON whatsapp_consent_events (contact_id, created_at)",
+    "ALTER TABLE whatsapp_templates ADD CONSTRAINT fk_whatsapp_templates_workspace_id FOREIGN KEY(workspace_id) REFERENCES workspaces (id)",
+    "ALTER TABLE whatsapp_templates ADD CONSTRAINT fk_whatsapp_templates_whatsapp_account_id FOREIGN KEY(whatsapp_account_id) REFERENCES whatsapp_accounts (id)",
+    "ALTER TABLE whatsapp_templates ADD CONSTRAINT uq_whatsapp_templates_account_name_language UNIQUE (whatsapp_account_id, name, language)",
+    "ALTER TABLE whatsapp_templates ADD CONSTRAINT ck_whatsapp_templates_category CHECK (category IN ('marketing', 'utility', 'authentication'))",
+    "ALTER TABLE whatsapp_templates ADD CONSTRAINT ck_whatsapp_templates_status CHECK (status IN ('draft', 'pending', 'approved', 'rejected', 'paused', 'disabled'))",
+    "ALTER TABLE whatsapp_campaigns ADD CONSTRAINT fk_whatsapp_campaigns_workspace_id FOREIGN KEY(workspace_id) REFERENCES workspaces (id)",
+    "ALTER TABLE whatsapp_campaigns ADD CONSTRAINT fk_whatsapp_campaigns_whatsapp_account_id FOREIGN KEY(whatsapp_account_id) REFERENCES whatsapp_accounts (id)",
+    "ALTER TABLE whatsapp_campaigns ADD CONSTRAINT fk_whatsapp_campaigns_template_id FOREIGN KEY(template_id) REFERENCES whatsapp_templates (id)",
+    "ALTER TABLE whatsapp_campaigns ADD CONSTRAINT fk_whatsapp_campaigns_created_by FOREIGN KEY(created_by) REFERENCES users (id)",
+    "ALTER TABLE whatsapp_campaigns ADD CONSTRAINT ck_whatsapp_campaigns_status CHECK (status IN ('draft', 'scheduled', 'running', 'paused', 'completed', 'cancelled', 'failed'))",
+    "ALTER TABLE whatsapp_campaign_recipients ADD CONSTRAINT fk_whatsapp_campaign_recipients_campaign_id FOREIGN KEY(campaign_id) REFERENCES whatsapp_campaigns (id) ON DELETE CASCADE",
+    "ALTER TABLE whatsapp_campaign_recipients ADD CONSTRAINT fk_whatsapp_campaign_recipients_contact_id FOREIGN KEY(contact_id) REFERENCES whatsapp_contacts (id)",
+    "ALTER TABLE whatsapp_campaign_recipients ADD CONSTRAINT fk_whatsapp_campaign_recipients_message_id FOREIGN KEY(message_id) REFERENCES messages (id)",
+    "ALTER TABLE whatsapp_campaign_recipients ADD CONSTRAINT uq_whatsapp_campaign_recipients_campaign_contact UNIQUE (campaign_id, contact_id)",
+    "ALTER TABLE whatsapp_campaign_recipients ADD CONSTRAINT ck_whatsapp_campaign_recipients_status CHECK (status IN ('queued', 'sent', 'delivered', 'read', 'failed', 'skipped_no_consent', 'skipped_opted_out', 'skipped_not_eligible'))",
+    "CREATE INDEX ix_whatsapp_campaign_recipients_campaign_status ON whatsapp_campaign_recipients (campaign_id, status)",
+    "ALTER TABLE whatsapp_accounts ADD CONSTRAINT ck_whatsapp_accounts_quality_rating CHECK (quality_rating IS NULL OR quality_rating IN ('GREEN', 'YELLOW', 'RED'))",
+    "ALTER TABLE messages ADD CONSTRAINT fk_messages_whatsapp_campaign_id FOREIGN KEY(whatsapp_campaign_id) REFERENCES whatsapp_campaigns (id)",
+    "ALTER TABLE messages ADD CONSTRAINT fk_messages_whatsapp_template_id FOREIGN KEY(whatsapp_template_id) REFERENCES whatsapp_templates (id)",
+    "ALTER TABLE whatsapp_accounts ADD COLUMN ctwa_counts_as_consent BOOLEAN DEFAULT false NOT NULL",
+    "ALTER TABLE whatsapp_accounts ADD COLUMN transactional_utility_attested BOOLEAN DEFAULT false NOT NULL",
+    "ALTER TABLE whatsapp_accounts ADD COLUMN opt_out_keywords JSONB",
+    "ALTER TABLE whatsapp_accounts ADD COLUMN opt_in_keywords JSONB",
+    "ALTER TABLE whatsapp_accounts ADD COLUMN outreach_daily_cap INTEGER DEFAULT '250' NOT NULL",
+    "ALTER TABLE whatsapp_accounts ADD CONSTRAINT ck_whatsapp_accounts_opt_out_keywords_array CHECK (opt_out_keywords IS NULL OR jsonb_typeof(opt_out_keywords) = 'array')",
+    "ALTER TABLE whatsapp_accounts ADD CONSTRAINT ck_whatsapp_accounts_opt_in_keywords_array CHECK (opt_in_keywords IS NULL OR jsonb_typeof(opt_in_keywords) = 'array')",
+    "ALTER TABLE whatsapp_accounts ADD CONSTRAINT ck_whatsapp_accounts_outreach_daily_cap CHECK (outreach_daily_cap > 0)",
+    "ALTER TABLE messages ALTER COLUMN lead_id DROP NOT NULL",
+    "ALTER TABLE whatsapp_campaign_recipients DROP CONSTRAINT ck_whatsapp_campaign_recipients_status",
+    "UPDATE whatsapp_campaign_recipients SET status = 'pending' WHERE status = 'queued'",
+    "ALTER TABLE whatsapp_campaign_recipients ALTER COLUMN status SET DEFAULT 'pending'",
+    "ALTER TABLE whatsapp_campaign_recipients ADD CONSTRAINT ck_whatsapp_campaign_recipients_status CHECK (status IN ('queued', 'pending', 'sending', 'sent', 'delivered', 'read', 'failed', 'skipped_no_consent', 'skipped_opted_out', 'skipped_not_eligible'))",
+    "ALTER TABLE whatsapp_consent_events DROP CONSTRAINT ck_whatsapp_consent_events_event_type",
+    "ALTER TABLE whatsapp_consent_events ADD CONSTRAINT ck_whatsapp_consent_events_event_type CHECK (event_type IN ('opt_in', 'opt_out', 'import', 'revoke', 'resubscribe'))",
+    "ALTER TABLE whatsapp_templates DROP CONSTRAINT ck_whatsapp_templates_status",
+    "ALTER TABLE whatsapp_templates ADD CONSTRAINT ck_whatsapp_templates_status CHECK (status IN ('draft', 'pending', 'approved', 'rejected', 'paused', 'disabled', 'deleted'))",
+    "ALTER TABLE whatsapp_campaigns ADD COLUMN completed_at TIMESTAMP WITH TIME ZONE",
+    "ALTER TABLE whatsapp_accounts ADD COLUMN opt_in_link_salt UUID DEFAULT gen_random_uuid() NOT NULL",
+    "ALTER TABLE whatsapp_accounts ADD COLUMN outreach_paused_at TIMESTAMP WITH TIME ZONE",
+    "UPDATE whatsapp_accounts SET outreach_paused_at = COALESCE(health_checked_at, now()) WHERE outreach_paused = true AND outreach_paused_at IS NULL",
+    "ALTER TABLE whatsapp_consent_events DROP CONSTRAINT ck_whatsapp_consent_events_event_type",
+    "ALTER TABLE whatsapp_consent_events ADD CONSTRAINT ck_whatsapp_consent_events_event_type CHECK (event_type IN ('opt_in', 'opt_out', 'import', 'revoke', 'resubscribe', 'opt_in_unverified'))",
+    "UPDATE whatsapp_accounts SET outreach_daily_cap=0",
+    "UPDATE whatsapp_contacts SET wa_id='invalid'",
+    "UPDATE whatsapp_contacts SET marketing_consent='invalid'"
+  ],
+  "passed": true,
+  "before": {
+    "row_counts": {
+      "audit_logs": 0,
+      "webhook_events": 0,
+      "webhook_health": 0,
+      "workspaces": 1,
+      "facebook_pages": 0,
+      "instagram_accounts": 0,
+      "users": 0,
+      "user_workspace_memberships": 0,
+      "whatsapp_accounts": 100,
+      "campaigns": 0,
+      "comments": 0,
+      "facebook_campaigns": 0,
+      "facebook_comments": 0,
+      "facebook_tokens": 0,
+      "meta_tokens": 0,
+      "whatsapp_tokens": 0,
+      "campaign_keywords": 0,
+      "facebook_campaign_keywords": 0,
+      "facebook_user_cooldowns": 0,
+      "leads": 100000,
+      "user_cooldowns": 0,
+      "automation_logs": 0,
+      "conversations": 0,
+      "messages": 300000,
+      "processed_webhook_events": 0
+    },
+    "constraints": {
+      "alembic_version:alembic_version_pkc": "PRIMARY KEY (version_num)",
+      "audit_logs:audit_logs_pkey": "PRIMARY KEY (id)",
+      "users:users_pkey": "PRIMARY KEY (id)",
+      "webhook_events:webhook_events_pkey": "PRIMARY KEY (id)",
+      "webhook_events:uq_webhook_event_provider_external": "UNIQUE (provider, external_event_id)",
+      "webhook_health:webhook_health_pkey": "PRIMARY KEY (id)",
+      "workspaces:workspaces_pkey": "PRIMARY KEY (id)",
+      "facebook_pages:facebook_pages_pkey": "PRIMARY KEY (id)",
+      "facebook_pages:facebook_pages_workspace_id_fkey": "FOREIGN KEY (workspace_id) REFERENCES workspaces(id)",
+      "instagram_accounts:instagram_accounts_pkey": "PRIMARY KEY (id)",
+      "instagram_accounts:instagram_accounts_workspace_id_fkey": "FOREIGN KEY (workspace_id) REFERENCES workspaces(id)",
+      "user_workspace_memberships:user_workspace_memberships_pkey": "PRIMARY KEY (id)",
+      "user_workspace_memberships:uq_user_workspace_membership": "UNIQUE (user_id, workspace_id)",
+      "user_workspace_memberships:user_workspace_memberships_user_id_fkey": "FOREIGN KEY (user_id) REFERENCES users(id)",
+      "user_workspace_memberships:user_workspace_memberships_workspace_id_fkey": "FOREIGN KEY (workspace_id) REFERENCES workspaces(id)",
+      "whatsapp_accounts:whatsapp_accounts_pkey": "PRIMARY KEY (id)",
+      "whatsapp_accounts:whatsapp_accounts_workspace_id_fkey": "FOREIGN KEY (workspace_id) REFERENCES workspaces(id)",
+      "campaigns:campaigns_pkey": "PRIMARY KEY (id)",
+      "campaigns:campaigns_workspace_id_fkey": "FOREIGN KEY (workspace_id) REFERENCES workspaces(id)",
+      "campaigns:campaigns_instagram_account_id_fkey": "FOREIGN KEY (instagram_account_id) REFERENCES instagram_accounts(id)",
+      "comments:comments_pkey": "PRIMARY KEY (id)",
+      "comments:comments_instagram_account_id_fkey": "FOREIGN KEY (instagram_account_id) REFERENCES instagram_accounts(id)",
+      "facebook_campaigns:facebook_campaigns_pkey": "PRIMARY KEY (id)",
+      "facebook_campaigns:facebook_campaigns_workspace_id_fkey": "FOREIGN KEY (workspace_id) REFERENCES workspaces(id)",
+      "facebook_campaigns:facebook_campaigns_facebook_page_id_fkey": "FOREIGN KEY (facebook_page_id) REFERENCES facebook_pages(id)",
+      "facebook_comments:facebook_comments_pkey": "PRIMARY KEY (id)",
+      "facebook_comments:facebook_comments_facebook_page_id_fkey": "FOREIGN KEY (facebook_page_id) REFERENCES facebook_pages(id)",
+      "facebook_tokens:facebook_tokens_pkey": "PRIMARY KEY (id)",
+      "facebook_tokens:facebook_tokens_facebook_page_id_fkey": "FOREIGN KEY (facebook_page_id) REFERENCES facebook_pages(id)",
+      "meta_tokens:meta_tokens_pkey": "PRIMARY KEY (id)",
+      "meta_tokens:meta_tokens_instagram_account_id_fkey": "FOREIGN KEY (instagram_account_id) REFERENCES instagram_accounts(id)",
+      "whatsapp_tokens:whatsapp_tokens_pkey": "PRIMARY KEY (id)",
+      "whatsapp_tokens:whatsapp_tokens_whatsapp_account_id_fkey": "FOREIGN KEY (whatsapp_account_id) REFERENCES whatsapp_accounts(id)",
+      "campaign_keywords:campaign_keywords_pkey": "PRIMARY KEY (id)",
+      "campaign_keywords:uq_campaign_keyword": "UNIQUE (campaign_id, normalized_keyword)",
+      "campaign_keywords:campaign_keywords_campaign_id_fkey": "FOREIGN KEY (campaign_id) REFERENCES campaigns(id)",
+      "facebook_campaign_keywords:facebook_campaign_keywords_pkey": "PRIMARY KEY (id)",
+      "facebook_campaign_keywords:uq_facebook_campaign_keyword": "UNIQUE (campaign_id, normalized_keyword)",
+      "facebook_campaign_keywords:facebook_campaign_keywords_campaign_id_fkey": "FOREIGN KEY (campaign_id) REFERENCES facebook_campaigns(id)",
+      "facebook_user_cooldowns:facebook_user_cooldowns_pkey": "PRIMARY KEY (id)",
+      "facebook_user_cooldowns:uq_facebook_user_cooldown_campaign_user": "UNIQUE (campaign_id, facebook_user_id)",
+      "facebook_user_cooldowns:facebook_user_cooldowns_campaign_id_fkey": "FOREIGN KEY (campaign_id) REFERENCES facebook_campaigns(id)",
+      "leads:ck_leads_platform_account_fk": "CHECK (((((platform)::text = 'instagram'::text) AND (instagram_account_id IS NOT NULL) AND (whatsapp_account_id IS NULL) AND (facebook_page_id IS NULL)) OR (((platform)::text = 'whatsapp'::text) AND (whatsapp_account_id IS NOT NULL) AND (instagram_account_id IS NULL) AND (facebook_page_id IS NULL)) OR (((platform)::text = 'facebook'::text) AND (facebook_page_id IS NOT NULL) AND (instagram_account_id IS NULL) AND (whatsapp_account_id IS NULL))))",
+      "leads:leads_pkey": "PRIMARY KEY (id)",
+      "leads:uq_lead_workspace_instagram_user": "UNIQUE (workspace_id, instagram_account_id, ig_user_id)",
+      "leads:uq_lead_workspace_whatsapp_user": "UNIQUE (workspace_id, whatsapp_account_id, ig_user_id)",
+      "leads:uq_lead_workspace_facebook_user": "UNIQUE (workspace_id, facebook_page_id, ig_user_id)",
+      "leads:leads_workspace_id_fkey": "FOREIGN KEY (workspace_id) REFERENCES workspaces(id)",
+      "leads:leads_instagram_account_id_fkey": "FOREIGN KEY (instagram_account_id) REFERENCES instagram_accounts(id)",
+      "leads:fk_leads_whatsapp_account_id": "FOREIGN KEY (whatsapp_account_id) REFERENCES whatsapp_accounts(id)",
+      "leads:fk_leads_facebook_page_id": "FOREIGN KEY (facebook_page_id) REFERENCES facebook_pages(id)",
+      "leads:leads_source_campaign_id_fkey": "FOREIGN KEY (source_campaign_id) REFERENCES campaigns(id)",
+      "leads:leads_source_comment_id_fkey": "FOREIGN KEY (source_comment_id) REFERENCES comments(id)",
+      "user_cooldowns:user_cooldowns_pkey": "PRIMARY KEY (id)",
+      "user_cooldowns:uq_user_cooldown_campaign_user": "UNIQUE (campaign_id, instagram_user_id)",
+      "user_cooldowns:user_cooldowns_campaign_id_fkey": "FOREIGN KEY (campaign_id) REFERENCES campaigns(id)",
+      "automation_logs:automation_logs_pkey": "PRIMARY KEY (id)",
+      "automation_logs:automation_logs_campaign_id_fkey": "FOREIGN KEY (campaign_id) REFERENCES campaigns(id)",
+      "automation_logs:automation_logs_lead_id_fkey": "FOREIGN KEY (lead_id) REFERENCES leads(id)",
+      "automation_logs:automation_logs_instagram_account_id_fkey": "FOREIGN KEY (instagram_account_id) REFERENCES instagram_accounts(id)",
+      "automation_logs:fk_automation_logs_whatsapp_account_id": "FOREIGN KEY (whatsapp_account_id) REFERENCES whatsapp_accounts(id)",
+      "automation_logs:fk_automation_logs_facebook_page_id": "FOREIGN KEY (facebook_page_id) REFERENCES facebook_pages(id)",
+      "conversations:ck_conversations_platform_account_fk": "CHECK (((((platform)::text = 'instagram'::text) AND (instagram_account_id IS NOT NULL) AND (whatsapp_account_id IS NULL) AND (facebook_page_id IS NULL)) OR (((platform)::text = 'whatsapp'::text) AND (whatsapp_account_id IS NOT NULL) AND (instagram_account_id IS NULL) AND (facebook_page_id IS NULL)) OR (((platform)::text = 'facebook'::text) AND (facebook_page_id IS NOT NULL) AND (instagram_account_id IS NULL) AND (whatsapp_account_id IS NULL))))",
+      "conversations:conversations_pkey": "PRIMARY KEY (id)",
+      "conversations:uq_conversation_lead_campaign": "UNIQUE (lead_id, campaign_id)",
+      "conversations:uq_conversation_lead_facebook_campaign": "UNIQUE (lead_id, facebook_campaign_id)",
+      "conversations:conversations_workspace_id_fkey": "FOREIGN KEY (workspace_id) REFERENCES workspaces(id)",
+      "conversations:conversations_lead_id_fkey": "FOREIGN KEY (lead_id) REFERENCES leads(id)",
+      "conversations:conversations_campaign_id_fkey": "FOREIGN KEY (campaign_id) REFERENCES campaigns(id)",
+      "conversations:fk_conversations_facebook_campaign_id": "FOREIGN KEY (facebook_campaign_id) REFERENCES facebook_campaigns(id)",
+      "conversations:conversations_instagram_account_id_fkey": "FOREIGN KEY (instagram_account_id) REFERENCES instagram_accounts(id)",
+      "conversations:fk_conversations_whatsapp_account_id": "FOREIGN KEY (whatsapp_account_id) REFERENCES whatsapp_accounts(id)",
+      "conversations:fk_conversations_facebook_page_id": "FOREIGN KEY (facebook_page_id) REFERENCES facebook_pages(id)",
+      "messages:messages_pkey": "PRIMARY KEY (id)",
+      "messages:uq_message_campaign_comment_type": "UNIQUE (campaign_id, comment_id, message_type)",
+      "messages:uq_message_facebook_campaign_comment_type": "UNIQUE (facebook_campaign_id, facebook_comment_id, message_type)",
+      "messages:messages_campaign_id_fkey": "FOREIGN KEY (campaign_id) REFERENCES campaigns(id)",
+      "messages:messages_lead_id_fkey": "FOREIGN KEY (lead_id) REFERENCES leads(id)",
+      "messages:messages_comment_id_fkey": "FOREIGN KEY (comment_id) REFERENCES comments(id)",
+      "messages:fk_messages_facebook_campaign_id": "FOREIGN KEY (facebook_campaign_id) REFERENCES facebook_campaigns(id)",
+      "messages:fk_messages_facebook_comment_id": "FOREIGN KEY (facebook_comment_id) REFERENCES facebook_comments(id)",
+      "messages:messages_conversation_id_fkey": "FOREIGN KEY (conversation_id) REFERENCES conversations(id)",
+      "processed_webhook_events:processed_webhook_events_pkey": "PRIMARY KEY (id)",
+      "processed_webhook_events:uq_processed_webhook_provider_key": "UNIQUE (provider, event_key)"
+    },
+    "columns": {
+      "audit_logs": {
+        "id": {
+          "nullable": false,
+          "type": "UUID",
+          "default": null
+        },
+        "actor_user_id": {
+          "nullable": true,
+          "type": "UUID",
+          "default": null
+        },
+        "actor_email": {
+          "nullable": true,
+          "type": "VARCHAR(255)",
+          "default": null
+        },
+        "action": {
+          "nullable": false,
+          "type": "VARCHAR(100)",
+          "default": null
+        },
+        "entity_type": {
+          "nullable": true,
+          "type": "VARCHAR(100)",
+          "default": null
+        },
+        "entity_id": {
+          "nullable": true,
+          "type": "UUID",
+          "default": null
+        },
+        "entity_name": {
+          "nullable": true,
+          "type": "VARCHAR(255)",
+          "default": null
+        },
+        "severity": {
+          "nullable": false,
+          "type": "VARCHAR(50)",
+          "default": null
+        },
+        "message": {
+          "nullable": false,
+          "type": "TEXT",
+          "default": null
+        },
+        "metadata": {
+          "nullable": true,
+          "type": "JSONB",
+          "default": null
+        },
+        "created_at": {
+          "nullable": false,
+          "type": "TIMESTAMP",
+          "default": "now()"
+        }
+      },
+      "webhook_events": {
+        "id": {
+          "nullable": false,
+          "type": "UUID",
+          "default": null
+        },
+        "provider": {
+          "nullable": false,
+          "type": "VARCHAR(50)",
+          "default": null
+        },
+        "external_event_id": {
+          "nullable": false,
+          "type": "VARCHAR(255)",
+          "default": null
+        },
+        "event_type": {
+          "nullable": true,
+          "type": "VARCHAR(100)",
+          "default": null
+        },
+        "payload": {
+          "nullable": true,
+          "type": "JSONB",
+          "default": null
+        },
+        "processing_status": {
+          "nullable": false,
+          "type": "VARCHAR(50)",
+          "default": null
+        },
+        "created_at": {
+          "nullable": false,
+          "type": "TIMESTAMP",
+          "default": "now()"
+        },
+        "updated_at": {
+          "nullable": false,
+          "type": "TIMESTAMP",
+          "default": "now()"
+        }
+      },
+      "webhook_health": {
+        "id": {
+          "nullable": false,
+          "type": "UUID",
+          "default": null
+        },
+        "provider": {
+          "nullable": false,
+          "type": "VARCHAR(50)",
+          "default": null
+        },
+        "last_webhook_at": {
+          "nullable": true,
+          "type": "TIMESTAMP",
+          "default": null
+        },
+        "last_success_at": {
+          "nullable": true,
+          "type": "TIMESTAMP",
+          "default": null
+        },
+        "consecutive_failures": {
+          "nullable": false,
+          "type": "INTEGER",
+          "default": null
+        },
+        "created_at": {
+          "nullable": false,
+          "type": "TIMESTAMP",
+          "default": "now()"
+        },
+        "updated_at": {
+          "nullable": false,
+          "type": "TIMESTAMP",
+          "default": "now()"
+        }
+      },
+      "workspaces": {
+        "id": {
+          "nullable": false,
+          "type": "UUID",
+          "default": null
+        },
+        "name": {
+          "nullable": false,
+          "type": "VARCHAR(255)",
+          "default": null
+        },
+        "slug": {
+          "nullable": false,
+          "type": "VARCHAR(255)",
+          "default": null
+        },
+        "created_at": {
+          "nullable": false,
+          "type": "TIMESTAMP",
+          "default": "now()"
+        },
+        "updated_at": {
+          "nullable": false,
+          "type": "TIMESTAMP",
+          "default": "now()"
+        }
+      },
+      "facebook_pages": {
+        "id": {
+          "nullable": false,
+          "type": "UUID",
+          "default": null
+        },
+        "workspace_id": {
+          "nullable": false,
+          "type": "UUID",
+          "default": null
+        },
+        "page_id": {
+          "nullable": false,
+          "type": "VARCHAR(255)",
+          "default": null
+        },
+        "page_name": {
+          "nullable": true,
+          "type": "VARCHAR(255)",
+          "default": null
+        },
+        "status": {
+          "nullable": false,
+          "type": "VARCHAR(50)",
+          "default": null
+        },
+        "business_vertical": {
+          "nullable": false,
+          "type": "VARCHAR(50)",
+          "default": null
+        },
+        "ai_enabled": {
+          "nullable": false,
+          "type": "BOOLEAN",
+          "default": null
+        },
+        "ai_cold_dm_enabled": {
+          "nullable": false,
+          "type": "BOOLEAN",
+          "default": "false"
+        },
+        "ai_business_profile": {
+          "nullable": true,
+          "type": "TEXT",
+          "default": null
+        },
+        "ai_tone_instructions": {
+          "nullable": true,
+          "type": "TEXT",
+          "default": null
+        },
+        "ai_daily_message_cap": {
+          "nullable": false,
+          "type": "INTEGER",
+          "default": null
+        },
+        "ai_handoff_after_turns": {
+          "nullable": false,
+          "type": "INTEGER",
+          "default": "8"
+        },
+        "ai_messages_sent_today": {
+          "nullable": false,
+          "type": "INTEGER",
+          "default": null
+        },
+        "ai_budget_reset_at": {
+          "nullable": true,
+          "type": "TIMESTAMP",
+          "default": null
+        },
+        "created_at": {
+          "nullable": false,
+          "type": "TIMESTAMP",
+          "default": "now()"
+        },
+        "updated_at": {
+          "nullable": false,
+          "type": "TIMESTAMP",
+          "default": "now()"
+        }
+      },
+      "instagram_accounts": {
+        "id": {
+          "nullable": false,
+          "type": "UUID",
+          "default": null
+        },
+        "workspace_id": {
+          "nullable": false,
+          "type": "UUID",
+          "default": null
+        },
+        "ig_user_id": {
+          "nullable": false,
+          "type": "VARCHAR(255)",
+          "default": null
+        },
+        "ig_username": {
+          "nullable": true,
+          "type": "VARCHAR(255)",
+          "default": null
+        },
+        "status": {
+          "nullable": false,
+          "type": "VARCHAR(50)",
+          "default": null
+        },
+        "business_vertical": {
+          "nullable": false,
+          "type": "VARCHAR(50)",
+          "default": null
+        },
+        "ai_enabled": {
+          "nullable": false,
+          "type": "BOOLEAN",
+          "default": null
+        },
+        "ai_cold_dm_enabled": {
+          "nullable": false,
+          "type": "BOOLEAN",
+          "default": "false"
+        },
+        "ai_business_profile": {
+          "nullable": true,
+          "type": "TEXT",
+          "default": null
+        },
+        "ai_tone_instructions": {
+          "nullable": true,
+          "type": "TEXT",
+          "default": null
+        },
+        "ai_daily_message_cap": {
+          "nullable": false,
+          "type": "INTEGER",
+          "default": null
+        },
+        "ai_handoff_after_turns": {
+          "nullable": false,
+          "type": "INTEGER",
+          "default": "8"
+        },
+        "ai_messages_sent_today": {
+          "nullable": false,
+          "type": "INTEGER",
+          "default": null
+        },
+        "ai_budget_reset_at": {
+          "nullable": true,
+          "type": "TIMESTAMP",
+          "default": null
+        },
+        "created_at": {
+          "nullable": false,
+          "type": "TIMESTAMP",
+          "default": "now()"
+        },
+        "updated_at": {
+          "nullable": false,
+          "type": "TIMESTAMP",
+          "default": "now()"
+        }
+      },
+      "users": {
+        "id": {
+          "nullable": false,
+          "type": "UUID",
+          "default": null
+        },
+        "email": {
+          "nullable": false,
+          "type": "VARCHAR(255)",
+          "default": null
+        },
+        "name": {
+          "nullable": true,
+          "type": "VARCHAR(255)",
+          "default": null
+        },
+        "password_hash": {
+          "nullable": false,
+          "type": "VARCHAR(255)",
+          "default": null
+        },
+        "role": {
+          "nullable": false,
+          "type": "VARCHAR(50)",
+          "default": "'admin'::character varying"
+        },
+        "is_active": {
+          "nullable": false,
+          "type": "BOOLEAN",
+          "default": null
+        },
+        "created_at": {
+          "nullable": false,
+          "type": "TIMESTAMP",
+          "default": "now()"
+        },
+        "updated_at": {
+          "nullable": false,
+          "type": "TIMESTAMP",
+          "default": "now()"
+        }
+      },
+      "user_workspace_memberships": {
+        "id": {
+          "nullable": false,
+          "type": "UUID",
+          "default": null
+        },
+        "user_id": {
+          "nullable": false,
+          "type": "UUID",
+          "default": null
+        },
+        "workspace_id": {
+          "nullable": false,
+          "type": "UUID",
+          "default": null
+        },
+        "role": {
+          "nullable": false,
+          "type": "VARCHAR(50)",
+          "default": "'operator'::character varying"
+        },
+        "created_at": {
+          "nullable": false,
+          "type": "TIMESTAMP",
+          "default": "now()"
+        },
+        "updated_at": {
+          "nullable": false,
+          "type": "TIMESTAMP",
+          "default": "now()"
+        }
+      },
+      "whatsapp_accounts": {
+        "id": {
+          "nullable": false,
+          "type": "UUID",
+          "default": null
+        },
+        "workspace_id": {
+          "nullable": false,
+          "type": "UUID",
+          "default": null
+        },
+        "phone_number_id": {
+          "nullable": false,
+          "type": "VARCHAR(255)",
+          "default": null
+        },
+        "display_phone_number": {
+          "nullable": true,
+          "type": "VARCHAR(50)",
+          "default": null
+        },
+        "whatsapp_business_account_id": {
+          "nullable": true,
+          "type": "VARCHAR(255)",
+          "default": null
+        },
+        "status": {
+          "nullable": false,
+          "type": "VARCHAR(50)",
+          "default": null
+        },
+        "business_vertical": {
+          "nullable": false,
+          "type": "VARCHAR(50)",
+          "default": null
+        },
+        "ai_enabled": {
+          "nullable": false,
+          "type": "BOOLEAN",
+          "default": null
+        },
+        "ai_business_profile": {
+          "nullable": true,
+          "type": "TEXT",
+          "default": null
+        },
+        "ai_tone_instructions": {
+          "nullable": true,
+          "type": "TEXT",
+          "default": null
+        },
+        "ai_daily_message_cap": {
+          "nullable": false,
+          "type": "INTEGER",
+          "default": null
+        },
+        "ai_handoff_after_turns": {
+          "nullable": false,
+          "type": "INTEGER",
+          "default": "8"
+        },
+        "ai_messages_sent_today": {
+          "nullable": false,
+          "type": "INTEGER",
+          "default": null
+        },
+        "ai_budget_reset_at": {
+          "nullable": true,
+          "type": "TIMESTAMP",
+          "default": null
+        },
+        "created_at": {
+          "nullable": false,
+          "type": "TIMESTAMP",
+          "default": "now()"
+        },
+        "updated_at": {
+          "nullable": false,
+          "type": "TIMESTAMP",
+          "default": "now()"
+        }
+      },
+      "campaigns": {
+        "id": {
+          "nullable": false,
+          "type": "UUID",
+          "default": null
+        },
+        "workspace_id": {
+          "nullable": false,
+          "type": "UUID",
+          "default": null
+        },
+        "instagram_account_id": {
+          "nullable": false,
+          "type": "UUID",
+          "default": null
+        },
+        "name": {
+          "nullable": false,
+          "type": "VARCHAR(255)",
+          "default": null
+        },
+        "description": {
+          "nullable": true,
+          "type": "TEXT",
+          "default": null
+        },
+        "media_id": {
+          "nullable": true,
+          "type": "VARCHAR(255)",
+          "default": null
+        },
+        "media_url": {
+          "nullable": true,
+          "type": "TEXT",
+          "default": null
+        },
+        "target_scope": {
+          "nullable": false,
+          "type": "VARCHAR(50)",
+          "default": null
+        },
+        "target_media_url": {
+          "nullable": true,
+          "type": "TEXT",
+          "default": null
+        },
+        "target_media_shortcode": {
+          "nullable": true,
+          "type": "VARCHAR(255)",
+          "default": null
+        },
+        "target_media_id": {
+          "nullable": true,
+          "type": "VARCHAR(255)",
+          "default": null
+        },
+        "target_media_type": {
+          "nullable": false,
+          "type": "VARCHAR(50)",
+          "default": null
+        },
+        "target_media_label": {
+          "nullable": true,
+          "type": "VARCHAR(255)",
+          "default": null
+        },
+        "match_type": {
+          "nullable": false,
+          "type": "VARCHAR(50)",
+          "default": null
+        },
+        "message_template": {
+          "nullable": false,
+          "type": "TEXT",
+          "default": null
+        },
+        "link_url": {
+          "nullable": true,
+          "type": "TEXT",
+          "default": null
+        },
+        "cooldown_hours": {
+          "nullable": false,
+          "type": "INTEGER",
+          "default": null
+        },
+        "status": {
+          "nullable": false,
+          "type": "VARCHAR(50)",
+          "default": null
+        },
+        "delivery_mode": {
+          "nullable": false,
+          "type": "VARCHAR(50)",
+          "default": null
+        },
+        "follow_prompt_title": {
+          "nullable": true,
+          "type": "TEXT",
+          "default": null
+        },
+        "follow_prompt_description": {
+          "nullable": true,
+          "type": "TEXT",
+          "default": null
+        },
+        "follow_prompt_profile_url": {
+          "nullable": true,
+          "type": "TEXT",
+          "default": null
+        },
+        "comment_reply_enabled": {
+          "nullable": false,
+          "type": "BOOLEAN",
+          "default": null
+        },
+        "comment_reply_text": {
+          "nullable": true,
+          "type": "TEXT",
+          "default": null
+        },
+        "ai_enabled": {
+          "nullable": false,
+          "type": "BOOLEAN",
+          "default": null
+        },
+        "ai_handoff_after_turns": {
+          "nullable": false,
+          "type": "INTEGER",
+          "default": null
+        },
+        "total_triggers": {
+          "nullable": false,
+          "type": "INTEGER",
+          "default": null
+        },
+        "successful_sends": {
+          "nullable": false,
+          "type": "INTEGER",
+          "default": null
+        },
+        "failed_sends": {
+          "nullable": false,
+          "type": "INTEGER",
+          "default": null
+        },
+        "created_at": {
+          "nullable": false,
+          "type": "TIMESTAMP",
+          "default": "now()"
+        },
+        "updated_at": {
+          "nullable": false,
+          "type": "TIMESTAMP",
+          "default": "now()"
+        }
+      },
+      "comments": {
+        "id": {
+          "nullable": false,
+          "type": "UUID",
+          "default": null
+        },
+        "instagram_account_id": {
+          "nullable": false,
+          "type": "UUID",
+          "default": null
+        },
+        "comment_id": {
+          "nullable": false,
+          "type": "VARCHAR(255)",
+          "default": null
+        },
+        "ig_user_id": {
+          "nullable": true,
+          "type": "VARCHAR(255)",
+          "default": null
+        },
+        "ig_username": {
+          "nullable": true,
+          "type": "VARCHAR(255)",
+          "default": null
+        },
+        "message": {
+          "nullable": true,
+          "type": "TEXT",
+          "default": null
+        },
+        "normalized_text": {
+          "nullable": true,
+          "type": "TEXT",
+          "default": null
+        },
+        "received_at": {
+          "nullable": false,
+          "type": "TIMESTAMP",
+          "default": "now()"
+        },
+        "created_at": {
+          "nullable": false,
+          "type": "TIMESTAMP",
+          "default": "now()"
+        }
+      },
+      "facebook_campaigns": {
+        "id": {
+          "nullable": false,
+          "type": "UUID",
+          "default": null
+        },
+        "workspace_id": {
+          "nullable": false,
+          "type": "UUID",
+          "default": null
+        },
+        "facebook_page_id": {
+          "nullable": false,
+          "type": "UUID",
+          "default": null
+        },
+        "name": {
+          "nullable": false,
+          "type": "VARCHAR(255)",
+          "default": null
+        },
+        "description": {
+          "nullable": true,
+          "type": "TEXT",
+          "default": null
+        },
+        "post_id": {
+          "nullable": true,
+          "type": "VARCHAR(255)",
+          "default": null
+        },
+        "target_scope": {
+          "nullable": false,
+          "type": "VARCHAR(50)",
+          "default": null
+        },
+        "target_post_id": {
+          "nullable": true,
+          "type": "VARCHAR(255)",
+          "default": null
+        },
+        "target_post_label": {
+          "nullable": true,
+          "type": "VARCHAR(255)",
+          "default": null
+        },
+        "match_type": {
+          "nullable": false,
+          "type": "VARCHAR(50)",
+          "default": null
+        },
+        "message_template": {
+          "nullable": false,
+          "type": "TEXT",
+          "default": null
+        },
+        "link_url": {
+          "nullable": true,
+          "type": "TEXT",
+          "default": null
+        },
+        "cooldown_hours": {
+          "nullable": false,
+          "type": "INTEGER",
+          "default": null
+        },
+        "status": {
+          "nullable": false,
+          "type": "VARCHAR(50)",
+          "default": null
+        },
+        "delivery_mode": {
+          "nullable": false,
+          "type": "VARCHAR(50)",
+          "default": null
+        },
+        "comment_reply_enabled": {
+          "nullable": false,
+          "type": "BOOLEAN",
+          "default": null
+        },
+        "comment_reply_text": {
+          "nullable": true,
+          "type": "TEXT",
+          "default": null
+        },
+        "ai_enabled": {
+          "nullable": false,
+          "type": "BOOLEAN",
+          "default": null
+        },
+        "ai_handoff_after_turns": {
+          "nullable": false,
+          "type": "INTEGER",
+          "default": null
+        },
+        "total_triggers": {
+          "nullable": false,
+          "type": "INTEGER",
+          "default": null
+        },
+        "successful_sends": {
+          "nullable": false,
+          "type": "INTEGER",
+          "default": null
+        },
+        "failed_sends": {
+          "nullable": false,
+          "type": "INTEGER",
+          "default": null
+        },
+        "created_at": {
+          "nullable": false,
+          "type": "TIMESTAMP",
+          "default": "now()"
+        },
+        "updated_at": {
+          "nullable": false,
+          "type": "TIMESTAMP",
+          "default": "now()"
+        }
+      },
+      "facebook_comments": {
+        "id": {
+          "nullable": false,
+          "type": "UUID",
+          "default": null
+        },
+        "facebook_page_id": {
+          "nullable": false,
+          "type": "UUID",
+          "default": null
+        },
+        "comment_id": {
+          "nullable": false,
+          "type": "VARCHAR(255)",
+          "default": null
+        },
+        "post_id": {
+          "nullable": true,
+          "type": "VARCHAR(255)",
+          "default": null
+        },
+        "from_id": {
+          "nullable": true,
+          "type": "VARCHAR(255)",
+          "default": null
+        },
+        "from_name": {
+          "nullable": true,
+          "type": "VARCHAR(255)",
+          "default": null
+        },
+        "message": {
+          "nullable": true,
+          "type": "TEXT",
+          "default": null
+        },
+        "normalized_text": {
+          "nullable": true,
+          "type": "TEXT",
+          "default": null
+        },
+        "received_at": {
+          "nullable": false,
+          "type": "TIMESTAMP",
+          "default": "now()"
+        },
+        "created_at": {
+          "nullable": false,
+          "type": "TIMESTAMP",
+          "default": "now()"
+        }
+      },
+      "facebook_tokens": {
+        "id": {
+          "nullable": false,
+          "type": "UUID",
+          "default": null
+        },
+        "facebook_page_id": {
+          "nullable": false,
+          "type": "UUID",
+          "default": null
+        },
+        "access_token": {
+          "nullable": false,
+          "type": "TEXT",
+          "default": null
+        },
+        "token_type": {
+          "nullable": true,
+          "type": "VARCHAR(50)",
+          "default": null
+        },
+        "status": {
+          "nullable": false,
+          "type": "VARCHAR(50)",
+          "default": null
+        },
+        "expires_at": {
+          "nullable": true,
+          "type": "TIMESTAMP",
+          "default": null
+        },
+        "created_at": {
+          "nullable": false,
+          "type": "TIMESTAMP",
+          "default": "now()"
+        },
+        "updated_at": {
+          "nullable": false,
+          "type": "TIMESTAMP",
+          "default": "now()"
+        }
+      },
+      "meta_tokens": {
+        "id": {
+          "nullable": false,
+          "type": "UUID",
+          "default": null
+        },
+        "instagram_account_id": {
+          "nullable": false,
+          "type": "UUID",
+          "default": null
+        },
+        "access_token": {
+          "nullable": false,
+          "type": "TEXT",
+          "default": null
+        },
+        "token_type": {
+          "nullable": true,
+          "type": "VARCHAR(50)",
+          "default": null
+        },
+        "status": {
+          "nullable": false,
+          "type": "VARCHAR(50)",
+          "default": null
+        },
+        "expires_at": {
+          "nullable": true,
+          "type": "TIMESTAMP",
+          "default": null
+        },
+        "created_at": {
+          "nullable": false,
+          "type": "TIMESTAMP",
+          "default": "now()"
+        },
+        "updated_at": {
+          "nullable": false,
+          "type": "TIMESTAMP",
+          "default": "now()"
+        }
+      },
+      "whatsapp_tokens": {
+        "id": {
+          "nullable": false,
+          "type": "UUID",
+          "default": null
+        },
+        "whatsapp_account_id": {
+          "nullable": false,
+          "type": "UUID",
+          "default": null
+        },
+        "access_token": {
+          "nullable": false,
+          "type": "TEXT",
+          "default": null
+        },
+        "token_type": {
+          "nullable": true,
+          "type": "VARCHAR(50)",
+          "default": null
+        },
+        "status": {
+          "nullable": false,
+          "type": "VARCHAR(50)",
+          "default": null
+        },
+        "expires_at": {
+          "nullable": true,
+          "type": "TIMESTAMP",
+          "default": null
+        },
+        "created_at": {
+          "nullable": false,
+          "type": "TIMESTAMP",
+          "default": "now()"
+        },
+        "updated_at": {
+          "nullable": false,
+          "type": "TIMESTAMP",
+          "default": "now()"
+        }
+      },
+      "campaign_keywords": {
+        "id": {
+          "nullable": false,
+          "type": "UUID",
+          "default": null
+        },
+        "campaign_id": {
+          "nullable": false,
+          "type": "UUID",
+          "default": null
+        },
+        "normalized_keyword": {
+          "nullable": false,
+          "type": "VARCHAR(255)",
+          "default": null
+        },
+        "created_at": {
+          "nullable": false,
+          "type": "TIMESTAMP",
+          "default": "now()"
+        }
+      },
+      "facebook_campaign_keywords": {
+        "id": {
+          "nullable": false,
+          "type": "UUID",
+          "default": null
+        },
+        "campaign_id": {
+          "nullable": false,
+          "type": "UUID",
+          "default": null
+        },
+        "normalized_keyword": {
+          "nullable": false,
+          "type": "VARCHAR(255)",
+          "default": null
+        },
+        "created_at": {
+          "nullable": false,
+          "type": "TIMESTAMP",
+          "default": "now()"
+        }
+      },
+      "facebook_user_cooldowns": {
+        "id": {
+          "nullable": false,
+          "type": "UUID",
+          "default": null
+        },
+        "campaign_id": {
+          "nullable": false,
+          "type": "UUID",
+          "default": null
+        },
+        "facebook_user_id": {
+          "nullable": false,
+          "type": "VARCHAR(255)",
+          "default": null
+        },
+        "expires_at": {
+          "nullable": false,
+          "type": "TIMESTAMP",
+          "default": null
+        },
+        "created_at": {
+          "nullable": false,
+          "type": "TIMESTAMP",
+          "default": "now()"
+        }
+      },
+      "leads": {
+        "id": {
+          "nullable": false,
+          "type": "UUID",
+          "default": null
+        },
+        "workspace_id": {
+          "nullable": false,
+          "type": "UUID",
+          "default": null
+        },
+        "instagram_account_id": {
+          "nullable": true,
+          "type": "UUID",
+          "default": null
+        },
+        "platform": {
+          "nullable": false,
+          "type": "VARCHAR(50)",
+          "default": "'instagram'::character varying"
+        },
+        "whatsapp_account_id": {
+          "nullable": true,
+          "type": "UUID",
+          "default": null
+        },
+        "facebook_page_id": {
+          "nullable": true,
+          "type": "UUID",
+          "default": null
+        },
+        "ig_user_id": {
+          "nullable": false,
+          "type": "VARCHAR(255)",
+          "default": null
+        },
+        "ig_username": {
+          "nullable": true,
+          "type": "VARCHAR(255)",
+          "default": null
+        },
+        "facebook_psid": {
+          "nullable": true,
+          "type": "VARCHAR(255)",
+          "default": null
+        },
+        "lead_source": {
+          "nullable": false,
+          "type": "VARCHAR(50)",
+          "default": "'campaign'::character varying"
+        },
+        "last_seen_at": {
+          "nullable": true,
+          "type": "TIMESTAMP",
+          "default": null
+        },
+        "source_campaign_id": {
+          "nullable": true,
+          "type": "UUID",
+          "default": null
+        },
+        "source_comment_id": {
+          "nullable": true,
+          "type": "UUID",
+          "default": null
+        },
+        "source_media_id": {
+          "nullable": true,
+          "type": "VARCHAR(255)",
+          "default": null
+        },
+        "source_media_type": {
+          "nullable": true,
+          "type": "VARCHAR(50)",
+          "default": null
+        },
+        "source_media_label": {
+          "nullable": true,
+          "type": "VARCHAR(255)",
+          "default": null
+        },
+        "status": {
+          "nullable": false,
+          "type": "VARCHAR(50)",
+          "default": null
+        },
+        "created_at": {
+          "nullable": false,
+          "type": "TIMESTAMP",
+          "default": "now()"
+        }
+      },
+      "user_cooldowns": {
+        "id": {
+          "nullable": false,
+          "type": "UUID",
+          "default": null
+        },
+        "campaign_id": {
+          "nullable": false,
+          "type": "UUID",
+          "default": null
+        },
+        "instagram_user_id": {
+          "nullable": false,
+          "type": "VARCHAR(255)",
+          "default": null
+        },
+        "expires_at": {
+          "nullable": false,
+          "type": "TIMESTAMP",
+          "default": null
+        },
+        "created_at": {
+          "nullable": false,
+          "type": "TIMESTAMP",
+          "default": "now()"
+        }
+      },
+      "automation_logs": {
+        "id": {
+          "nullable": false,
+          "type": "UUID",
+          "default": null
+        },
+        "campaign_id": {
+          "nullable": true,
+          "type": "UUID",
+          "default": null
+        },
+        "lead_id": {
+          "nullable": true,
+          "type": "UUID",
+          "default": null
+        },
+        "instagram_account_id": {
+          "nullable": true,
+          "type": "UUID",
+          "default": null
+        },
+        "whatsapp_account_id": {
+          "nullable": true,
+          "type": "UUID",
+          "default": null
+        },
+        "facebook_page_id": {
+          "nullable": true,
+          "type": "UUID",
+          "default": null
+        },
+        "action": {
+          "nullable": false,
+          "type": "VARCHAR(100)",
+          "default": null
+        },
+        "details": {
+          "nullable": true,
+          "type": "JSONB",
+          "default": null
+        },
+        "created_at": {
+          "nullable": false,
+          "type": "TIMESTAMP",
+          "default": "now()"
+        }
+      },
+      "conversations": {
+        "id": {
+          "nullable": false,
+          "type": "UUID",
+          "default": null
+        },
+        "workspace_id": {
+          "nullable": false,
+          "type": "UUID",
+          "default": null
+        },
+        "lead_id": {
+          "nullable": false,
+          "type": "UUID",
+          "default": null
+        },
+        "campaign_id": {
+          "nullable": true,
+          "type": "UUID",
+          "default": null
+        },
+        "facebook_campaign_id": {
+          "nullable": true,
+          "type": "UUID",
+          "default": null
+        },
+        "instagram_account_id": {
+          "nullable": true,
+          "type": "UUID",
+          "default": null
+        },
+        "platform": {
+          "nullable": false,
+          "type": "VARCHAR(50)",
+          "default": "'instagram'::character varying"
+        },
+        "whatsapp_account_id": {
+          "nullable": true,
+          "type": "UUID",
+          "default": null
+        },
+        "facebook_page_id": {
+          "nullable": true,
+          "type": "UUID",
+          "default": null
+        },
+        "status": {
+          "nullable": false,
+          "type": "VARCHAR(50)",
+          "default": null
+        },
+        "handoff_reason": {
+          "nullable": true,
+          "type": "VARCHAR(50)",
+          "default": null
+        },
+        "turn_count": {
+          "nullable": false,
+          "type": "INTEGER",
+          "default": null
+        },
+        "last_message_at": {
+          "nullable": true,
+          "type": "TIMESTAMP",
+          "default": null
+        },
+        "created_at": {
+          "nullable": false,
+          "type": "TIMESTAMP",
+          "default": "now()"
+        },
+        "updated_at": {
+          "nullable": false,
+          "type": "TIMESTAMP",
+          "default": "now()"
+        }
+      },
+      "messages": {
+        "id": {
+          "nullable": false,
+          "type": "UUID",
+          "default": null
+        },
+        "campaign_id": {
+          "nullable": true,
+          "type": "UUID",
+          "default": null
+        },
+        "lead_id": {
+          "nullable": false,
+          "type": "UUID",
+          "default": null
+        },
+        "comment_id": {
+          "nullable": true,
+          "type": "UUID",
+          "default": null
+        },
+        "facebook_campaign_id": {
+          "nullable": true,
+          "type": "UUID",
+          "default": null
+        },
+        "facebook_comment_id": {
+          "nullable": true,
+          "type": "UUID",
+          "default": null
+        },
+        "conversation_id": {
+          "nullable": true,
+          "type": "UUID",
+          "default": null
+        },
+        "direction": {
+          "nullable": false,
+          "type": "VARCHAR(20)",
+          "default": null
+        },
+        "source_media_id": {
+          "nullable": true,
+          "type": "VARCHAR(255)",
+          "default": null
+        },
+        "source_media_type": {
+          "nullable": true,
+          "type": "VARCHAR(50)",
+          "default": null
+        },
+        "source_media_label": {
+          "nullable": true,
+          "type": "VARCHAR(255)",
+          "default": null
+        },
+        "rendered_body": {
+          "nullable": true,
+          "type": "TEXT",
+          "default": null
+        },
+        "content": {
+          "nullable": true,
+          "type": "TEXT",
+          "default": null
+        },
+        "message_type": {
+          "nullable": false,
+          "type": "VARCHAR(50)",
+          "default": null
+        },
+        "status": {
+          "nullable": false,
+          "type": "VARCHAR(50)",
+          "default": null
+        },
+        "provider_message_id": {
+          "nullable": true,
+          "type": "VARCHAR(255)",
+          "default": null
+        },
+        "error_code": {
+          "nullable": true,
+          "type": "VARCHAR(100)",
+          "default": null
+        },
+        "error_message": {
+          "nullable": true,
+          "type": "TEXT",
+          "default": null
+        },
+        "retryable": {
+          "nullable": false,
+          "type": "BOOLEAN",
+          "default": null
+        },
+        "retry_count": {
+          "nullable": false,
+          "type": "INTEGER",
+          "default": null
+        },
+        "created_at": {
+          "nullable": false,
+          "type": "TIMESTAMP",
+          "default": "now()"
+        },
+        "updated_at": {
+          "nullable": false,
+          "type": "TIMESTAMP",
+          "default": "now()"
+        }
+      },
+      "processed_webhook_events": {
+        "id": {
+          "nullable": false,
+          "type": "UUID",
+          "default": null
+        },
+        "provider": {
+          "nullable": false,
+          "type": "VARCHAR(50)",
+          "default": "'meta'::character varying"
+        },
+        "event_key": {
+          "nullable": false,
+          "type": "VARCHAR(500)",
+          "default": null
+        },
+        "event_type": {
+          "nullable": true,
+          "type": "VARCHAR(100)",
+          "default": null
+        },
+        "received_at": {
+          "nullable": false,
+          "type": "TIMESTAMP",
+          "default": "now()"
+        },
+        "metadata": {
+          "nullable": true,
+          "type": "JSONB",
+          "default": null
+        }
+      }
+    }
+  },
+  "constraint_probes": [
+    {
+      "statement": "UPDATE whatsapp_accounts SET outreach_daily_cap=0",
+      "result": "rejected: 23514"
+    },
+    {
+      "statement": "UPDATE whatsapp_contacts SET wa_id='invalid'",
+      "result": "rejected: 23514"
+    },
+    {
+      "statement": "UPDATE whatsapp_contacts SET marketing_consent='invalid'",
+      "result": "rejected: 23514"
+    },
+    {
+      "statement": "UPDATE whatsapp_accounts SET outreach_daily_cap=0",
+      "result": "rejected: 23514"
+    },
+    {
+      "statement": "UPDATE whatsapp_contacts SET wa_id='invalid'",
+      "result": "rejected: 23514"
+    },
+    {
+      "statement": "UPDATE whatsapp_contacts SET marketing_consent='invalid'",
+      "result": "rejected: 23514"
+    }
+  ],
+  "first_upgrade_contacts": 100000,
+  "after_first_upgrade": {
+    "row_counts": {
+      "audit_logs": 0,
+      "webhook_events": 0,
+      "webhook_health": 0,
+      "workspaces": 1,
+      "facebook_pages": 0,
+      "instagram_accounts": 0,
+      "users": 0,
+      "user_workspace_memberships": 0,
+      "campaigns": 0,
+      "comments": 0,
+      "facebook_campaigns": 0,
+      "facebook_comments": 0,
+      "facebook_tokens": 0,
+      "meta_tokens": 0,
+      "whatsapp_tokens": 0,
+      "campaign_keywords": 0,
+      "facebook_campaign_keywords": 0,
+      "facebook_user_cooldowns": 0,
+      "leads": 100000,
+      "user_cooldowns": 0,
+      "automation_logs": 0,
+      "conversations": 0,
+      "processed_webhook_events": 0,
+      "messages": 300000,
+      "whatsapp_contacts": 100000,
+      "whatsapp_campaign_recipients": 0,
+      "whatsapp_templates": 0,
+      "whatsapp_campaigns": 0,
+      "whatsapp_accounts": 100,
+      "whatsapp_consent_events": 0
+    },
+    "constraints": {
+      "alembic_version:alembic_version_pkc": "PRIMARY KEY (version_num)",
+      "audit_logs:audit_logs_pkey": "PRIMARY KEY (id)",
+      "users:users_pkey": "PRIMARY KEY (id)",
+      "webhook_events:webhook_events_pkey": "PRIMARY KEY (id)",
+      "webhook_events:uq_webhook_event_provider_external": "UNIQUE (provider, external_event_id)",
+      "webhook_health:webhook_health_pkey": "PRIMARY KEY (id)",
+      "workspaces:workspaces_pkey": "PRIMARY KEY (id)",
+      "facebook_pages:facebook_pages_pkey": "PRIMARY KEY (id)",
+      "facebook_pages:facebook_pages_workspace_id_fkey": "FOREIGN KEY (workspace_id) REFERENCES workspaces(id)",
+      "instagram_accounts:instagram_accounts_pkey": "PRIMARY KEY (id)",
+      "instagram_accounts:instagram_accounts_workspace_id_fkey": "FOREIGN KEY (workspace_id) REFERENCES workspaces(id)",
+      "user_workspace_memberships:user_workspace_memberships_pkey": "PRIMARY KEY (id)",
+      "user_workspace_memberships:uq_user_workspace_membership": "UNIQUE (user_id, workspace_id)",
+      "user_workspace_memberships:user_workspace_memberships_user_id_fkey": "FOREIGN KEY (user_id) REFERENCES users(id)",
+      "user_workspace_memberships:user_workspace_memberships_workspace_id_fkey": "FOREIGN KEY (workspace_id) REFERENCES workspaces(id)",
+      "whatsapp_accounts:whatsapp_accounts_pkey": "PRIMARY KEY (id)",
+      "whatsapp_accounts:whatsapp_accounts_workspace_id_fkey": "FOREIGN KEY (workspace_id) REFERENCES workspaces(id)",
+      "campaigns:campaigns_pkey": "PRIMARY KEY (id)",
+      "campaigns:campaigns_workspace_id_fkey": "FOREIGN KEY (workspace_id) REFERENCES workspaces(id)",
+      "campaigns:campaigns_instagram_account_id_fkey": "FOREIGN KEY (instagram_account_id) REFERENCES instagram_accounts(id)",
+      "comments:comments_pkey": "PRIMARY KEY (id)",
+      "comments:comments_instagram_account_id_fkey": "FOREIGN KEY (instagram_account_id) REFERENCES instagram_accounts(id)",
+      "facebook_campaigns:facebook_campaigns_pkey": "PRIMARY KEY (id)",
+      "facebook_campaigns:facebook_campaigns_workspace_id_fkey": "FOREIGN KEY (workspace_id) REFERENCES workspaces(id)",
+      "facebook_campaigns:facebook_campaigns_facebook_page_id_fkey": "FOREIGN KEY (facebook_page_id) REFERENCES facebook_pages(id)",
+      "facebook_comments:facebook_comments_pkey": "PRIMARY KEY (id)",
+      "facebook_comments:facebook_comments_facebook_page_id_fkey": "FOREIGN KEY (facebook_page_id) REFERENCES facebook_pages(id)",
+      "facebook_tokens:facebook_tokens_pkey": "PRIMARY KEY (id)",
+      "facebook_tokens:facebook_tokens_facebook_page_id_fkey": "FOREIGN KEY (facebook_page_id) REFERENCES facebook_pages(id)",
+      "meta_tokens:meta_tokens_pkey": "PRIMARY KEY (id)",
+      "meta_tokens:meta_tokens_instagram_account_id_fkey": "FOREIGN KEY (instagram_account_id) REFERENCES instagram_accounts(id)",
+      "whatsapp_contacts:pk_whatsapp_contacts": "PRIMARY KEY (id)",
+      "whatsapp_consent_events:pk_whatsapp_consent_events": "PRIMARY KEY (id)",
+      "whatsapp_templates:pk_whatsapp_templates": "PRIMARY KEY (id)",
+      "whatsapp_campaigns:pk_whatsapp_campaigns": "PRIMARY KEY (id)",
+      "whatsapp_campaign_recipients:pk_whatsapp_campaign_recipients": "PRIMARY KEY (id)",
+      "whatsapp_tokens:whatsapp_tokens_pkey": "PRIMARY KEY (id)",
+      "whatsapp_tokens:whatsapp_tokens_whatsapp_account_id_fkey": "FOREIGN KEY (whatsapp_account_id) REFERENCES whatsapp_accounts(id)",
+      "campaign_keywords:campaign_keywords_pkey": "PRIMARY KEY (id)",
+      "campaign_keywords:uq_campaign_keyword": "UNIQUE (campaign_id, normalized_keyword)",
+      "campaign_keywords:campaign_keywords_campaign_id_fkey": "FOREIGN KEY (campaign_id) REFERENCES campaigns(id)",
+      "facebook_campaign_keywords:facebook_campaign_keywords_pkey": "PRIMARY KEY (id)",
+      "facebook_campaign_keywords:uq_facebook_campaign_keyword": "UNIQUE (campaign_id, normalized_keyword)",
+      "facebook_campaign_keywords:facebook_campaign_keywords_campaign_id_fkey": "FOREIGN KEY (campaign_id) REFERENCES facebook_campaigns(id)",
+      "facebook_user_cooldowns:facebook_user_cooldowns_pkey": "PRIMARY KEY (id)",
+      "facebook_user_cooldowns:uq_facebook_user_cooldown_campaign_user": "UNIQUE (campaign_id, facebook_user_id)",
+      "facebook_user_cooldowns:facebook_user_cooldowns_campaign_id_fkey": "FOREIGN KEY (campaign_id) REFERENCES facebook_campaigns(id)",
+      "leads:ck_leads_platform_account_fk": "CHECK (((((platform)::text = 'instagram'::text) AND (instagram_account_id IS NOT NULL) AND (whatsapp_account_id IS NULL) AND (facebook_page_id IS NULL)) OR (((platform)::text = 'whatsapp'::text) AND (whatsapp_account_id IS NOT NULL) AND (instagram_account_id IS NULL) AND (facebook_page_id IS NULL)) OR (((platform)::text = 'facebook'::text) AND (facebook_page_id IS NOT NULL) AND (instagram_account_id IS NULL) AND (whatsapp_account_id IS NULL))))",
+      "leads:leads_pkey": "PRIMARY KEY (id)",
+      "leads:uq_lead_workspace_instagram_user": "UNIQUE (workspace_id, instagram_account_id, ig_user_id)",
+      "leads:uq_lead_workspace_whatsapp_user": "UNIQUE (workspace_id, whatsapp_account_id, ig_user_id)",
+      "leads:uq_lead_workspace_facebook_user": "UNIQUE (workspace_id, facebook_page_id, ig_user_id)",
+      "leads:leads_workspace_id_fkey": "FOREIGN KEY (workspace_id) REFERENCES workspaces(id)",
+      "leads:leads_instagram_account_id_fkey": "FOREIGN KEY (instagram_account_id) REFERENCES instagram_accounts(id)",
+      "leads:fk_leads_whatsapp_account_id": "FOREIGN KEY (whatsapp_account_id) REFERENCES whatsapp_accounts(id)",
+      "leads:fk_leads_facebook_page_id": "FOREIGN KEY (facebook_page_id) REFERENCES facebook_pages(id)",
+      "leads:leads_source_campaign_id_fkey": "FOREIGN KEY (source_campaign_id) REFERENCES campaigns(id)",
+      "leads:leads_source_comment_id_fkey": "FOREIGN KEY (source_comment_id) REFERENCES comments(id)",
+      "user_cooldowns:user_cooldowns_pkey": "PRIMARY KEY (id)",
+      "user_cooldowns:uq_user_cooldown_campaign_user": "UNIQUE (campaign_id, instagram_user_id)",
+      "user_cooldowns:user_cooldowns_campaign_id_fkey": "FOREIGN KEY (campaign_id) REFERENCES campaigns(id)",
+      "whatsapp_contacts:fk_whatsapp_contacts_workspace_id": "FOREIGN KEY (workspace_id) REFERENCES workspaces(id)",
+      "whatsapp_contacts:fk_whatsapp_contacts_whatsapp_account_id": "FOREIGN KEY (whatsapp_account_id) REFERENCES whatsapp_accounts(id)",
+      "whatsapp_contacts:fk_whatsapp_contacts_lead_id": "FOREIGN KEY (lead_id) REFERENCES leads(id) ON DELETE SET NULL",
+      "whatsapp_contacts:uq_whatsapp_contacts_account_wa_id": "UNIQUE (whatsapp_account_id, wa_id)",
+      "automation_logs:automation_logs_pkey": "PRIMARY KEY (id)",
+      "automation_logs:automation_logs_campaign_id_fkey": "FOREIGN KEY (campaign_id) REFERENCES campaigns(id)",
+      "automation_logs:automation_logs_lead_id_fkey": "FOREIGN KEY (lead_id) REFERENCES leads(id)",
+      "automation_logs:automation_logs_instagram_account_id_fkey": "FOREIGN KEY (instagram_account_id) REFERENCES instagram_accounts(id)",
+      "automation_logs:fk_automation_logs_whatsapp_account_id": "FOREIGN KEY (whatsapp_account_id) REFERENCES whatsapp_accounts(id)",
+      "automation_logs:fk_automation_logs_facebook_page_id": "FOREIGN KEY (facebook_page_id) REFERENCES facebook_pages(id)",
+      "conversations:ck_conversations_platform_account_fk": "CHECK (((((platform)::text = 'instagram'::text) AND (instagram_account_id IS NOT NULL) AND (whatsapp_account_id IS NULL) AND (facebook_page_id IS NULL)) OR (((platform)::text = 'whatsapp'::text) AND (whatsapp_account_id IS NOT NULL) AND (instagram_account_id IS NULL) AND (facebook_page_id IS NULL)) OR (((platform)::text = 'facebook'::text) AND (facebook_page_id IS NOT NULL) AND (instagram_account_id IS NULL) AND (whatsapp_account_id IS NULL))))",
+      "conversations:conversations_pkey": "PRIMARY KEY (id)",
+      "conversations:uq_conversation_lead_campaign": "UNIQUE (lead_id, campaign_id)",
+      "conversations:uq_conversation_lead_facebook_campaign": "UNIQUE (lead_id, facebook_campaign_id)",
+      "conversations:conversations_workspace_id_fkey": "FOREIGN KEY (workspace_id) REFERENCES workspaces(id)",
+      "conversations:conversations_lead_id_fkey": "FOREIGN KEY (lead_id) REFERENCES leads(id)",
+      "conversations:conversations_campaign_id_fkey": "FOREIGN KEY (campaign_id) REFERENCES campaigns(id)",
+      "conversations:fk_conversations_facebook_campaign_id": "FOREIGN KEY (facebook_campaign_id) REFERENCES facebook_campaigns(id)",
+      "conversations:conversations_instagram_account_id_fkey": "FOREIGN KEY (instagram_account_id) REFERENCES instagram_accounts(id)",
+      "conversations:fk_conversations_whatsapp_account_id": "FOREIGN KEY (whatsapp_account_id) REFERENCES whatsapp_accounts(id)",
+      "conversations:fk_conversations_facebook_page_id": "FOREIGN KEY (facebook_page_id) REFERENCES facebook_pages(id)",
+      "whatsapp_accounts:ck_whatsapp_accounts_opt_out_keywords_array": "CHECK (((opt_out_keywords IS NULL) OR (jsonb_typeof(opt_out_keywords) = 'array'::text)))",
+      "whatsapp_accounts:ck_whatsapp_accounts_opt_in_keywords_array": "CHECK (((opt_in_keywords IS NULL) OR (jsonb_typeof(opt_in_keywords) = 'array'::text)))",
+      "whatsapp_accounts:ck_whatsapp_accounts_outreach_daily_cap": "CHECK ((outreach_daily_cap > 0))",
+      "whatsapp_campaign_recipients:ck_whatsapp_campaign_recipients_status": "CHECK (((status)::text = ANY ((ARRAY['queued'::character varying, 'pending'::character varying, 'sending'::character varying, 'sent'::character varying, 'delivered'::character varying, 'read'::character varying, 'failed'::character varying, 'skipped_no_consent'::character varying, 'skipped_opted_out'::character varying, 'skipped_not_eligible'::character varying])::text[])))",
+      "messages:messages_pkey": "PRIMARY KEY (id)",
+      "messages:uq_message_campaign_comment_type": "UNIQUE (campaign_id, comment_id, message_type)",
+      "messages:uq_message_facebook_campaign_comment_type": "UNIQUE (facebook_campaign_id, facebook_comment_id, message_type)",
+      "messages:messages_campaign_id_fkey": "FOREIGN KEY (campaign_id) REFERENCES campaigns(id)",
+      "messages:messages_lead_id_fkey": "FOREIGN KEY (lead_id) REFERENCES leads(id)",
+      "messages:messages_comment_id_fkey": "FOREIGN KEY (comment_id) REFERENCES comments(id)",
+      "messages:fk_messages_facebook_campaign_id": "FOREIGN KEY (facebook_campaign_id) REFERENCES facebook_campaigns(id)",
+      "messages:fk_messages_facebook_comment_id": "FOREIGN KEY (facebook_comment_id) REFERENCES facebook_comments(id)",
+      "messages:messages_conversation_id_fkey": "FOREIGN KEY (conversation_id) REFERENCES conversations(id)",
+      "processed_webhook_events:processed_webhook_events_pkey": "PRIMARY KEY (id)",
+      "processed_webhook_events:uq_processed_webhook_provider_key": "UNIQUE (provider, event_key)",
+      "whatsapp_contacts:ck_whatsapp_contacts_marketing_consent": "CHECK (((marketing_consent)::text = ANY ((ARRAY['unknown'::character varying, 'opted_in'::character varying, 'opted_out'::character varying])::text[])))",
+      "whatsapp_contacts:ck_whatsapp_contacts_consent_source": "CHECK (((consent_source IS NULL) OR ((consent_source)::text = ANY ((ARRAY['web_form'::character varying, 'click_to_whatsapp'::character varying, 'inbound_keyword'::character varying, 'in_store'::character varying, 'imported_attested'::character varying, 'manual'::character varying])::text[]))))",
+      "whatsapp_contacts:ck_whatsapp_contacts_wa_id": "CHECK (((wa_id)::text ~ '^[0-9]{6,20}$'::text))",
+      "whatsapp_consent_events:fk_whatsapp_consent_events_contact_id": "FOREIGN KEY (contact_id) REFERENCES whatsapp_contacts(id)",
+      "whatsapp_consent_events:fk_whatsapp_consent_events_workspace_id": "FOREIGN KEY (workspace_id) REFERENCES workspaces(id)",
+      "whatsapp_consent_events:fk_whatsapp_consent_events_actor_user_id": "FOREIGN KEY (actor_user_id) REFERENCES users(id)",
+      "whatsapp_templates:fk_whatsapp_templates_workspace_id": "FOREIGN KEY (workspace_id) REFERENCES workspaces(id)",
+      "whatsapp_templates:fk_whatsapp_templates_whatsapp_account_id": "FOREIGN KEY (whatsapp_account_id) REFERENCES whatsapp_accounts(id)",
+      "whatsapp_templates:uq_whatsapp_templates_account_name_language": "UNIQUE (whatsapp_account_id, name, language)",
+      "whatsapp_templates:ck_whatsapp_templates_category": "CHECK (((category)::text = ANY ((ARRAY['marketing'::character varying, 'utility'::character varying, 'authentication'::character varying])::text[])))",
+      "whatsapp_campaigns:fk_whatsapp_campaigns_workspace_id": "FOREIGN KEY (workspace_id) REFERENCES workspaces(id)",
+      "whatsapp_campaigns:fk_whatsapp_campaigns_whatsapp_account_id": "FOREIGN KEY (whatsapp_account_id) REFERENCES whatsapp_accounts(id)",
+      "whatsapp_campaigns:fk_whatsapp_campaigns_template_id": "FOREIGN KEY (template_id) REFERENCES whatsapp_templates(id)",
+      "whatsapp_campaigns:fk_whatsapp_campaigns_created_by": "FOREIGN KEY (created_by) REFERENCES users(id)",
+      "whatsapp_campaigns:ck_whatsapp_campaigns_status": "CHECK (((status)::text = ANY ((ARRAY['draft'::character varying, 'scheduled'::character varying, 'running'::character varying, 'paused'::character varying, 'completed'::character varying, 'cancelled'::character varying, 'failed'::character varying])::text[])))",
+      "whatsapp_campaign_recipients:fk_whatsapp_campaign_recipients_campaign_id": "FOREIGN KEY (campaign_id) REFERENCES whatsapp_campaigns(id) ON DELETE CASCADE",
+      "whatsapp_campaign_recipients:fk_whatsapp_campaign_recipients_contact_id": "FOREIGN KEY (contact_id) REFERENCES whatsapp_contacts(id)",
+      "whatsapp_campaign_recipients:fk_whatsapp_campaign_recipients_message_id": "FOREIGN KEY (message_id) REFERENCES messages(id)",
+      "whatsapp_campaign_recipients:uq_whatsapp_campaign_recipients_campaign_contact": "UNIQUE (campaign_id, contact_id)",
+      "whatsapp_accounts:ck_whatsapp_accounts_quality_rating": "CHECK (((quality_rating IS NULL) OR ((quality_rating)::text = ANY ((ARRAY['GREEN'::character varying, 'YELLOW'::character varying, 'RED'::character varying])::text[]))))",
+      "messages:fk_messages_whatsapp_campaign_id": "FOREIGN KEY (whatsapp_campaign_id) REFERENCES whatsapp_campaigns(id)",
+      "messages:fk_messages_whatsapp_template_id": "FOREIGN KEY (whatsapp_template_id) REFERENCES whatsapp_templates(id)",
+      "whatsapp_templates:ck_whatsapp_templates_status": "CHECK (((status)::text = ANY ((ARRAY['draft'::character varying, 'pending'::character varying, 'approved'::character varying, 'rejected'::character varying, 'paused'::character varying, 'disabled'::character varying, 'deleted'::character varying])::text[])))",
+      "whatsapp_consent_events:ck_whatsapp_consent_events_event_type": "CHECK (((event_type)::text = ANY ((ARRAY['opt_in'::character varying, 'opt_out'::character varying, 'import'::character varying, 'revoke'::character varying, 'resubscribe'::character varying, 'opt_in_unverified'::character varying])::text[])))"
+    },
+    "columns": {
+      "audit_logs": {
+        "id": {
+          "nullable": false,
+          "type": "UUID",
+          "default": null
+        },
+        "actor_user_id": {
+          "nullable": true,
+          "type": "UUID",
+          "default": null
+        },
+        "actor_email": {
+          "nullable": true,
+          "type": "VARCHAR(255)",
+          "default": null
+        },
+        "action": {
+          "nullable": false,
+          "type": "VARCHAR(100)",
+          "default": null
+        },
+        "entity_type": {
+          "nullable": true,
+          "type": "VARCHAR(100)",
+          "default": null
+        },
+        "entity_id": {
+          "nullable": true,
+          "type": "UUID",
+          "default": null
+        },
+        "entity_name": {
+          "nullable": true,
+          "type": "VARCHAR(255)",
+          "default": null
+        },
+        "severity": {
+          "nullable": false,
+          "type": "VARCHAR(50)",
+          "default": null
+        },
+        "message": {
+          "nullable": false,
+          "type": "TEXT",
+          "default": null
+        },
+        "metadata": {
+          "nullable": true,
+          "type": "JSONB",
+          "default": null
+        },
+        "created_at": {
+          "nullable": false,
+          "type": "TIMESTAMP",
+          "default": "now()"
+        }
+      },
+      "webhook_events": {
+        "id": {
+          "nullable": false,
+          "type": "UUID",
+          "default": null
+        },
+        "provider": {
+          "nullable": false,
+          "type": "VARCHAR(50)",
+          "default": null
+        },
+        "external_event_id": {
+          "nullable": false,
+          "type": "VARCHAR(255)",
+          "default": null
+        },
+        "event_type": {
+          "nullable": true,
+          "type": "VARCHAR(100)",
+          "default": null
+        },
+        "payload": {
+          "nullable": true,
+          "type": "JSONB",
+          "default": null
+        },
+        "processing_status": {
+          "nullable": false,
+          "type": "VARCHAR(50)",
+          "default": null
+        },
+        "created_at": {
+          "nullable": false,
+          "type": "TIMESTAMP",
+          "default": "now()"
+        },
+        "updated_at": {
+          "nullable": false,
+          "type": "TIMESTAMP",
+          "default": "now()"
+        }
+      },
+      "webhook_health": {
+        "id": {
+          "nullable": false,
+          "type": "UUID",
+          "default": null
+        },
+        "provider": {
+          "nullable": false,
+          "type": "VARCHAR(50)",
+          "default": null
+        },
+        "last_webhook_at": {
+          "nullable": true,
+          "type": "TIMESTAMP",
+          "default": null
+        },
+        "last_success_at": {
+          "nullable": true,
+          "type": "TIMESTAMP",
+          "default": null
+        },
+        "consecutive_failures": {
+          "nullable": false,
+          "type": "INTEGER",
+          "default": null
+        },
+        "created_at": {
+          "nullable": false,
+          "type": "TIMESTAMP",
+          "default": "now()"
+        },
+        "updated_at": {
+          "nullable": false,
+          "type": "TIMESTAMP",
+          "default": "now()"
+        }
+      },
+      "workspaces": {
+        "id": {
+          "nullable": false,
+          "type": "UUID",
+          "default": null
+        },
+        "name": {
+          "nullable": false,
+          "type": "VARCHAR(255)",
+          "default": null
+        },
+        "slug": {
+          "nullable": false,
+          "type": "VARCHAR(255)",
+          "default": null
+        },
+        "created_at": {
+          "nullable": false,
+          "type": "TIMESTAMP",
+          "default": "now()"
+        },
+        "updated_at": {
+          "nullable": false,
+          "type": "TIMESTAMP",
+          "default": "now()"
+        }
+      },
+      "facebook_pages": {
+        "id": {
+          "nullable": false,
+          "type": "UUID",
+          "default": null
+        },
+        "workspace_id": {
+          "nullable": false,
+          "type": "UUID",
+          "default": null
+        },
+        "page_id": {
+          "nullable": false,
+          "type": "VARCHAR(255)",
+          "default": null
+        },
+        "page_name": {
+          "nullable": true,
+          "type": "VARCHAR(255)",
+          "default": null
+        },
+        "status": {
+          "nullable": false,
+          "type": "VARCHAR(50)",
+          "default": null
+        },
+        "business_vertical": {
+          "nullable": false,
+          "type": "VARCHAR(50)",
+          "default": null
+        },
+        "ai_enabled": {
+          "nullable": false,
+          "type": "BOOLEAN",
+          "default": null
+        },
+        "ai_cold_dm_enabled": {
+          "nullable": false,
+          "type": "BOOLEAN",
+          "default": "false"
+        },
+        "ai_business_profile": {
+          "nullable": true,
+          "type": "TEXT",
+          "default": null
+        },
+        "ai_tone_instructions": {
+          "nullable": true,
+          "type": "TEXT",
+          "default": null
+        },
+        "ai_daily_message_cap": {
+          "nullable": false,
+          "type": "INTEGER",
+          "default": null
+        },
+        "ai_handoff_after_turns": {
+          "nullable": false,
+          "type": "INTEGER",
+          "default": "8"
+        },
+        "ai_messages_sent_today": {
+          "nullable": false,
+          "type": "INTEGER",
+          "default": null
+        },
+        "ai_budget_reset_at": {
+          "nullable": true,
+          "type": "TIMESTAMP",
+          "default": null
+        },
+        "created_at": {
+          "nullable": false,
+          "type": "TIMESTAMP",
+          "default": "now()"
+        },
+        "updated_at": {
+          "nullable": false,
+          "type": "TIMESTAMP",
+          "default": "now()"
+        }
+      },
+      "instagram_accounts": {
+        "id": {
+          "nullable": false,
+          "type": "UUID",
+          "default": null
+        },
+        "workspace_id": {
+          "nullable": false,
+          "type": "UUID",
+          "default": null
+        },
+        "ig_user_id": {
+          "nullable": false,
+          "type": "VARCHAR(255)",
+          "default": null
+        },
+        "ig_username": {
+          "nullable": true,
+          "type": "VARCHAR(255)",
+          "default": null
+        },
+        "status": {
+          "nullable": false,
+          "type": "VARCHAR(50)",
+          "default": null
+        },
+        "business_vertical": {
+          "nullable": false,
+          "type": "VARCHAR(50)",
+          "default": null
+        },
+        "ai_enabled": {
+          "nullable": false,
+          "type": "BOOLEAN",
+          "default": null
+        },
+        "ai_cold_dm_enabled": {
+          "nullable": false,
+          "type": "BOOLEAN",
+          "default": "false"
+        },
+        "ai_business_profile": {
+          "nullable": true,
+          "type": "TEXT",
+          "default": null
+        },
+        "ai_tone_instructions": {
+          "nullable": true,
+          "type": "TEXT",
+          "default": null
+        },
+        "ai_daily_message_cap": {
+          "nullable": false,
+          "type": "INTEGER",
+          "default": null
+        },
+        "ai_handoff_after_turns": {
+          "nullable": false,
+          "type": "INTEGER",
+          "default": "8"
+        },
+        "ai_messages_sent_today": {
+          "nullable": false,
+          "type": "INTEGER",
+          "default": null
+        },
+        "ai_budget_reset_at": {
+          "nullable": true,
+          "type": "TIMESTAMP",
+          "default": null
+        },
+        "created_at": {
+          "nullable": false,
+          "type": "TIMESTAMP",
+          "default": "now()"
+        },
+        "updated_at": {
+          "nullable": false,
+          "type": "TIMESTAMP",
+          "default": "now()"
+        }
+      },
+      "users": {
+        "id": {
+          "nullable": false,
+          "type": "UUID",
+          "default": null
+        },
+        "email": {
+          "nullable": false,
+          "type": "VARCHAR(255)",
+          "default": null
+        },
+        "name": {
+          "nullable": true,
+          "type": "VARCHAR(255)",
+          "default": null
+        },
+        "password_hash": {
+          "nullable": false,
+          "type": "VARCHAR(255)",
+          "default": null
+        },
+        "role": {
+          "nullable": false,
+          "type": "VARCHAR(50)",
+          "default": "'admin'::character varying"
+        },
+        "is_active": {
+          "nullable": false,
+          "type": "BOOLEAN",
+          "default": null
+        },
+        "created_at": {
+          "nullable": false,
+          "type": "TIMESTAMP",
+          "default": "now()"
+        },
+        "updated_at": {
+          "nullable": false,
+          "type": "TIMESTAMP",
+          "default": "now()"
+        }
+      },
+      "user_workspace_memberships": {
+        "id": {
+          "nullable": false,
+          "type": "UUID",
+          "default": null
+        },
+        "user_id": {
+          "nullable": false,
+          "type": "UUID",
+          "default": null
+        },
+        "workspace_id": {
+          "nullable": false,
+          "type": "UUID",
+          "default": null
+        },
+        "role": {
+          "nullable": false,
+          "type": "VARCHAR(50)",
+          "default": "'operator'::character varying"
+        },
+        "created_at": {
+          "nullable": false,
+          "type": "TIMESTAMP",
+          "default": "now()"
+        },
+        "updated_at": {
+          "nullable": false,
+          "type": "TIMESTAMP",
+          "default": "now()"
+        }
+      },
+      "campaigns": {
+        "id": {
+          "nullable": false,
+          "type": "UUID",
+          "default": null
+        },
+        "workspace_id": {
+          "nullable": false,
+          "type": "UUID",
+          "default": null
+        },
+        "instagram_account_id": {
+          "nullable": false,
+          "type": "UUID",
+          "default": null
+        },
+        "name": {
+          "nullable": false,
+          "type": "VARCHAR(255)",
+          "default": null
+        },
+        "description": {
+          "nullable": true,
+          "type": "TEXT",
+          "default": null
+        },
+        "media_id": {
+          "nullable": true,
+          "type": "VARCHAR(255)",
+          "default": null
+        },
+        "media_url": {
+          "nullable": true,
+          "type": "TEXT",
+          "default": null
+        },
+        "target_scope": {
+          "nullable": false,
+          "type": "VARCHAR(50)",
+          "default": null
+        },
+        "target_media_url": {
+          "nullable": true,
+          "type": "TEXT",
+          "default": null
+        },
+        "target_media_shortcode": {
+          "nullable": true,
+          "type": "VARCHAR(255)",
+          "default": null
+        },
+        "target_media_id": {
+          "nullable": true,
+          "type": "VARCHAR(255)",
+          "default": null
+        },
+        "target_media_type": {
+          "nullable": false,
+          "type": "VARCHAR(50)",
+          "default": null
+        },
+        "target_media_label": {
+          "nullable": true,
+          "type": "VARCHAR(255)",
+          "default": null
+        },
+        "match_type": {
+          "nullable": false,
+          "type": "VARCHAR(50)",
+          "default": null
+        },
+        "message_template": {
+          "nullable": false,
+          "type": "TEXT",
+          "default": null
+        },
+        "link_url": {
+          "nullable": true,
+          "type": "TEXT",
+          "default": null
+        },
+        "cooldown_hours": {
+          "nullable": false,
+          "type": "INTEGER",
+          "default": null
+        },
+        "status": {
+          "nullable": false,
+          "type": "VARCHAR(50)",
+          "default": null
+        },
+        "delivery_mode": {
+          "nullable": false,
+          "type": "VARCHAR(50)",
+          "default": null
+        },
+        "follow_prompt_title": {
+          "nullable": true,
+          "type": "TEXT",
+          "default": null
+        },
+        "follow_prompt_description": {
+          "nullable": true,
+          "type": "TEXT",
+          "default": null
+        },
+        "follow_prompt_profile_url": {
+          "nullable": true,
+          "type": "TEXT",
+          "default": null
+        },
+        "comment_reply_enabled": {
+          "nullable": false,
+          "type": "BOOLEAN",
+          "default": null
+        },
+        "comment_reply_text": {
+          "nullable": true,
+          "type": "TEXT",
+          "default": null
+        },
+        "ai_enabled": {
+          "nullable": false,
+          "type": "BOOLEAN",
+          "default": null
+        },
+        "ai_handoff_after_turns": {
+          "nullable": false,
+          "type": "INTEGER",
+          "default": null
+        },
+        "total_triggers": {
+          "nullable": false,
+          "type": "INTEGER",
+          "default": null
+        },
+        "successful_sends": {
+          "nullable": false,
+          "type": "INTEGER",
+          "default": null
+        },
+        "failed_sends": {
+          "nullable": false,
+          "type": "INTEGER",
+          "default": null
+        },
+        "created_at": {
+          "nullable": false,
+          "type": "TIMESTAMP",
+          "default": "now()"
+        },
+        "updated_at": {
+          "nullable": false,
+          "type": "TIMESTAMP",
+          "default": "now()"
+        }
+      },
+      "comments": {
+        "id": {
+          "nullable": false,
+          "type": "UUID",
+          "default": null
+        },
+        "instagram_account_id": {
+          "nullable": false,
+          "type": "UUID",
+          "default": null
+        },
+        "comment_id": {
+          "nullable": false,
+          "type": "VARCHAR(255)",
+          "default": null
+        },
+        "ig_user_id": {
+          "nullable": true,
+          "type": "VARCHAR(255)",
+          "default": null
+        },
+        "ig_username": {
+          "nullable": true,
+          "type": "VARCHAR(255)",
+          "default": null
+        },
+        "message": {
+          "nullable": true,
+          "type": "TEXT",
+          "default": null
+        },
+        "normalized_text": {
+          "nullable": true,
+          "type": "TEXT",
+          "default": null
+        },
+        "received_at": {
+          "nullable": false,
+          "type": "TIMESTAMP",
+          "default": "now()"
+        },
+        "created_at": {
+          "nullable": false,
+          "type": "TIMESTAMP",
+          "default": "now()"
+        }
+      },
+      "facebook_campaigns": {
+        "id": {
+          "nullable": false,
+          "type": "UUID",
+          "default": null
+        },
+        "workspace_id": {
+          "nullable": false,
+          "type": "UUID",
+          "default": null
+        },
+        "facebook_page_id": {
+          "nullable": false,
+          "type": "UUID",
+          "default": null
+        },
+        "name": {
+          "nullable": false,
+          "type": "VARCHAR(255)",
+          "default": null
+        },
+        "description": {
+          "nullable": true,
+          "type": "TEXT",
+          "default": null
+        },
+        "post_id": {
+          "nullable": true,
+          "type": "VARCHAR(255)",
+          "default": null
+        },
+        "target_scope": {
+          "nullable": false,
+          "type": "VARCHAR(50)",
+          "default": null
+        },
+        "target_post_id": {
+          "nullable": true,
+          "type": "VARCHAR(255)",
+          "default": null
+        },
+        "target_post_label": {
+          "nullable": true,
+          "type": "VARCHAR(255)",
+          "default": null
+        },
+        "match_type": {
+          "nullable": false,
+          "type": "VARCHAR(50)",
+          "default": null
+        },
+        "message_template": {
+          "nullable": false,
+          "type": "TEXT",
+          "default": null
+        },
+        "link_url": {
+          "nullable": true,
+          "type": "TEXT",
+          "default": null
+        },
+        "cooldown_hours": {
+          "nullable": false,
+          "type": "INTEGER",
+          "default": null
+        },
+        "status": {
+          "nullable": false,
+          "type": "VARCHAR(50)",
+          "default": null
+        },
+        "delivery_mode": {
+          "nullable": false,
+          "type": "VARCHAR(50)",
+          "default": null
+        },
+        "comment_reply_enabled": {
+          "nullable": false,
+          "type": "BOOLEAN",
+          "default": null
+        },
+        "comment_reply_text": {
+          "nullable": true,
+          "type": "TEXT",
+          "default": null
+        },
+        "ai_enabled": {
+          "nullable": false,
+          "type": "BOOLEAN",
+          "default": null
+        },
+        "ai_handoff_after_turns": {
+          "nullable": false,
+          "type": "INTEGER",
+          "default": null
+        },
+        "total_triggers": {
+          "nullable": false,
+          "type": "INTEGER",
+          "default": null
+        },
+        "successful_sends": {
+          "nullable": false,
+          "type": "INTEGER",
+          "default": null
+        },
+        "failed_sends": {
+          "nullable": false,
+          "type": "INTEGER",
+          "default": null
+        },
+        "created_at": {
+          "nullable": false,
+          "type": "TIMESTAMP",
+          "default": "now()"
+        },
+        "updated_at": {
+          "nullable": false,
+          "type": "TIMESTAMP",
+          "default": "now()"
+        }
+      },
+      "facebook_comments": {
+        "id": {
+          "nullable": false,
+          "type": "UUID",
+          "default": null
+        },
+        "facebook_page_id": {
+          "nullable": false,
+          "type": "UUID",
+          "default": null
+        },
+        "comment_id": {
+          "nullable": false,
+          "type": "VARCHAR(255)",
+          "default": null
+        },
+        "post_id": {
+          "nullable": true,
+          "type": "VARCHAR(255)",
+          "default": null
+        },
+        "from_id": {
+          "nullable": true,
+          "type": "VARCHAR(255)",
+          "default": null
+        },
+        "from_name": {
+          "nullable": true,
+          "type": "VARCHAR(255)",
+          "default": null
+        },
+        "message": {
+          "nullable": true,
+          "type": "TEXT",
+          "default": null
+        },
+        "normalized_text": {
+          "nullable": true,
+          "type": "TEXT",
+          "default": null
+        },
+        "received_at": {
+          "nullable": false,
+          "type": "TIMESTAMP",
+          "default": "now()"
+        },
+        "created_at": {
+          "nullable": false,
+          "type": "TIMESTAMP",
+          "default": "now()"
+        }
+      },
+      "facebook_tokens": {
+        "id": {
+          "nullable": false,
+          "type": "UUID",
+          "default": null
+        },
+        "facebook_page_id": {
+          "nullable": false,
+          "type": "UUID",
+          "default": null
+        },
+        "access_token": {
+          "nullable": false,
+          "type": "TEXT",
+          "default": null
+        },
+        "token_type": {
+          "nullable": true,
+          "type": "VARCHAR(50)",
+          "default": null
+        },
+        "status": {
+          "nullable": false,
+          "type": "VARCHAR(50)",
+          "default": null
+        },
+        "expires_at": {
+          "nullable": true,
+          "type": "TIMESTAMP",
+          "default": null
+        },
+        "created_at": {
+          "nullable": false,
+          "type": "TIMESTAMP",
+          "default": "now()"
+        },
+        "updated_at": {
+          "nullable": false,
+          "type": "TIMESTAMP",
+          "default": "now()"
+        }
+      },
+      "meta_tokens": {
+        "id": {
+          "nullable": false,
+          "type": "UUID",
+          "default": null
+        },
+        "instagram_account_id": {
+          "nullable": false,
+          "type": "UUID",
+          "default": null
+        },
+        "access_token": {
+          "nullable": false,
+          "type": "TEXT",
+          "default": null
+        },
+        "token_type": {
+          "nullable": true,
+          "type": "VARCHAR(50)",
+          "default": null
+        },
+        "status": {
+          "nullable": false,
+          "type": "VARCHAR(50)",
+          "default": null
+        },
+        "expires_at": {
+          "nullable": true,
+          "type": "TIMESTAMP",
+          "default": null
+        },
+        "created_at": {
+          "nullable": false,
+          "type": "TIMESTAMP",
+          "default": "now()"
+        },
+        "updated_at": {
+          "nullable": false,
+          "type": "TIMESTAMP",
+          "default": "now()"
+        }
+      },
+      "whatsapp_tokens": {
+        "id": {
+          "nullable": false,
+          "type": "UUID",
+          "default": null
+        },
+        "whatsapp_account_id": {
+          "nullable": false,
+          "type": "UUID",
+          "default": null
+        },
+        "access_token": {
+          "nullable": false,
+          "type": "TEXT",
+          "default": null
+        },
+        "token_type": {
+          "nullable": true,
+          "type": "VARCHAR(50)",
+          "default": null
+        },
+        "status": {
+          "nullable": false,
+          "type": "VARCHAR(50)",
+          "default": null
+        },
+        "expires_at": {
+          "nullable": true,
+          "type": "TIMESTAMP",
+          "default": null
+        },
+        "created_at": {
+          "nullable": false,
+          "type": "TIMESTAMP",
+          "default": "now()"
+        },
+        "updated_at": {
+          "nullable": false,
+          "type": "TIMESTAMP",
+          "default": "now()"
+        }
+      },
+      "campaign_keywords": {
+        "id": {
+          "nullable": false,
+          "type": "UUID",
+          "default": null
+        },
+        "campaign_id": {
+          "nullable": false,
+          "type": "UUID",
+          "default": null
+        },
+        "normalized_keyword": {
+          "nullable": false,
+          "type": "VARCHAR(255)",
+          "default": null
+        },
+        "created_at": {
+          "nullable": false,
+          "type": "TIMESTAMP",
+          "default": "now()"
+        }
+      },
+      "facebook_campaign_keywords": {
+        "id": {
+          "nullable": false,
+          "type": "UUID",
+          "default": null
+        },
+        "campaign_id": {
+          "nullable": false,
+          "type": "UUID",
+          "default": null
+        },
+        "normalized_keyword": {
+          "nullable": false,
+          "type": "VARCHAR(255)",
+          "default": null
+        },
+        "created_at": {
+          "nullable": false,
+          "type": "TIMESTAMP",
+          "default": "now()"
+        }
+      },
+      "facebook_user_cooldowns": {
+        "id": {
+          "nullable": false,
+          "type": "UUID",
+          "default": null
+        },
+        "campaign_id": {
+          "nullable": false,
+          "type": "UUID",
+          "default": null
+        },
+        "facebook_user_id": {
+          "nullable": false,
+          "type": "VARCHAR(255)",
+          "default": null
+        },
+        "expires_at": {
+          "nullable": false,
+          "type": "TIMESTAMP",
+          "default": null
+        },
+        "created_at": {
+          "nullable": false,
+          "type": "TIMESTAMP",
+          "default": "now()"
+        }
+      },
+      "leads": {
+        "id": {
+          "nullable": false,
+          "type": "UUID",
+          "default": null
+        },
+        "workspace_id": {
+          "nullable": false,
+          "type": "UUID",
+          "default": null
+        },
+        "instagram_account_id": {
+          "nullable": true,
+          "type": "UUID",
+          "default": null
+        },
+        "platform": {
+          "nullable": false,
+          "type": "VARCHAR(50)",
+          "default": "'instagram'::character varying"
+        },
+        "whatsapp_account_id": {
+          "nullable": true,
+          "type": "UUID",
+          "default": null
+        },
+        "facebook_page_id": {
+          "nullable": true,
+          "type": "UUID",
+          "default": null
+        },
+        "ig_user_id": {
+          "nullable": false,
+          "type": "VARCHAR(255)",
+          "default": null
+        },
+        "ig_username": {
+          "nullable": true,
+          "type": "VARCHAR(255)",
+          "default": null
+        },
+        "facebook_psid": {
+          "nullable": true,
+          "type": "VARCHAR(255)",
+          "default": null
+        },
+        "lead_source": {
+          "nullable": false,
+          "type": "VARCHAR(50)",
+          "default": "'campaign'::character varying"
+        },
+        "last_seen_at": {
+          "nullable": true,
+          "type": "TIMESTAMP",
+          "default": null
+        },
+        "source_campaign_id": {
+          "nullable": true,
+          "type": "UUID",
+          "default": null
+        },
+        "source_comment_id": {
+          "nullable": true,
+          "type": "UUID",
+          "default": null
+        },
+        "source_media_id": {
+          "nullable": true,
+          "type": "VARCHAR(255)",
+          "default": null
+        },
+        "source_media_type": {
+          "nullable": true,
+          "type": "VARCHAR(50)",
+          "default": null
+        },
+        "source_media_label": {
+          "nullable": true,
+          "type": "VARCHAR(255)",
+          "default": null
+        },
+        "status": {
+          "nullable": false,
+          "type": "VARCHAR(50)",
+          "default": null
+        },
+        "created_at": {
+          "nullable": false,
+          "type": "TIMESTAMP",
+          "default": "now()"
+        }
+      },
+      "user_cooldowns": {
+        "id": {
+          "nullable": false,
+          "type": "UUID",
+          "default": null
+        },
+        "campaign_id": {
+          "nullable": false,
+          "type": "UUID",
+          "default": null
+        },
+        "instagram_user_id": {
+          "nullable": false,
+          "type": "VARCHAR(255)",
+          "default": null
+        },
+        "expires_at": {
+          "nullable": false,
+          "type": "TIMESTAMP",
+          "default": null
+        },
+        "created_at": {
+          "nullable": false,
+          "type": "TIMESTAMP",
+          "default": "now()"
+        }
+      },
+      "automation_logs": {
+        "id": {
+          "nullable": false,
+          "type": "UUID",
+          "default": null
+        },
+        "campaign_id": {
+          "nullable": true,
+          "type": "UUID",
+          "default": null
+        },
+        "lead_id": {
+          "nullable": true,
+          "type": "UUID",
+          "default": null
+        },
+        "instagram_account_id": {
+          "nullable": true,
+          "type": "UUID",
+          "default": null
+        },
+        "whatsapp_account_id": {
+          "nullable": true,
+          "type": "UUID",
+          "default": null
+        },
+        "facebook_page_id": {
+          "nullable": true,
+          "type": "UUID",
+          "default": null
+        },
+        "action": {
+          "nullable": false,
+          "type": "VARCHAR(100)",
+          "default": null
+        },
+        "details": {
+          "nullable": true,
+          "type": "JSONB",
+          "default": null
+        },
+        "created_at": {
+          "nullable": false,
+          "type": "TIMESTAMP",
+          "default": "now()"
+        }
+      },
+      "conversations": {
+        "id": {
+          "nullable": false,
+          "type": "UUID",
+          "default": null
+        },
+        "workspace_id": {
+          "nullable": false,
+          "type": "UUID",
+          "default": null
+        },
+        "lead_id": {
+          "nullable": false,
+          "type": "UUID",
+          "default": null
+        },
+        "campaign_id": {
+          "nullable": true,
+          "type": "UUID",
+          "default": null
+        },
+        "facebook_campaign_id": {
+          "nullable": true,
+          "type": "UUID",
+          "default": null
+        },
+        "instagram_account_id": {
+          "nullable": true,
+          "type": "UUID",
+          "default": null
+        },
+        "platform": {
+          "nullable": false,
+          "type": "VARCHAR(50)",
+          "default": "'instagram'::character varying"
+        },
+        "whatsapp_account_id": {
+          "nullable": true,
+          "type": "UUID",
+          "default": null
+        },
+        "facebook_page_id": {
+          "nullable": true,
+          "type": "UUID",
+          "default": null
+        },
+        "status": {
+          "nullable": false,
+          "type": "VARCHAR(50)",
+          "default": null
+        },
+        "handoff_reason": {
+          "nullable": true,
+          "type": "VARCHAR(50)",
+          "default": null
+        },
+        "turn_count": {
+          "nullable": false,
+          "type": "INTEGER",
+          "default": null
+        },
+        "last_message_at": {
+          "nullable": true,
+          "type": "TIMESTAMP",
+          "default": null
+        },
+        "created_at": {
+          "nullable": false,
+          "type": "TIMESTAMP",
+          "default": "now()"
+        },
+        "updated_at": {
+          "nullable": false,
+          "type": "TIMESTAMP",
+          "default": "now()"
+        }
+      },
+      "processed_webhook_events": {
+        "id": {
+          "nullable": false,
+          "type": "UUID",
+          "default": null
+        },
+        "provider": {
+          "nullable": false,
+          "type": "VARCHAR(50)",
+          "default": "'meta'::character varying"
+        },
+        "event_key": {
+          "nullable": false,
+          "type": "VARCHAR(500)",
+          "default": null
+        },
+        "event_type": {
+          "nullable": true,
+          "type": "VARCHAR(100)",
+          "default": null
+        },
+        "received_at": {
+          "nullable": false,
+          "type": "TIMESTAMP",
+          "default": "now()"
+        },
+        "metadata": {
+          "nullable": true,
+          "type": "JSONB",
+          "default": null
+        }
+      },
+      "messages": {
+        "id": {
+          "nullable": false,
+          "type": "UUID",
+          "default": null
+        },
+        "campaign_id": {
+          "nullable": true,
+          "type": "UUID",
+          "default": null
+        },
+        "lead_id": {
+          "nullable": true,
+          "type": "UUID",
+          "default": null
+        },
+        "comment_id": {
+          "nullable": true,
+          "type": "UUID",
+          "default": null
+        },
+        "facebook_campaign_id": {
+          "nullable": true,
+          "type": "UUID",
+          "default": null
+        },
+        "facebook_comment_id": {
+          "nullable": true,
+          "type": "UUID",
+          "default": null
+        },
+        "conversation_id": {
+          "nullable": true,
+          "type": "UUID",
+          "default": null
+        },
+        "direction": {
+          "nullable": false,
+          "type": "VARCHAR(20)",
+          "default": null
+        },
+        "source_media_id": {
+          "nullable": true,
+          "type": "VARCHAR(255)",
+          "default": null
+        },
+        "source_media_type": {
+          "nullable": true,
+          "type": "VARCHAR(50)",
+          "default": null
+        },
+        "source_media_label": {
+          "nullable": true,
+          "type": "VARCHAR(255)",
+          "default": null
+        },
+        "rendered_body": {
+          "nullable": true,
+          "type": "TEXT",
+          "default": null
+        },
+        "content": {
+          "nullable": true,
+          "type": "TEXT",
+          "default": null
+        },
+        "message_type": {
+          "nullable": false,
+          "type": "VARCHAR(50)",
+          "default": null
+        },
+        "status": {
+          "nullable": false,
+          "type": "VARCHAR(50)",
+          "default": null
+        },
+        "provider_message_id": {
+          "nullable": true,
+          "type": "VARCHAR(255)",
+          "default": null
+        },
+        "error_code": {
+          "nullable": true,
+          "type": "VARCHAR(100)",
+          "default": null
+        },
+        "error_message": {
+          "nullable": true,
+          "type": "TEXT",
+          "default": null
+        },
+        "retryable": {
+          "nullable": false,
+          "type": "BOOLEAN",
+          "default": null
+        },
+        "retry_count": {
+          "nullable": false,
+          "type": "INTEGER",
+          "default": null
+        },
+        "created_at": {
+          "nullable": false,
+          "type": "TIMESTAMP",
+          "default": "now()"
+        },
+        "updated_at": {
+          "nullable": false,
+          "type": "TIMESTAMP",
+          "default": "now()"
+        },
+        "whatsapp_campaign_id": {
+          "nullable": true,
+          "type": "UUID",
+          "default": null
+        },
+        "whatsapp_template_id": {
+          "nullable": true,
+          "type": "UUID",
+          "default": null
+        },
+        "delivered_at": {
+          "nullable": true,
+          "type": "TIMESTAMP",
+          "default": null
+        },
+        "read_at": {
+          "nullable": true,
+          "type": "TIMESTAMP",
+          "default": null
+        }
+      },
+      "whatsapp_contacts": {
+        "id": {
+          "nullable": false,
+          "type": "UUID",
+          "default": "gen_random_uuid()"
+        },
+        "workspace_id": {
+          "nullable": false,
+          "type": "UUID",
+          "default": null
+        },
+        "whatsapp_account_id": {
+          "nullable": false,
+          "type": "UUID",
+          "default": null
+        },
+        "wa_id": {
+          "nullable": false,
+          "type": "VARCHAR(32)",
+          "default": null
+        },
+        "display_name": {
+          "nullable": true,
+          "type": "VARCHAR(255)",
+          "default": null
+        },
+        "lead_id": {
+          "nullable": true,
+          "type": "UUID",
+          "default": null
+        },
+        "marketing_consent": {
+          "nullable": false,
+          "type": "VARCHAR(20)",
+          "default": "'unknown'::character varying"
+        },
+        "consent_source": {
+          "nullable": true,
+          "type": "VARCHAR(40)",
+          "default": null
+        },
+        "consent_at": {
+          "nullable": true,
+          "type": "TIMESTAMP",
+          "default": null
+        },
+        "opted_out_at": {
+          "nullable": true,
+          "type": "TIMESTAMP",
+          "default": null
+        },
+        "last_inbound_at": {
+          "nullable": true,
+          "type": "TIMESTAMP",
+          "default": null
+        },
+        "free_entry_point_expires_at": {
+          "nullable": true,
+          "type": "TIMESTAMP",
+          "default": null
+        },
+        "created_at": {
+          "nullable": false,
+          "type": "TIMESTAMP",
+          "default": "now()"
+        },
+        "updated_at": {
+          "nullable": false,
+          "type": "TIMESTAMP",
+          "default": "now()"
+        }
+      },
+      "whatsapp_campaign_recipients": {
+        "id": {
+          "nullable": false,
+          "type": "UUID",
+          "default": "gen_random_uuid()"
+        },
+        "campaign_id": {
+          "nullable": false,
+          "type": "UUID",
+          "default": null
+        },
+        "contact_id": {
+          "nullable": false,
+          "type": "UUID",
+          "default": null
+        },
+        "status": {
+          "nullable": false,
+          "type": "VARCHAR(30)",
+          "default": "'pending'::character varying"
+        },
+        "message_id": {
+          "nullable": true,
+          "type": "UUID",
+          "default": null
+        },
+        "provider_message_id": {
+          "nullable": true,
+          "type": "VARCHAR(255)",
+          "default": null
+        },
+        "error_code": {
+          "nullable": true,
+          "type": "VARCHAR(100)",
+          "default": null
+        },
+        "error_message": {
+          "nullable": true,
+          "type": "TEXT",
+          "default": null
+        },
+        "sent_at": {
+          "nullable": true,
+          "type": "TIMESTAMP",
+          "default": null
+        }
+      },
+      "whatsapp_templates": {
+        "id": {
+          "nullable": false,
+          "type": "UUID",
+          "default": "gen_random_uuid()"
+        },
+        "workspace_id": {
+          "nullable": false,
+          "type": "UUID",
+          "default": null
+        },
+        "whatsapp_account_id": {
+          "nullable": false,
+          "type": "UUID",
+          "default": null
+        },
+        "meta_template_id": {
+          "nullable": true,
+          "type": "VARCHAR(255)",
+          "default": null
+        },
+        "name": {
+          "nullable": false,
+          "type": "VARCHAR(512)",
+          "default": null
+        },
+        "language": {
+          "nullable": false,
+          "type": "VARCHAR(16)",
+          "default": null
+        },
+        "category": {
+          "nullable": false,
+          "type": "VARCHAR(20)",
+          "default": null
+        },
+        "status": {
+          "nullable": false,
+          "type": "VARCHAR(20)",
+          "default": "'draft'::character varying"
+        },
+        "rejection_reason": {
+          "nullable": true,
+          "type": "TEXT",
+          "default": null
+        },
+        "components": {
+          "nullable": false,
+          "type": "JSONB",
+          "default": "'[]'::jsonb"
+        },
+        "quality_score": {
+          "nullable": true,
+          "type": "VARCHAR(20)",
+          "default": null
+        },
+        "last_synced_at": {
+          "nullable": true,
+          "type": "TIMESTAMP",
+          "default": null
+        },
+        "created_at": {
+          "nullable": false,
+          "type": "TIMESTAMP",
+          "default": "now()"
+        },
+        "updated_at": {
+          "nullable": false,
+          "type": "TIMESTAMP",
+          "default": "now()"
+        }
+      },
+      "whatsapp_campaigns": {
+        "id": {
+          "nullable": false,
+          "type": "UUID",
+          "default": "gen_random_uuid()"
+        },
+        "workspace_id": {
+          "nullable": false,
+          "type": "UUID",
+          "default": null
+        },
+        "whatsapp_account_id": {
+          "nullable": false,
+          "type": "UUID",
+          "default": null
+        },
+        "template_id": {
+          "nullable": false,
+          "type": "UUID",
+          "default": null
+        },
+        "name": {
+          "nullable": false,
+          "type": "VARCHAR(255)",
+          "default": null
+        },
+        "status": {
+          "nullable": false,
+          "type": "VARCHAR(20)",
+          "default": "'draft'::character varying"
+        },
+        "scheduled_at": {
+          "nullable": true,
+          "type": "TIMESTAMP",
+          "default": null
+        },
+        "throttle_per_minute": {
+          "nullable": false,
+          "type": "INTEGER",
+          "default": "30"
+        },
+        "variable_mapping": {
+          "nullable": false,
+          "type": "JSONB",
+          "default": "'{}'::jsonb"
+        },
+        "total_recipients": {
+          "nullable": false,
+          "type": "INTEGER",
+          "default": "0"
+        },
+        "sent_count": {
+          "nullable": false,
+          "type": "INTEGER",
+          "default": "0"
+        },
+        "delivered_count": {
+          "nullable": false,
+          "type": "INTEGER",
+          "default": "0"
+        },
+        "read_count": {
+          "nullable": false,
+          "type": "INTEGER",
+          "default": "0"
+        },
+        "failed_count": {
+          "nullable": false,
+          "type": "INTEGER",
+          "default": "0"
+        },
+        "skipped_count": {
+          "nullable": false,
+          "type": "INTEGER",
+          "default": "0"
+        },
+        "created_by": {
+          "nullable": false,
+          "type": "UUID",
+          "default": null
+        },
+        "created_at": {
+          "nullable": false,
+          "type": "TIMESTAMP",
+          "default": "now()"
+        },
+        "updated_at": {
+          "nullable": false,
+          "type": "TIMESTAMP",
+          "default": "now()"
+        },
+        "completed_at": {
+          "nullable": true,
+          "type": "TIMESTAMP",
+          "default": null
+        }
+      },
+      "whatsapp_accounts": {
+        "id": {
+          "nullable": false,
+          "type": "UUID",
+          "default": null
+        },
+        "workspace_id": {
+          "nullable": false,
+          "type": "UUID",
+          "default": null
+        },
+        "phone_number_id": {
+          "nullable": false,
+          "type": "VARCHAR(255)",
+          "default": null
+        },
+        "display_phone_number": {
+          "nullable": true,
+          "type": "VARCHAR(50)",
+          "default": null
+        },
+        "whatsapp_business_account_id": {
+          "nullable": true,
+          "type": "VARCHAR(255)",
+          "default": null
+        },
+        "status": {
+          "nullable": false,
+          "type": "VARCHAR(50)",
+          "default": null
+        },
+        "business_vertical": {
+          "nullable": false,
+          "type": "VARCHAR(50)",
+          "default": null
+        },
+        "ai_enabled": {
+          "nullable": false,
+          "type": "BOOLEAN",
+          "default": null
+        },
+        "ai_business_profile": {
+          "nullable": true,
+          "type": "TEXT",
+          "default": null
+        },
+        "ai_tone_instructions": {
+          "nullable": true,
+          "type": "TEXT",
+          "default": null
+        },
+        "ai_daily_message_cap": {
+          "nullable": false,
+          "type": "INTEGER",
+          "default": null
+        },
+        "ai_handoff_after_turns": {
+          "nullable": false,
+          "type": "INTEGER",
+          "default": "8"
+        },
+        "ai_messages_sent_today": {
+          "nullable": false,
+          "type": "INTEGER",
+          "default": null
+        },
+        "ai_budget_reset_at": {
+          "nullable": true,
+          "type": "TIMESTAMP",
+          "default": null
+        },
+        "created_at": {
+          "nullable": false,
+          "type": "TIMESTAMP",
+          "default": "now()"
+        },
+        "updated_at": {
+          "nullable": false,
+          "type": "TIMESTAMP",
+          "default": "now()"
+        },
+        "quality_rating": {
+          "nullable": true,
+          "type": "VARCHAR(20)",
+          "default": null
+        },
+        "messaging_limit_tier": {
+          "nullable": true,
+          "type": "VARCHAR(30)",
+          "default": null
+        },
+        "outreach_paused": {
+          "nullable": false,
+          "type": "BOOLEAN",
+          "default": "false"
+        },
+        "outreach_paused_reason": {
+          "nullable": true,
+          "type": "TEXT",
+          "default": null
+        },
+        "health_checked_at": {
+          "nullable": true,
+          "type": "TIMESTAMP",
+          "default": null
+        },
+        "ctwa_counts_as_consent": {
+          "nullable": false,
+          "type": "BOOLEAN",
+          "default": "false"
+        },
+        "transactional_utility_attested": {
+          "nullable": false,
+          "type": "BOOLEAN",
+          "default": "false"
+        },
+        "opt_out_keywords": {
+          "nullable": true,
+          "type": "JSONB",
+          "default": null
+        },
+        "opt_in_keywords": {
+          "nullable": true,
+          "type": "JSONB",
+          "default": null
+        },
+        "outreach_daily_cap": {
+          "nullable": false,
+          "type": "INTEGER",
+          "default": "250"
+        },
+        "opt_in_link_salt": {
+          "nullable": false,
+          "type": "UUID",
+          "default": "gen_random_uuid()"
+        },
+        "outreach_paused_at": {
+          "nullable": true,
+          "type": "TIMESTAMP",
+          "default": null
+        }
+      },
+      "whatsapp_consent_events": {
+        "id": {
+          "nullable": false,
+          "type": "UUID",
+          "default": "gen_random_uuid()"
+        },
+        "contact_id": {
+          "nullable": false,
+          "type": "UUID",
+          "default": null
+        },
+        "workspace_id": {
+          "nullable": false,
+          "type": "UUID",
+          "default": null
+        },
+        "event_type": {
+          "nullable": false,
+          "type": "VARCHAR(20)",
+          "default": null
+        },
+        "source": {
+          "nullable": false,
+          "type": "VARCHAR(40)",
+          "default": null
+        },
+        "evidence": {
+          "nullable": false,
+          "type": "JSONB",
+          "default": "'{}'::jsonb"
+        },
+        "actor_user_id": {
+          "nullable": true,
+          "type": "UUID",
+          "default": null
+        },
+        "created_at": {
+          "nullable": false,
+          "type": "TIMESTAMP",
+          "default": "now()"
+        }
+      }
+    }
+  },
+  "second_upgrade_contacts": 100000,
+  "finished_at": "2026-10-04T02:21:20.027792+00:00"
+}

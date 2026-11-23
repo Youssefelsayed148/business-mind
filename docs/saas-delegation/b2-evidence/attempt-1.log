@@ -1,0 +1,45 @@
+..........F..........................................................    [100%]
+=================================== FAILURES ===================================
+_______________ test_queue_failure_rolls_back_every_local_change _______________
+
+client = <starlette.testclient.TestClient object at 0x7d4eec54a510>
+db_session = <sqlalchemy.orm.session.Session object at 0x7d4eec545a90>
+world = namespace(workspace=<app.models.workspace.Workspace object at 0x7d4eec5b5890>, other=<app.models.workspace.Workspace o...OiJhY2Nlc3MifQ.VjYSCtWk0y3kRaTQ4Lk_4Jz2sDZ48xeMvwh7lTtlwCY', 'X-Workspace-Id': '5825a905-f8a1-4312-8f2c-4b191ea355f0'})
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7d4eec546690>
+
+    def test_queue_failure_rolls_back_every_local_change(client, db_session, world, monkeypatch):
+        target = seed(db_session, world.channels[("a", "instagram")], "instagram")
+        lead_id = target[0].id
+        original = service._erase_webhooks
+        def fail_after_queue(*args, **kwargs):
+            original(*args, **kwargs)
+            raise RuntimeError("synthetic failure after local changes")
+        monkeypatch.setattr(service, "_erase_webhooks", fail_after_queue)
+        assert erase(client, world).status_code == 500
+>       assert db_session.get(Lead, lead_id) is not None
+E       AssertionError: assert None is not None
+E        +  where None = get(Lead, UUID('27daeb73-6c5c-4d2a-bcd6-c6c18ce8d36f'))
+E        +    where get = <sqlalchemy.orm.session.Session object at 0x7d4eec545a90>.get
+
+tests/test_contact_erasure.py:136: AssertionError
+----------------------------- Captured stdout call -----------------------------
+{"timestamp": "2026-10-28 11:39:34,535", "level": "INFO", "logger": "httpx2", "message": "HTTP Request: POST http://testserver/privacy/contact-erasure/instagram/66725192-0cbf-435a-85a1-7aee3a0d1304 \"HTTP/1.1 500 Internal Server Error\""}
+------------------------------ Captured log call -------------------------------
+INFO     httpx2:_client.py:1084 HTTP Request: POST http://testserver/privacy/contact-erasure/instagram/66725192-0cbf-435a-85a1-7aee3a0d1304 "HTTP/1.1 500 Internal Server Error"
+=============================== warnings summary ===============================
+../../../many-t0-20261028/venv/lib/python3.11/site-packages/passlib/utils/__init__.py:854
+  /var/tmp/many-t0-20261028/venv/lib/python3.11/site-packages/passlib/utils/__init__.py:854: DeprecationWarning: 'crypt' is deprecated and slated for removal in Python 3.13
+    from crypt import crypt as _crypt
+
+tests/test_contact_erasure.py::test_queue_failure_rolls_back_every_local_change
+  /var/tmp/many-b2-20261028/source/backend/tests/conftest.py:94: SAWarning: transaction already deassociated from connection
+    transaction.rollback()
+
+tests/test_saas_retention.py::test_api_reports_failed_event_counts
+  /var/tmp/many-t0-20261028/venv/lib/python3.11/site-packages/passlib/handlers/argon2.py:716: DeprecationWarning: Accessing argon2.__version__ is deprecated and will be removed in a future release. Use importlib.metadata directly to query for argon2-cffi's packaging metadata.
+    _argon2_cffi.__version__, max_version)
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ============================
+FAILED tests/test_contact_erasure.py::test_queue_failure_rolls_back_every_local_change
+1 failed, 68 passed, 3 warnings in 3.07s

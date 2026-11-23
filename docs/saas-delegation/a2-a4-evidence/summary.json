@@ -1,0 +1,304 @@
+{
+  "runs": [
+    {
+      "file": "attempt-1.xml",
+      "tests": 65,
+      "passed": 59,
+      "failed": 6,
+      "errors": 0,
+      "skipped": 0
+    },
+    {
+      "file": "attempt-2.xml",
+      "tests": 13,
+      "passed": 11,
+      "failed": 2,
+      "errors": 0,
+      "skipped": 0
+    },
+    {
+      "file": "attempt-3.xml",
+      "tests": 2,
+      "passed": 2,
+      "failed": 0,
+      "errors": 0,
+      "skipped": 0
+    },
+    {
+      "file": "tests.xml",
+      "tests": 4,
+      "passed": 4,
+      "failed": 0,
+      "errors": 0,
+      "skipped": 0
+    }
+  ],
+  "unique_cases": 66,
+  "latest_results": {
+    "tests.test_campaign_routes::test_simulate_returns_rendered_message": {
+      "status": "passed",
+      "evidence": "attempt-1.xml"
+    },
+    "tests.test_campaign_routes::test_simulate_no_match": {
+      "status": "passed",
+      "evidence": "attempt-1.xml"
+    },
+    "tests.test_campaign_routes::test_patch_campaign_persists_ai_enabled": {
+      "status": "passed",
+      "evidence": "attempt-1.xml"
+    },
+    "tests.test_campaigns::test_campaign_create_defaults_to_instant_delivery": {
+      "status": "passed",
+      "evidence": "attempt-1.xml"
+    },
+    "tests.test_campaigns::test_follow_prompt_fields_required_for_follow_prompt_mode": {
+      "status": "passed",
+      "evidence": "attempt-1.xml"
+    },
+    "tests.test_campaigns::test_follow_prompt_invalid_profile_url_rejected": {
+      "status": "passed",
+      "evidence": "attempt-1.xml"
+    },
+    "tests.test_campaigns::test_create_campaign_with_keywords": {
+      "status": "passed",
+      "evidence": "attempt-1.xml"
+    },
+    "tests.test_campaigns::test_duplicate_normalized_keyword_rejected": {
+      "status": "passed",
+      "evidence": "attempt-1.xml"
+    },
+    "tests.test_campaigns::test_invalid_template_variable_rejected": {
+      "status": "passed",
+      "evidence": "attempt-1.xml"
+    },
+    "tests.test_campaigns::test_activate_fails_with_no_keywords": {
+      "status": "passed",
+      "evidence": "attempt-1.xml"
+    },
+    "tests.test_campaigns::test_activate_fails_with_disconnected_account": {
+      "status": "passed",
+      "evidence": "attempt-1.xml"
+    },
+    "tests.test_campaigns::test_contains_match": {
+      "status": "passed",
+      "evidence": "attempt-1.xml"
+    },
+    "tests.test_campaigns::test_any_media_and_specific_media_matching": {
+      "status": "passed",
+      "evidence": "attempt-1.xml"
+    },
+    "tests.test_campaigns::test_exact_match": {
+      "status": "passed",
+      "evidence": "attempt-1.xml"
+    },
+    "tests.test_campaigns::test_starts_with_match": {
+      "status": "passed",
+      "evidence": "attempt-1.xml"
+    },
+    "tests.test_campaigns::test_arabic_normalization_match": {
+      "status": "passed",
+      "evidence": "attempt-1.xml"
+    },
+    "tests.test_campaigns::test_paused_campaign_does_not_match": {
+      "status": "passed",
+      "evidence": "attempt-1.xml"
+    },
+    "tests.test_campaigns::test_draft_campaign_does_not_match_real": {
+      "status": "passed",
+      "evidence": "attempt-1.xml"
+    },
+    "tests.test_instagram_routes::test_list_instagram_accounts": {
+      "status": "passed",
+      "evidence": "attempt-1.xml"
+    },
+    "tests.test_instagram_routes::test_get_instagram_account": {
+      "status": "passed",
+      "evidence": "attempt-1.xml"
+    },
+    "tests.test_instagram_routes::test_disconnect_instagram_account": {
+      "status": "passed",
+      "evidence": "attempt-1.xml"
+    },
+    "tests.test_instagram_routes::test_disconnect_instagram_account_is_idempotent": {
+      "status": "passed",
+      "evidence": "attempt-1.xml"
+    },
+    "tests.test_instagram_routes::test_disconnect_pauses_active_campaigns_and_overview_count": {
+      "status": "passed",
+      "evidence": "attempt-1.xml"
+    },
+    "tests.test_instagram_routes::test_reconnect_restores_account_and_token_without_reactivating_campaigns": {
+      "status": "passed",
+      "evidence": "attempt-3.xml"
+    },
+    "tests.test_instagram_token_refresh::test_refresh_long_lived_token_calls_documented_endpoint": {
+      "status": "passed",
+      "evidence": "attempt-1.xml"
+    },
+    "tests.test_instagram_token_refresh::test_refresh_long_lived_token_raises_on_meta_error": {
+      "status": "passed",
+      "evidence": "attempt-1.xml"
+    },
+    "tests.test_instagram_token_refresh::test_refresh_long_lived_token_network_error_does_not_leak_token": {
+      "status": "passed",
+      "evidence": "attempt-1.xml"
+    },
+    "tests.test_instagram_token_refresh::test_refresh_token_success_stores_new_encrypted_token_and_expiry": {
+      "status": "passed",
+      "evidence": "attempt-1.xml"
+    },
+    "tests.test_instagram_token_refresh::test_refresh_token_failure_keeps_old_token_and_stays_active": {
+      "status": "passed",
+      "evidence": "attempt-1.xml"
+    },
+    "tests.test_instagram_token_refresh::test_refresh_token_too_young_is_not_sent_to_meta": {
+      "status": "passed",
+      "evidence": "attempt-1.xml"
+    },
+    "tests.test_instagram_token_refresh::test_refresh_token_already_expired_is_marked_expired_without_calling_meta": {
+      "status": "passed",
+      "evidence": "attempt-1.xml"
+    },
+    "tests.test_instagram_token_refresh::test_get_tokens_expiring_within_filters": {
+      "status": "passed",
+      "evidence": "attempt-1.xml"
+    },
+    "tests.test_instagram_token_refresh::test_task_refreshes_logs_and_never_logs_token": {
+      "status": "passed",
+      "evidence": "attempt-1.xml"
+    },
+    "tests.test_instagram_token_refresh::test_task_logs_failure": {
+      "status": "passed",
+      "evidence": "attempt-1.xml"
+    },
+    "tests.test_instagram_token_refresh::test_schedule_is_registered_on_celery_app": {
+      "status": "passed",
+      "evidence": "attempt-1.xml"
+    },
+    "tests.test_instagram_token_refresh::test_no_dead_beat_schedule_module": {
+      "status": "passed",
+      "evidence": "attempt-1.xml"
+    },
+    "tests.test_instagram_token_refresh::test_account_response_includes_token_expiry": {
+      "status": "passed",
+      "evidence": "attempt-1.xml"
+    },
+    "tests.test_message_retry::test_retry_endpoint_accepts_failed_message": {
+      "status": "passed",
+      "evidence": "attempt-1.xml"
+    },
+    "tests.test_message_retry::test_retry_endpoint_rejects_sent_message": {
+      "status": "passed",
+      "evidence": "attempt-1.xml"
+    },
+    "tests.test_message_retry::test_retry_endpoint_rejects_expired_message": {
+      "status": "passed",
+      "evidence": "attempt-1.xml"
+    },
+    "tests.test_meta_integration::test_mock_meta_connect_is_unavailable_in_test": {
+      "status": "passed",
+      "evidence": "attempt-1.xml"
+    },
+    "tests.test_meta_integration::test_token_is_not_plaintext_in_db": {
+      "status": "passed",
+      "evidence": "attempt-1.xml"
+    },
+    "tests.test_send_private_reply::test_send_private_reply_success": {
+      "status": "passed",
+      "evidence": "attempt-2.xml"
+    },
+    "tests.test_send_private_reply::test_send_private_reply_expired_private_reply": {
+      "status": "passed",
+      "evidence": "attempt-2.xml"
+    },
+    "tests.test_send_private_reply::test_send_private_reply_token_error_no_retry": {
+      "status": "passed",
+      "evidence": "attempt-2.xml"
+    },
+    "tests.test_send_private_reply::test_send_private_reply_retryable_500": {
+      "status": "passed",
+      "evidence": "attempt-3.xml"
+    },
+    "tests.test_webhook_processing::test_webhook_event_enqueues_processing": {
+      "status": "passed",
+      "evidence": "attempt-2.xml"
+    },
+    "tests.test_webhook_processing::test_duplicate_webhook_does_not_duplicate_message": {
+      "status": "passed",
+      "evidence": "attempt-2.xml"
+    },
+    "tests.test_webhook_processing::test_comment_creates_comment_row": {
+      "status": "passed",
+      "evidence": "attempt-2.xml"
+    },
+    "tests.test_webhook_processing::test_matching_active_campaign_creates_queued_message": {
+      "status": "passed",
+      "evidence": "attempt-2.xml"
+    },
+    "tests.test_webhook_processing::test_message_type_allows_follow_prompt_and_final_delivery": {
+      "status": "passed",
+      "evidence": "attempt-2.xml"
+    },
+    "tests.test_webhook_processing::test_duplicate_comment_does_not_duplicate_message": {
+      "status": "passed",
+      "evidence": "attempt-2.xml"
+    },
+    "tests.test_webhook_processing::test_lead_is_created_from_comment": {
+      "status": "passed",
+      "evidence": "attempt-2.xml"
+    },
+    "tests.test_webhook_processing::test_cooldown_prevents_message_queue": {
+      "status": "passed",
+      "evidence": "attempt-2.xml"
+    },
+    "tests.test_whatsapp_outreach_settings_migration::test_whatsapp_outreach_settings_model_defaults": {
+      "status": "passed",
+      "evidence": "attempt-1.xml"
+    },
+    "tests.test_whatsapp_outreach_settings_migration::test_0019_defaults_constraints_and_round_trip": {
+      "status": "passed",
+      "evidence": "attempt-1.xml"
+    },
+    "tests.test_closeout_migrations::test_empty_to_head_then_0022_to_head_round_trip": {
+      "status": "passed",
+      "evidence": "attempt-1.xml"
+    },
+    "tests.test_closeout_migrations::test_0019_accepts_correct_existing_shape_without_changing_it": {
+      "status": "passed",
+      "evidence": "attempt-1.xml"
+    },
+    "tests.test_closeout_migrations::test_0019_refuses_incompatible_existing_shape[ALTER TABLE whatsapp_accounts ALTER COLUMN outreach_daily_cap TYPE bigint-outreach_daily_cap]": {
+      "status": "passed",
+      "evidence": "attempt-1.xml"
+    },
+    "tests.test_closeout_migrations::test_0019_refuses_incompatible_existing_shape[ALTER TABLE whatsapp_accounts ALTER COLUMN ctwa_counts_as_consent SET DEFAULT true-ctwa_counts_as_consent]": {
+      "status": "passed",
+      "evidence": "attempt-1.xml"
+    },
+    "tests.test_closeout_migrations::test_0019_refuses_incompatible_existing_shape[ALTER TABLE whatsapp_accounts ALTER COLUMN outreach_daily_cap DROP NOT NULL-outreach_daily_cap]": {
+      "status": "passed",
+      "evidence": "attempt-1.xml"
+    },
+    "tests.test_closeout_migrations::test_0019_refuses_incompatible_existing_shape[alteration3-ck_whatsapp_accounts_outreach_daily_cap]": {
+      "status": "passed",
+      "evidence": "attempt-1.xml"
+    },
+    "tests.test_instagram_hard_delete::test_hard_delete_removes_conversations_and_delegation_data_only_for_account": {
+      "status": "passed",
+      "evidence": "tests.xml"
+    },
+    "tests.test_instagram_hard_delete::test_hard_delete_requires_owner_permission": {
+      "status": "passed",
+      "evidence": "tests.xml"
+    },
+    "tests.test_instagram_hard_delete::test_hard_delete_cannot_cross_workspace": {
+      "status": "passed",
+      "evidence": "tests.xml"
+    },
+    "tests.test_closeout_migrations::test_0019_refuses_incompatible_existing_shape[wrong-case-json-type]": {
+      "status": "passed",
+      "evidence": "tests.xml"
+    }
+  },
+  "note": "Latest per-case evidence across iterative targeted runs, not a single all-green suite. Final integrated full suites remain UNVERIFIED."
+}

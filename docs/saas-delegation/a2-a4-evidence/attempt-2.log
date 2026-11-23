@@ -1,0 +1,244 @@
+F...F........                                                            [100%]
+=================================== FAILURES ===================================
+___ test_reconnect_restores_account_and_token_without_reactivating_campaigns ___
+
+client = <starlette.testclient.TestClient object at 0x7cb21baf7010>
+db_session = <sqlalchemy.orm.session.Session object at 0x7cb222171c50>
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7cb21a96a050>
+
+    @skip_if_no_db
+    def test_reconnect_restores_account_and_token_without_reactivating_campaigns(
+        client: TestClient, db_session: Session, monkeypatch
+    ):
+        ws = Workspace(id=uuid4(), name="Default", slug="default")
+        db_session.add(ws)
+        user = User(
+            id=uuid4(),
+            email="igreconnect@test.com",
+            name="IG Reconnect",
+            password_hash=hash_password("secret"),
+            role="admin",
+            is_active=True,
+        )
+        db_session.add(user)
+        db_session.commit()
+    
+        acc = InstagramAccount(
+            workspace_id=ws.id,
+            ig_user_id="707808909",
+            ig_username="testcompany",
+            status="disconnected",
+        )
+        db_session.add(acc)
+        db_session.flush()
+    
+        campaign = Campaign(
+            workspace_id=ws.id,
+            instagram_account_id=acc.id,
+            name="Paused campaign",
+            media_id="media_1",
+            message_template="Hi",
+            status="paused",
+        )
+        db_session.add(campaign)
+        db_session.commit()
+    
+        token_row = MetaToken(
+            instagram_account_id=acc.id,
+            access_token="encrypted-placeholder",
+            token_type="long_lived",
+            status="expired",
+        )
+        db_session.add(token_row)
+        db_session.commit()
+    
+        token_resp = client.post(
+            "/auth/login",
+            data={"username": "igreconnect@test.com", "password": "secret"},
+        )
+        token = token_resp.json()["access_token"]
+    
+        response = client.post(
+            f"/instagram/accounts/{acc.id}/reconnect",
+            headers={"Authorization": f"Bearer {token}"},
+        )
+        assert response.status_code == 200
+        from unittest.mock import AsyncMock
+        from urllib.parse import parse_qs, urlparse
+        from app.api import routes_meta
+    
+        state = parse_qs(urlparse(response.json()["oauth_url"]).query)["state"][0]
+        db_session.refresh(acc)
+        db_session.refresh(token_row)
+        assert acc.status == "disconnected"
+        assert token_row.status == "expired"
+        monkeypatch.setattr(routes_meta, "exchange_code_for_short_lived_token", AsyncMock(return_value={"access_token": "short-test-token"}))
+        monkeypatch.setattr(routes_meta, "exchange_for_long_lived_token", AsyncMock(return_value={"access_token": "long-test-token", "expires_in": 5184000}))
+        monkeypatch.setattr(routes_meta, "fetch_instagram_account_metadata", AsyncMock(return_value={"ig_user_id": acc.ig_user_id, "username": "testcompany", "account_type": "BUSINESS"}))
+        callback = client.get("/meta/connect/callback", params={"code": "test-code", "state": state}, follow_redirects=False)
+        assert callback.status_code == 307
+        assert "reconnected=true" in callback.headers["location"]
+    
+        db_session.refresh(acc)
+        db_session.refresh(token_row)
+        db_session.refresh(campaign)
+        assert acc.status == "connected"
+        assert acc.ig_username == "testcompany"
+        # Reconnect stores a new token; the expired historical row stays expired.
+        from app.services.token_service import get_decrypted_token
+        assert token_row.status == "expired"
+        active_token = db_session.query(MetaToken).filter(
+            MetaToken.instagram_account_id == acc.id, MetaToken.status == "active"
+        ).one()
+        assert active_token.id != token_row.id
+        assert get_decrypted_token(db_session, acc.id) == "long-test-token"
+        assert campaign.status == "paused"
+    
+        log = (
+            db_session.query(AutomationLog)
+            .filter(
+                AutomationLog.instagram_account_id == acc.id,
+                AutomationLog.action == "account_reconnect_initiated",
+            )
+            .first()
+        )
+>       assert log is not None
+E       assert None is not None
+
+tests/test_instagram_routes.py:367: AssertionError
+----------------------------- Captured stdout call -----------------------------
+{"timestamp": "2026-10-28 11:24:55,838", "level": "INFO", "logger": "httpx2", "message": "HTTP Request: POST http://testserver/auth/login \"HTTP/1.1 200 OK\""}
+{"timestamp": "2026-10-28 11:24:55,852", "level": "INFO", "logger": "app.api.routes_instagram", "message": "OAuth reconnect initiated", "account_id": "6f514492-2e81-446c-8599-a23bf07cb22b"}
+{"timestamp": "2026-10-28 11:24:55,852", "level": "INFO", "logger": "httpx2", "message": "HTTP Request: POST http://testserver/instagram/accounts/6f514492-2e81-446c-8599-a23bf07cb22b/reconnect \"HTTP/1.1 200 OK\""}
+{"timestamp": "2026-10-28 11:24:55,859", "level": "INFO", "logger": "app.api.routes_meta", "message": "Meta OAuth callback received", "state": "8c471f3d-0700-4e32-8d33-ed9c41abf689"}
+{"timestamp": "2026-10-28 11:24:55,868", "level": "INFO", "logger": "app.services.token_service", "message": "Stored encrypted token", "token_id": "1cd27136-bbdf-455f-b6d4-3d442560fd21"}
+{"timestamp": "2026-10-28 11:24:55,869", "level": "INFO", "logger": "app.api.routes_meta", "message": "Meta account reconnected via OAuth", "ig_user_id": "707808909", "username": "testcompany"}
+{"timestamp": "2026-10-28 11:24:55,870", "level": "INFO", "logger": "httpx2", "message": "HTTP Request: GET http://testserver/meta/connect/callback?code=test-code&state=8c471f3d-0700-4e32-8d33-ed9c41abf689 \"HTTP/1.1 307 Temporary Redirect\""}
+------------------------------ Captured log call -------------------------------
+INFO     httpx2:_client.py:1084 HTTP Request: POST http://testserver/auth/login "HTTP/1.1 200 OK"
+INFO     app.api.routes_instagram:routes_instagram.py:206 OAuth reconnect initiated
+INFO     httpx2:_client.py:1084 HTTP Request: POST http://testserver/instagram/accounts/6f514492-2e81-446c-8599-a23bf07cb22b/reconnect "HTTP/1.1 200 OK"
+INFO     app.api.routes_meta:routes_meta.py:88 Meta OAuth callback received
+INFO     app.services.token_service:token_service.py:40 Stored encrypted token
+INFO     app.api.routes_meta:routes_meta.py:153 Meta account reconnected via OAuth
+INFO     httpx2:_client.py:1084 HTTP Request: GET http://testserver/meta/connect/callback?code=test-code&state=8c471f3d-0700-4e32-8d33-ed9c41abf689 "HTTP/1.1 307 Temporary Redirect"
+____________________ test_send_private_reply_retryable_500 _____________________
+
+db_session = <sqlalchemy.orm.session.Session object at 0x7cb21a3ae790>
+
+    @skip_if_no_db
+    def test_send_private_reply_retryable_500(db_session: Session):
+        ws = Workspace(id=uuid4(), name="Default", slug="default")
+        db_session.add(ws)
+        db_session.commit()
+    
+        acc = InstagramAccount(
+            workspace_id=ws.id,
+            ig_user_id="ig_retry",
+            ig_username="retryacc",
+        )
+        db_session.add(acc)
+        db_session.commit()
+    
+        store_encrypted_token(db_session, ws.id, acc.id, "fake_token")
+    
+        campaign = Campaign(
+            id=uuid4(),
+            workspace_id=ws.id,
+            instagram_account_id=acc.id,
+            name="Retry",
+            media_id="m1",
+            message_template="Hi",
+            match_type="contains",
+            status="active",
+        )
+        db_session.add(campaign)
+        db_session.commit()
+    
+        lead = Lead(
+            id=uuid4(),
+            workspace_id=ws.id,
+            instagram_account_id=acc.id,
+            ig_user_id="u1",
+        )
+        db_session.add(lead)
+        db_session.commit()
+    
+        comment = Comment(
+            id=uuid4(),
+            instagram_account_id=acc.id,
+            comment_id="c_retry",
+            ig_user_id="u1",
+        )
+        db_session.add(comment)
+        db_session.commit()
+    
+        msg = Message(
+            id=uuid4(),
+            campaign_id=campaign.id,
+            lead_id=lead.id,
+            comment_id=comment.id,
+            status="queued",
+            rendered_body="Hello",
+        )
+        db_session.add(msg)
+        db_session.commit()
+    
+        mock_result = MagicMock()
+        mock_result.success = False
+        mock_result.error_code = "retryable"
+        mock_result.error_message = "Internal server error"
+        mock_result.retryable = True
+    
+        with patch(
+            "app.workers.tasks.MetaMessagingClient.send_private_reply",
+            new_callable=MagicMock,
+            return_value=mock_result,
+        ), patch("app.workers.tasks.MetaMessagingClient.close", new_callable=MagicMock):
+            # The task will raise self.retry, which we need to catch
+            try:
+                send_private_reply(str(msg.id))
+            except Exception as exc:
+                exc_name = type(exc).__name__
+                assert exc_name in ("Retry", "MaxRetriesExceededError")
+    
+        db_session.refresh(msg)
+        assert msg.status == "failed"
+>       assert msg.retryable is True
+E       assert False is True
+E        +  where False = <app.models.message.Message object at 0x7cb219c46210>.retryable
+
+tests/test_send_private_reply.py:336: AssertionError
+----------------------------- Captured stdout call -----------------------------
+{"timestamp": "2026-10-28 11:24:56,055", "level": "INFO", "logger": "app.services.token_service", "message": "Stored encrypted token", "token_id": "3b12db2d-b954-4193-8cc4-fdf75ed90d26"}
+{"timestamp": "2026-10-28 11:24:56,083", "level": "ERROR", "logger": "app.workers.tasks", "message": "send_private_reply failed", "exc_info": "Traceback (most recent call last):\n  File \"/var/tmp/many-a2-a4-20261028/source/backend/app/workers/tasks.py\", line 2047, in _send_private_reply_impl\n    raise task.retry(countdown=60 * (2 ** task.request.retries), exc=Exception(result.error_message))\n          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/var/tmp/many-t0-20261028/venv/lib/python3.11/site-packages/celery/app/task.py\", line 753, in retry\n    raise_with_context(exc or Retry('Task can be retried', None))\n  File \"/var/tmp/many-t0-20261028/venv/lib/python3.11/site-packages/celery/utils/serialization.py\", line 273, in raise_with_context\n    raise exc from exc_info[1]\nException: Internal server error", "message_id": "905d2224-053c-43f5-808e-61ab09c8f05f"}
+------------------------------ Captured log call -------------------------------
+INFO     app.services.token_service:token_service.py:40 Stored encrypted token
+ERROR    app.workers.tasks:tasks.py:2086 send_private_reply failed
+Traceback (most recent call last):
+  File "/var/tmp/many-a2-a4-20261028/source/backend/app/workers/tasks.py", line 2047, in _send_private_reply_impl
+    raise task.retry(countdown=60 * (2 ** task.request.retries), exc=Exception(result.error_message))
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/var/tmp/many-t0-20261028/venv/lib/python3.11/site-packages/celery/app/task.py", line 753, in retry
+    raise_with_context(exc or Retry('Task can be retried', None))
+  File "/var/tmp/many-t0-20261028/venv/lib/python3.11/site-packages/celery/utils/serialization.py", line 273, in raise_with_context
+    raise exc from exc_info[1]
+Exception: Internal server error
+=============================== warnings summary ===============================
+../../../many-t0-20261028/venv/lib/python3.11/site-packages/passlib/utils/__init__.py:854
+  /var/tmp/many-t0-20261028/venv/lib/python3.11/site-packages/passlib/utils/__init__.py:854: DeprecationWarning: 'crypt' is deprecated and slated for removal in Python 3.13
+    from crypt import crypt as _crypt
+
+tests/test_instagram_routes.py::test_reconnect_restores_account_and_token_without_reactivating_campaigns
+  /var/tmp/many-t0-20261028/venv/lib/python3.11/site-packages/passlib/handlers/argon2.py:716: DeprecationWarning: Accessing argon2.__version__ is deprecated and will be removed in a future release. Use importlib.metadata directly to query for argon2-cffi's packaging metadata.
+    _argon2_cffi.__version__, max_version)
+
+tests/test_instagram_routes.py::test_reconnect_restores_account_and_token_without_reactivating_campaigns
+  /var/tmp/many-a2-a4-20261028/source/backend/app/api/routes_instagram.py:188: DeprecationWarning: Call to deprecated setex. (Use 'set' instead.) -- Deprecated since version 2.6.12.
+    _r.setex(f"oauth_state:{state}", 600, str(account_id))
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ============================
+FAILED tests/test_instagram_routes.py::test_reconnect_restores_account_and_token_without_reactivating_campaigns
+FAILED tests/test_send_private_reply.py::test_send_private_reply_retryable_500
+2 failed, 11 passed, 3 warnings in 1.77s

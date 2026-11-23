@@ -1,0 +1,60 @@
+# LOCAL-ONLY throwaway services for the Many + SaaS merge work.
+# - No real secrets: every value below is a fake dev value, overridable via .env.merge-dev
+#   (copy .env.merge-dev.example; the real file is git-ignored).
+# - Bound to 127.0.0.1 on non-default ports so it never collides with a local Postgres/Redis.
+# - Volumes are named and disposable:  docker compose -f docker-compose.merge-dev.yml down -v
+# - Never point this at a live database. Never use live Meta tokens or webhooks here.
+#
+# Many  stack uses Postgres 15 + Redis 7;  the SaaS uses pgvector on Postgres 17.
+# They stay separate databases until Phase 7 (see docs/MERGE-PLAN.md).
+#
+# Usage:
+#   docker compose -f docker-compose.merge-dev.yml --env-file .env.merge-dev up -d
+name: merge-dev
+
+services:
+  pg15:
+    image: postgres:15
+    environment:
+      POSTGRES_USER: ${MERGE_PG15_USER:-merge_dev}
+      POSTGRES_PASSWORD: ${MERGE_PG15_PASSWORD:-merge_dev_only_not_a_secret}
+      POSTGRES_DB: ${MERGE_PG15_DB:-many_throwaway}
+    ports:
+      - "127.0.0.1:${MERGE_PG15_PORT:-55415}:5432"
+    volumes:
+      - pg15_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  pg17_vector:
+    image: pgvector/pgvector:pg17
+    environment:
+      POSTGRES_USER: ${MERGE_PG17_USER:-merge_dev}
+      POSTGRES_PASSWORD: ${MERGE_PG17_PASSWORD:-merge_dev_only_not_a_secret}
+      POSTGRES_DB: ${MERGE_PG17_DB:-saas_throwaway}
+    ports:
+      - "127.0.0.1:${MERGE_PG17_PORT:-55417}:5432"
+    volumes:
+      - pg17_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "127.0.0.1:${MERGE_REDIS_PORT:-56379}:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+volumes:
+  pg15_data:
+  pg17_data:

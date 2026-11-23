@@ -1,0 +1,34 @@
+INFO  [alembic.runtime.migration] Context impl PostgresqlImpl.
+INFO  [alembic.runtime.migration] Will assume transactional DDL.
+INFO  [alembic.runtime.migration] Running upgrade  -> 0001_initial, Initial migration
+INFO  [alembic.runtime.migration] Running upgrade 0001_initial -> 0002_instagram_account_status, Add Instagram account status
+INFO  [alembic.runtime.migration] Running upgrade 0002_instagram_account_status -> 0003_follow_prompt_flow, Add follow prompt delivery flow
+INFO  [alembic.runtime.migration] Running upgrade 0003_follow_prompt_flow -> 0004_roles_and_audit_logs, Add role defaults and audit logs
+INFO  [alembic.runtime.migration] Running upgrade 0004_roles_and_audit_logs -> 0005_processed_webhook_events, Add processed_webhook_events table for per-change deduplication
+INFO  [alembic.runtime.migration] Running upgrade 0005_processed_webhook_events -> 0006_campaign_target_media, Add campaign target media fields
+INFO  [alembic.runtime.migration] Running upgrade 0006_campaign_target_media -> 0007_add_expires_at_meta_token, Add expires_at to meta_tokens
+INFO  [alembic.runtime.migration] Running upgrade 0007_add_expires_at_meta_token -> 0008_campaign_comment_reply, Add comment_reply_enabled and comment_reply_text to campaigns
+INFO  [alembic.runtime.migration] Running upgrade 0008_campaign_comment_reply -> 0009_ai_conversation_layer, Add AI conversation continuation layer
+INFO  [alembic.runtime.migration] Running upgrade 0009_ai_conversation_layer -> 0010_cold_dm_ai, Add cold-DM AI support
+INFO  [alembic.runtime.migration] Running upgrade 0010_cold_dm_ai -> 0011_platform_foundation, Add multi-platform foundation columns to leads and conversations
+INFO  [alembic.runtime.migration] Running upgrade 0011_platform_foundation -> 0012_whatsapp_accounts, Add WhatsApp Cloud API accounts, tokens, and wire up Phase 1's deferred FKs
+INFO  [alembic.runtime.migration] Running upgrade 0012_whatsapp_accounts -> 0013_facebook_pages, Add Facebook Pages, tokens, campaigns, comments, and wire up Phase 1's
+deferred facebook_page_id FKs
+INFO  [alembic.runtime.migration] Running upgrade 0013_facebook_pages -> 0014_facebook_psid, Add leads.facebook_psid so Facebook comment-identity and messaging-identity
+can be stored separately
+INFO  [alembic.runtime.migration] Running upgrade 0014_facebook_psid -> 0015_conv_cold_dm_uniq, Close the NULL-campaign gap in conversation uniqueness
+INFO  [alembic.runtime.migration] Running upgrade 0015_conv_cold_dm_uniq -> 0017_workspace_membership, Add user_workspace_memberships — workspace-scoped multi-tenancy (phase 1:
+WhatsApp + Facebook only)
+INFO  [alembic.runtime.migration] Running upgrade 0017_workspace_membership -> 0018_whatsapp_outreach, Add compliant WhatsApp outreach schema and backfill contacts.
+INFO  [alembic.runtime.migration] WhatsApp contact backfill: leads=0 eligible=0 inserted=0 invalid_skipped=0 duplicate_candidates=0 already_present=0; marketing_consent=unknown for every inserted contact
+INFO  [alembic.runtime.migration] Running upgrade 0018_whatsapp_outreach -> 0019_whatsapp_outreach_settings, Add per-account WhatsApp outreach settings.
+INFO  [alembic.runtime.migration] Running upgrade 0019_whatsapp_outreach_settings -> 0020_whatsapp_outreach_services, Support atomic WhatsApp outreach reservations.
+INFO  [alembic.runtime.migration] Running upgrade 0020_whatsapp_outreach_services -> 0021_whatsapp_campaign_done, Add the WhatsApp campaign completion timestamp.
+INFO  [alembic.runtime.migration] Running upgrade 0021_whatsapp_campaign_done -> 0022_whatsapp_opt_in, Add revocable opt-in links and unverified opt-in evidence.
+INFO  [alembic.runtime.migration] Running upgrade 0022_whatsapp_opt_in -> 0023_saas_delegation, Add per-channel SaaS delegation settings.
+INFO  [alembic.runtime.migration] Running upgrade 0023_saas_delegation -> 0024_saas_forward_events, Add the SaaS forwarding outbox.
+INFO  [alembic.runtime.migration] Running upgrade 0024_saas_forward_events -> 0025_saas_outbound_messages, Add the SaaS outbound message idempotency table.
+INFO  [alembic.runtime.migration] Running upgrade 0025_saas_outbound_messages -> 0026_saas_channel_health, Track the last channel.status pushed to the SaaS.
+INFO  [alembic.runtime.migration] Running upgrade 0026_saas_channel_health -> 0027_saas_conn_id_lowercase, Normalise stored SaaS connection ids to canonical lowercase UUIDs.
+INFO  [alembic.runtime.migration] Running upgrade 0027_saas_conn_id_lowercase -> 0028_meta_compliance, Durable Meta callback receipts and explicitly verified authorization ownership.
+INFO  [alembic.runtime.migration] Running upgrade 0028_meta_compliance -> 0029_hash_processed_event_keys, Hash historical webhook dedupe keys and remove diagnostic personal data.

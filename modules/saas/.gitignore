@@ -1,0 +1,45 @@
+.venv/
+node_modules/
+.next/
+out/
+coverage/
+playwright-report/
+test-results/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+*.egg-info/
+.env
+.env.local
+.env.*
+!.env.example
+!.env.production.example
+*.tsbuildinfo
+.npm-cache/
+.cache/
+
+pytest-cache-files-*/
+
+# Uploaded source files (P2) — never committed
+apps/api/.data/
+.test-storage/
+
+implementation/ui-screens/
+
+# Generated pytest temp directories retained locally
+.pytest-tmp-*/
+apps/api/.pytest_local_run/
+
+# Browser test output
+.test-storage-browser/
+.test-storage-*/
+
+# Screenshot baselines and captures (Batch E)
+.ui-baseline-*/
+.ui-after-*/
+apps/web/.ui-*/
+
+# Production runtime data
+/backups/

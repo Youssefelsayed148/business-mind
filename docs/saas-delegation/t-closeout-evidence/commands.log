@@ -1,0 +1,24 @@
+DB host=/var/tmp/many-closeout-t-20261028-02/socket db=many_test_closeout_t
+APP_ENV=test TEST_DATABASE_URL=<explicit private target> pytest tests -q --junitxml=/mnt/d/Projects/Work\ Projects/The\ Osiris\ Labs/ManyOsirisChat/docs/saas-delegation/t-closeout-evidence/many-backend.xml 
+many-backend exit=0 duration=130s
+DB host=/var/tmp/many-closeout-t-20261028-02/socket db=many_test_closeout_canary
+APP_ENV=test TEST_DATABASE_URL=<explicit private target> python -m unittest discover -s scripts -p test_\*.py -v 
+canary exit=1 duration=1s
+APP_ENV=test TEST_DATABASE_URL=<explicit private target> python scripts/check_contract_copies.py 
+contracts exit=0 duration=0s
+DB host=/var/tmp/many-closeout-t-20261028-02/socket db=many_test_closeout_empty
+APP_ENV=test TEST_DATABASE_URL=<explicit private target> alembic heads 
+heads exit=0 duration=0s
+APP_ENV=test TEST_DATABASE_URL=<explicit private target> alembic upgrade head 
+empty-head exit=0 duration=1s
+APP_ENV=test TEST_DATABASE_URL=<explicit private target> alembic check 
+drift exit=255 duration=1s
+APP_ENV=test TEST_DATABASE_URL=<explicit private target> alembic downgrade 0022_whatsapp_opt_in 
+downgrade exit=0 duration=1s
+APP_ENV=test TEST_DATABASE_URL=<explicit private target> alembic upgrade head 
+reupgrade exit=0 duration=0s
+DB host=/var/tmp/many-closeout-t-20261028-02/socket db=many_test_closeout_0022
+APP_ENV=test TEST_DATABASE_URL=<explicit private target> alembic upgrade 0022_whatsapp_opt_in 
+baseline-0022 exit=0 duration=1s
+APP_ENV=test TEST_DATABASE_URL=<explicit private target> alembic upgrade head 
+baseline-head exit=0 duration=1s

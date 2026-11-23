@@ -1,0 +1,48 @@
+"""Conservative SaaS defaults. Many owns the actual platform limits."""
+
+REPLY_CHAR_LIMITS = {"whatsapp": 1000, "messenger": 1000, "instagram": 1000}
+SEND_MAX_ATTEMPTS = 6
+SEND_BACKOFF_SECONDS = 18  # Five exponential waits total about nine minutes.
+RETRY_AFTER_MAX_SECONDS = 300  # a hostile or buggy Many cannot park a message for a year
+SEND_RESPONSE_BYTES = 64 * 1024
+SEND_CONNECT_SECONDS = 5.0
+SEND_READ_SECONDS = 15.0
+
+# Dedupe rows (connection_id, event_id) outlive their purged payload by this long
+# (contract v1 section 3 requires at least 30 days).
+CHANNEL_EVENT_DEDUPE_DAYS = 30
+
+# Inbound flood guard (contract v1.1 A8): above this many visitor messages per
+# minute from one contact on one connection, messages are stored, the thread is
+# flagged waiting_human, and the AI stays silent.
+INBOUND_PER_MINUTE = 15
+# At most one busy/quota reply per conversation inside this window (A8).
+BUSY_REPLY_WINDOW_SECONDS = 600
+# Channel turns are asynchronous (no visitor waiting on an HTTP request), so the
+# per-turn deadline is longer than the website's.
+CHANNEL_TURN_DEADLINE_SECONDS = 120.0
+# Default style line per channel; a bot may override it in bot.config
+# ``channel_style_hint`` (plain text, max 300 characters).
+DEFAULT_STYLE_HINT = (
+    "Reply as a short direct message: one to three sentences, plain text only, "
+    "no markdown, no source links or citations."
+)
+STYLE_HINT_MAX = 300
+
+# Instagram text is limited in UTF-8 BYTES (contract v1.1 A4); Arabic is two bytes
+# per character. Characters stay capped by REPLY_CHAR_LIMITS as well.
+REPLY_BYTE_LIMITS = {"instagram": 900}
+# Closed set of delivery error codes (A3). Anything else is stored as ``unknown``.
+CHANNEL_ERROR_CODES = frozenset(
+    {
+        "window_closed",
+        "template_required",
+        "recipient_unreachable",
+        "rate_limited",
+        "channel_disconnected",
+        "message_too_long",
+        "unknown",
+    }
+)
+# Accepted by Many (202) but no status callback within this time: ``unconfirmed`` (A2).
+UNCONFIRMED_AFTER_SECONDS = 15 * 60

@@ -1,0 +1,22 @@
+DB host=/var/tmp/many-closeout-t-fix-20261028-01/socket db=many_test_closeout_registry
+APP_ENV=test TEST_DATABASE_URL=<explicit private target> pytest tests/test_model_registry.py tests/test_processed_event_service.py tests/test_processed_event_migration.py -q --junitxml=/mnt/d/Projects/Work\ Projects/The\ Osiris\ Labs/ManyOsirisChat/docs/saas-delegation/t-closeout-evidence/registry.xml 
+registry exit=4 duration=0s
+DB host=/var/tmp/many-closeout-t-fix-20261028-01/socket db=many_test_closeout_drift
+APP_ENV=test TEST_DATABASE_URL=<explicit private target> alembic upgrade head 
+fixed-empty-head exit=1 duration=1s
+APP_ENV=test TEST_DATABASE_URL=<explicit private target> alembic check 
+fixed-drift exit=1 duration=0s
+DB host=/var/tmp/many-closeout-t-fix-20261028-01/socket db=many_test_closeout_canary_fixed
+APP_ENV=test TEST_DATABASE_URL=<explicit private target> python -m unittest discover -s scripts -p test_\*.py -v 
+canary-fixed exit=0 duration=1s
+DB host=/var/tmp/many-closeout-t-fix-20261028-02/socket db=many_test_closeout_registry
+APP_ENV=test TEST_DATABASE_URL=<explicit private target> pytest tests/test_model_registry.py tests/test_processed_event_service.py tests/test_processed_event_migration.py -q --junitxml=/mnt/d/Projects/Work\ Projects/The\ Osiris\ Labs/ManyOsirisChat/docs/saas-delegation/t-closeout-evidence/registry2.xml 
+registry2 exit=0 duration=5s
+DB host=/var/tmp/many-closeout-t-fix-20261028-02/socket db=many_test_closeout_drift
+APP_ENV=test TEST_DATABASE_URL=<explicit private target> alembic upgrade head 
+fixed2-empty-head exit=0 duration=1s
+APP_ENV=test TEST_DATABASE_URL=<explicit private target> alembic check 
+fixed2-drift exit=0 duration=0s
+DB host=/var/tmp/many-closeout-t-fix-20261028-02/socket db=many_test_closeout_canary_fixed
+APP_ENV=test TEST_DATABASE_URL=<explicit private target> python -m unittest discover -s scripts -p test_\*.py -v 
+canary-fixed2 exit=0 duration=1s

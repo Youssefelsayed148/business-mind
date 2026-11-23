@@ -1,0 +1,2015 @@
+{
+  "base_sha": "e284afd2d8866dd75c551404306e23c015d8c7cc",
+  "reviewed_uncommitted_changes": [
+    ".env.example",
+    ".env.production.example",
+    ".gitattributes",
+    ".github/workflows/saas-delegation.yml",
+    ".gitignore",
+    "2026-09-05-multi-platform-expansion-design.md",
+    "CLAUDE.md",
+    "README.md",
+    "ai-continuation-and-campaign-ai-toggle.patch",
+    "ai-conversation-layer.patch",
+    "backend/Dockerfile",
+    "backend/alembic.ini",
+    "backend/alembic/env.py",
+    "backend/alembic/script.py.mako",
+    "backend/alembic/versions/0001_initial.py",
+    "backend/alembic/versions/0002_instagram_account_status.py",
+    "backend/alembic/versions/0003_follow_prompt_flow.py",
+    "backend/alembic/versions/0004_roles_and_audit_logs.py",
+    "backend/alembic/versions/0005_processed_webhook_events.py",
+    "backend/alembic/versions/0006_campaign_target_media.py",
+    "backend/alembic/versions/0007_add_expires_at_meta_token.py",
+    "backend/alembic/versions/0008_campaign_comment_reply.py",
+    "backend/alembic/versions/0009_ai_conversation_layer.py",
+    "backend/alembic/versions/0010_cold_dm_ai.py",
+    "backend/alembic/versions/0011_platform_foundation.py",
+    "backend/alembic/versions/0012_whatsapp_accounts.py",
+    "backend/alembic/versions/0013_facebook_pages.py",
+    "backend/alembic/versions/0014_facebook_psid.py",
+    "backend/alembic/versions/0015_conv_cold_dm_uniq.py",
+    "backend/alembic/versions/0017_workspace_membership.py",
+    "backend/alembic/versions/0018_whatsapp_outreach.py",
+    "backend/alembic/versions/0019_whatsapp_outreach_settings.py",
+    "backend/alembic/versions/0020_whatsapp_outreach_services.py",
+    "backend/alembic/versions/0021_whatsapp_campaign_completed_at.py",
+    "backend/alembic/versions/0022_whatsapp_opt_in_unverified.py",
+    "backend/alembic/versions/0023_saas_delegation.py",
+    "backend/alembic/versions/0024_saas_forward_events.py",
+    "backend/alembic/versions/0025_saas_outbound_messages.py",
+    "backend/alembic/versions/0026_saas_channel_health.py",
+    "backend/alembic/versions/0027_saas_conn_id_lowercase.py",
+    "backend/alembic/versions/0028_meta_compliance.py",
+    "backend/alembic/versions/0029_hash_processed_event_keys.py",
+    "backend/app/api/routes_auth.py",
+    "backend/app/api/routes_campaigns.py",
+    "backend/app/api/routes_contact_erasure.py",
+    "backend/app/api/routes_conversations.py",
+    "backend/app/api/routes_dashboard.py",
+    "backend/app/api/routes_facebook.py",
+    "backend/app/api/routes_health.py",
+    "backend/app/api/routes_instagram.py",
+    "backend/app/api/routes_messages.py",
+    "backend/app/api/routes_meta.py",
+    "backend/app/api/routes_meta_compliance.py",
+    "backend/app/api/routes_saas_delegation.py",
+    "backend/app/api/routes_saas_messages.py",
+    "backend/app/api/routes_webhooks.py",
+    "backend/app/api/routes_whatsapp.py",
+    "backend/app/api/routes_whatsapp_outreach.py",
+    "backend/app/api/routes_workspaces.py",
+    "backend/app/authz.py",
+    "backend/app/core/config.py",
+    "backend/app/core/logging.py",
+    "backend/app/core/security.py",
+    "backend/app/db/base.py",
+    "backend/app/db/session.py",
+    "backend/app/integrations/meta/accounts.py",
+    "backend/app/integrations/meta/client.py",
+    "backend/app/integrations/meta/errors.py",
+    "backend/app/integrations/meta/facebook_client.py",
+    "backend/app/integrations/meta/facebook_oauth.py",
+    "backend/app/integrations/meta/facebook_webhooks.py",
+    "backend/app/integrations/meta/messaging.py",
+    "backend/app/integrations/meta/oauth.py",
+    "backend/app/integrations/meta/token_refresh.py",
+    "backend/app/integrations/meta/unsupported_messages.py",
+    "backend/app/integrations/meta/webhooks.py",
+    "backend/app/integrations/meta/whatsapp_client.py",
+    "backend/app/integrations/meta/whatsapp_ids.py",
+    "backend/app/integrations/meta/whatsapp_management_client.py",
+    "backend/app/integrations/meta/whatsapp_oauth.py",
+    "backend/app/integrations/meta/whatsapp_webhooks.py",
+    "backend/app/main.py",
+    "backend/app/models/__init__.py",
+    "backend/app/models/audit_log.py",
+    "backend/app/models/automation_log.py",
+    "backend/app/models/campaign.py",
+    "backend/app/models/campaign_keyword.py",
+    "backend/app/models/comment.py",
+    "backend/app/models/conversation.py",
+    "backend/app/models/data_deletion_request.py",
+    "backend/app/models/facebook_campaign.py",
+    "backend/app/models/facebook_campaign_keyword.py",
+    "backend/app/models/facebook_comment.py",
+    "backend/app/models/facebook_page.py",
+    "backend/app/models/facebook_token.py",
+    "backend/app/models/facebook_user_cooldown.py",
+    "backend/app/models/instagram_account.py",
+    "backend/app/models/lead.py",
+    "backend/app/models/message.py",
+    "backend/app/models/meta_authorization.py",
+    "backend/app/models/meta_token.py",
+    "backend/app/models/processed_webhook_event.py",
+    "backend/app/models/saas_delegation.py",
+    "backend/app/models/saas_forward_event.py",
+    "backend/app/models/saas_outbound_message.py",
+    "backend/app/models/user.py",
+    "backend/app/models/user_cooldown.py",
+    "backend/app/models/user_workspace_membership.py",
+    "backend/app/models/webhook_event.py",
+    "backend/app/models/webhook_health.py",
+    "backend/app/models/whatsapp_account.py",
+    "backend/app/models/whatsapp_campaign.py",
+    "backend/app/models/whatsapp_campaign_recipient.py",
+    "backend/app/models/whatsapp_consent_event.py",
+    "backend/app/models/whatsapp_contact.py",
+    "backend/app/models/whatsapp_template.py",
+    "backend/app/models/whatsapp_token.py",
+    "backend/app/models/workspace.py",
+    "backend/app/roles.py",
+    "backend/app/schemas/auth.py",
+    "backend/app/schemas/campaign.py",
+    "backend/app/schemas/saas_delegation.py",
+    "backend/app/schemas/user.py",
+    "backend/app/scripts/create_admin.py",
+    "backend/app/scripts/seed_rehearsal.py",
+    "backend/app/services/ai_service.py",
+    "backend/app/services/audit_service.py",
+    "backend/app/services/campaign_matcher.py",
+    "backend/app/services/campaign_service.py",
+    "backend/app/services/comment_service.py",
+    "backend/app/services/contact_erasure.py",
+    "backend/app/services/conversation_service.py",
+    "backend/app/services/cooldown_service.py",
+    "backend/app/services/facebook_campaign_matcher.py",
+    "backend/app/services/facebook_comment_service.py",
+    "backend/app/services/facebook_cooldown_service.py",
+    "backend/app/services/facebook_lead_service.py",
+    "backend/app/services/facebook_message_service.py",
+    "backend/app/services/facebook_token_service.py",
+    "backend/app/services/lead_service.py",
+    "backend/app/services/log_service.py",
+    "backend/app/services/message_service.py",
+    "backend/app/services/meta_compliance.py",
+    "backend/app/services/outreach_service.py",
+    "backend/app/services/processed_event_service.py",
+    "backend/app/services/rate_limit_service.py",
+    "backend/app/services/saas_delegation_service.py",
+    "backend/app/services/saas_error_mapping.py",
+    "backend/app/services/saas_forwarder.py",
+    "backend/app/services/saas_health.py",
+    "backend/app/services/saas_inbound.py",
+    "backend/app/services/saas_outbound.py",
+    "backend/app/services/saas_signing.py",
+    "backend/app/services/saas_status.py",
+    "backend/app/services/template_service.py",
+    "backend/app/services/token_service.py",
+    "backend/app/services/webhook_event_service.py",
+    "backend/app/services/whatsapp_consent_service.py",
+    "backend/app/services/whatsapp_template_service.py",
+    "backend/app/services/whatsapp_token_service.py",
+    "backend/app/services/whatsapp_webhook_service.py",
+    "backend/app/services/whatsapp_window_service.py",
+    "backend/app/utils/crypto.py",
+    "backend/app/utils/db.py",
+    "backend/app/utils/normalization.py",
+    "backend/app/utils/templates.py",
+    "backend/app/workers/celery_app.py",
+    "backend/app/workers/instagram_token_beat_schedule.py",
+    "backend/app/workers/instagram_token_tasks.py",
+    "backend/app/workers/saas_beat_schedule.py",
+    "backend/app/workers/saas_forward_tasks.py",
+    "backend/app/workers/saas_health_tasks.py",
+    "backend/app/workers/saas_retention_tasks.py",
+    "backend/app/workers/saas_send_tasks.py",
+    "backend/app/workers/tasks.py",
+    "backend/app/workers/webhook_recovery_beat_schedule.py",
+    "backend/app/workers/webhook_recovery_tasks.py",
+    "backend/app/workers/whatsapp_beat_schedule.py",
+    "backend/app/workers/whatsapp_tasks.py",
+    "backend/pyproject.toml",
+    "backend/requirements.txt",
+    "backend/scripts/verify_0015_merge.py",
+    "backend/tests/conftest.py",
+    "backend/tests/fake_saas.py",
+    "backend/tests/fixtures/contract/signing_vectors.json",
+    "backend/tests/test_ai_continuation_dispatch.py",
+    "backend/tests/test_auth.py",
+    "backend/tests/test_campaign_routes.py",
+    "backend/tests/test_campaigns.py",
+    "backend/tests/test_celery.py",
+    "backend/tests/test_closeout_migrations.py",
+    "backend/tests/test_cold_dm_ai_dispatch.py",
+    "backend/tests/test_comment_parser.py",
+    "backend/tests/test_contact_erasure.py",
+    "backend/tests/test_conversation_uniqueness.py",
+    "backend/tests/test_crypto.py",
+    "backend/tests/test_disconnect_stops_bot.py",
+    "backend/tests/test_facebook_ai_conversation_turn.py",
+    "backend/tests/test_facebook_comment_dispatch.py",
+    "backend/tests/test_facebook_message_dispatch.py",
+    "backend/tests/test_facebook_psid_identity.py",
+    "backend/tests/test_facebook_send_recipient.py",
+    "backend/tests/test_facebook_token_verification.py",
+    "backend/tests/test_facebook_webhook_parser.py",
+    "backend/tests/test_forwarded_ip_trust.py",
+    "backend/tests/test_health.py",
+    "backend/tests/test_instagram_hard_delete.py",
+    "backend/tests/test_instagram_routes.py",
+    "backend/tests/test_instagram_token_refresh.py",
+    "backend/tests/test_lead_creation_race.py",
+    "backend/tests/test_message_retry.py",
+    "backend/tests/test_message_retry_platform_guard.py",
+    "backend/tests/test_meta_compliance.py",
+    "backend/tests/test_meta_errors.py",
+    "backend/tests/test_meta_integration.py",
+    "backend/tests/test_meta_webhook_signatures.py",
+    "backend/tests/test_meta_webhooks.py",
+    "backend/tests/test_models.py",
+    "backend/tests/test_normalization.py",
+    "backend/tests/test_preflight_prod.py",
+    "backend/tests/test_processed_event_migration.py",
+    "backend/tests/test_processed_event_service.py",
+    "backend/tests/test_production_hardening.py",
+    "backend/tests/test_rate_limit_isolation.py",
+    "backend/tests/test_saas_contract.py",
+    "backend/tests/test_saas_contract_vectors.py",
+    "backend/tests/test_saas_delegation_config.py",
+    "backend/tests/test_saas_delegation_dispatch.py",
+    "backend/tests/test_saas_error_mapping.py",
+    "backend/tests/test_saas_forwarder.py",
+    "backend/tests/test_saas_health.py",
+    "backend/tests/test_saas_messages.py",
+    "backend/tests/test_saas_retention.py",
+    "backend/tests/test_saas_send_retry.py",
+    "backend/tests/test_saas_signing.py",
+    "backend/tests/test_saas_status.py",
+    "backend/tests/test_saas_takeover_guard.py",
+    "backend/tests/test_saas_unsupported.py",
+    "backend/tests/test_saas_unsupported_instagram.py",
+    "backend/tests/test_saas_whatsapp_replies.py",
+    "backend/tests/test_security.py",
+    "backend/tests/test_send_private_reply.py",
+    "backend/tests/test_templates.py",
+    "backend/tests/test_webhook_object_dispatch.py",
+    "backend/tests/test_webhook_persistence.py",
+    "backend/tests/test_webhook_processed_logging.py",
+    "backend/tests/test_webhook_processing.py",
+    "backend/tests/test_webhook_recovery.py",
+    "backend/tests/test_webhook_retention.py",
+    "backend/tests/test_webhook_secrets.py",
+    "backend/tests/test_whatsapp_ai_conversation_turn.py",
+    "backend/tests/test_whatsapp_cloud_client.py",
+    "backend/tests/test_whatsapp_consent_template_services.py",
+    "backend/tests/test_whatsapp_e2e.py",
+    "backend/tests/test_whatsapp_ids.py",
+    "backend/tests/test_whatsapp_management_client.py",
+    "backend/tests/test_whatsapp_message_dispatch.py",
+    "backend/tests/test_whatsapp_outreach_invariants.py",
+    "backend/tests/test_whatsapp_outreach_migration.py",
+    "backend/tests/test_whatsapp_outreach_services.py",
+    "backend/tests/test_whatsapp_outreach_settings_migration.py",
+    "backend/tests/test_whatsapp_phase5.py",
+    "backend/tests/test_whatsapp_tasks.py",
+    "backend/tests/test_whatsapp_template_send_invariant.py",
+    "backend/tests/test_whatsapp_webhook_handlers.py",
+    "backend/tests/test_whatsapp_webhook_parser.py",
+    "backend/tests/test_workspace_scoping.py",
+    "cold-dm-ai-conversations.patch",
+    "dashboard/.eslintrc.json",
+    "dashboard/Dockerfile",
+    "dashboard/app/(auth)/login/page.tsx",
+    "dashboard/app/(auth)/privacy/page.tsx",
+    "dashboard/app/(auth)/terms/page.tsx",
+    "dashboard/app/(dashboard)/accounts/page.tsx",
+    "dashboard/app/(dashboard)/campaigns/[id]/page.tsx",
+    "dashboard/app/(dashboard)/campaigns/[id]/stats/page.tsx",
+    "dashboard/app/(dashboard)/campaigns/new/page.tsx",
+    "dashboard/app/(dashboard)/campaigns/page.tsx",
+    "dashboard/app/(dashboard)/conversations/page.tsx",
+    "dashboard/app/(dashboard)/error.tsx",
+    "dashboard/app/(dashboard)/facebook-campaigns/page.tsx",
+    "dashboard/app/(dashboard)/layout.tsx",
+    "dashboard/app/(dashboard)/leads/page.tsx",
+    "dashboard/app/(dashboard)/logs/page.tsx",
+    "dashboard/app/(dashboard)/messages/page.tsx",
+    "dashboard/app/(dashboard)/overview/page.tsx",
+    "dashboard/app/(dashboard)/whatsapp/campaigns/[id]/page.tsx",
+    "dashboard/app/(dashboard)/whatsapp/campaigns/new/page.tsx",
+    "dashboard/app/(dashboard)/whatsapp/campaigns/page.tsx",
+    "dashboard/app/(dashboard)/whatsapp/contacts/page.tsx",
+    "dashboard/app/(dashboard)/whatsapp/health/page.tsx",
+    "dashboard/app/(dashboard)/whatsapp/layout.tsx",
+    "dashboard/app/(dashboard)/whatsapp/page.tsx",
+    "dashboard/app/(dashboard)/whatsapp/templates/page.tsx",
+    "dashboard/app/error.tsx",
+    "dashboard/app/globals.css",
+    "dashboard/app/icon.svg",
+    "dashboard/app/layout.tsx",
+    "dashboard/app/not-found.tsx",
+    "dashboard/app/opt-in/[token]/page.tsx",
+    "dashboard/app/page.tsx",
+    "dashboard/components/ErrorBoundary.tsx",
+    "dashboard/components/ToastProvider.tsx",
+    "dashboard/components/accounts/FacebookConnect.tsx",
+    "dashboard/components/accounts/MockConnect.tsx",
+    "dashboard/components/accounts/SaasDelegationPanel.tsx",
+    "dashboard/components/accounts/WhatsappConnect.tsx",
+    "dashboard/components/activity/ActivityFeed.tsx",
+    "dashboard/components/campaigns/CampaignForm.tsx",
+    "dashboard/components/campaigns/FacebookCampaignForm.tsx",
+    "dashboard/components/campaigns/PostPicker.tsx",
+    "dashboard/components/layout/AuthGate.tsx",
+    "dashboard/components/layout/Sidebar.tsx",
+    "dashboard/components/leads/LeadFilters.tsx",
+    "dashboard/components/logs/MetadataBlock.tsx",
+    "dashboard/components/ui/Avatar.tsx",
+    "dashboard/components/ui/Badge.tsx",
+    "dashboard/components/ui/Button.tsx",
+    "dashboard/components/ui/DataState.tsx",
+    "dashboard/components/ui/EmptyState.tsx",
+    "dashboard/components/ui/Field.tsx",
+    "dashboard/components/ui/Highlight.tsx",
+    "dashboard/components/ui/LiveStatusDot.tsx",
+    "dashboard/components/ui/PageHeader.tsx",
+    "dashboard/components/ui/Panel.tsx",
+    "dashboard/components/ui/PlatformBadge.tsx",
+    "dashboard/components/ui/Skeleton.tsx",
+    "dashboard/components/ui/Table.tsx",
+    "dashboard/components/whatsapp/WhatsappShell.tsx",
+    "dashboard/lib/api.ts",
+    "dashboard/lib/auth.ts",
+    "dashboard/lib/eventPresentation.tsx",
+    "dashboard/lib/facebookSdk.ts",
+    "dashboard/lib/logGrouping.ts",
+    "dashboard/lib/permissions.tsx",
+    "dashboard/lib/types.ts",
+    "dashboard/lib/whatsapp.ts",
+    "dashboard/lib/workspacePermissions.tsx",
+    "dashboard/next-env.d.ts",
+    "dashboard/next.config.mjs",
+    "dashboard/package-lock.json",
+    "dashboard/package.json",
+    "dashboard/postcss.config.js",
+    "dashboard/public/.gitkeep",
+    "dashboard/public/brand/robot.svg",
+    "dashboard/tailwind.config.ts",
+    "dashboard/tsconfig.json",
+    "docker-compose.local-override.yml",
+    "docker-compose.prod.yml",
+    "docker-compose.traefik.yml",
+    "docker-compose.yml",
+    "docs/backup-and-restore.md",
+    "docs/data-deletion-runbook.md",
+    "docs/deployment-vps.md",
+    "docs/end-customer-erasure-runbook.md",
+    "docs/meta-app-review-submission.md",
+    "docs/monitoring.md",
+    "docs/rate-limiting.md",
+    "docs/rehearsal-testing.md",
+    "docs/saas-delegation/A16-PROPOSED.md",
+    "docs/saas-delegation/CANARY.md",
+    "docs/saas-delegation/CONTRACT-V1.1-DELTA.md",
+    "docs/saas-delegation/CONTRACT-V1.md",
+    "docs/saas-delegation/CONTRACT.sha256",
+    "docs/saas-delegation/INITIAL-AC-REVIEW.md",
+    "docs/saas-delegation/KNOWN-LIMITS.md",
+    "docs/saas-delegation/RELEASE-GATES.md",
+    "docs/saas-delegation/T1-CONTRACT-AUDIT.md",
+    "docs/saas-delegation/TASK.md",
+    "docs/saas-delegation/a1-evidence/tests.log",
+    "docs/saas-delegation/a2-a4-evidence/WORKER-REPORT.md",
+    "docs/saas-delegation/a2-a4-evidence/attempt-1.log",
+    "docs/saas-delegation/a2-a4-evidence/attempt-1.xml",
+    "docs/saas-delegation/a2-a4-evidence/attempt-2.log",
+    "docs/saas-delegation/a2-a4-evidence/attempt-2.xml",
+    "docs/saas-delegation/a2-a4-evidence/attempt-3.log",
+    "docs/saas-delegation/a2-a4-evidence/initdb.log",
+    "docs/saas-delegation/a2-a4-evidence/prepare_snapshot.py",
+    "docs/saas-delegation/a2-a4-evidence/summary.json",
+    "docs/saas-delegation/a2-a4-evidence/tests.log",
+    "docs/saas-delegation/a5-a7-evidence/REPORT.md",
+    "docs/saas-delegation/a5-a7-evidence/canary.log",
+    "docs/saas-delegation/a5-a7-evidence/initdb.log",
+    "docs/saas-delegation/a5-a7-evidence/make_snapshot.py",
+    "docs/saas-delegation/a5-a7-evidence/tests.log",
+    "docs/saas-delegation/b1-b4-evidence/REPORT.md",
+    "docs/saas-delegation/b1-b4-evidence/check-migration.py",
+    "docs/saas-delegation/b1-b4-evidence/initdb.log",
+    "docs/saas-delegation/b1-b4-evidence/lead-cli.log",
+    "docs/saas-delegation/b1-b4-evidence/lead-migration.log",
+    "docs/saas-delegation/b1-b4-evidence/migration-first.log",
+    "docs/saas-delegation/b1-b4-evidence/migration.log",
+    "docs/saas-delegation/b1-b4-evidence/tests-first.log",
+    "docs/saas-delegation/b1-b4-evidence/tests.log",
+    "docs/saas-delegation/b2-evidence/WORKER-REPORT.md",
+    "docs/saas-delegation/b2-evidence/a2-0019-overlay.py",
+    "docs/saas-delegation/b2-evidence/a3-conftest.py",
+    "docs/saas-delegation/b2-evidence/attempt-1.log",
+    "docs/saas-delegation/b2-evidence/attempt-1.xml",
+    "docs/saas-delegation/b2-evidence/attempt-2.log",
+    "docs/saas-delegation/b2-evidence/attempt-2.xml",
+    "docs/saas-delegation/b2-evidence/attempt-3.log",
+    "docs/saas-delegation/b2-evidence/attempt-4.log",
+    "docs/saas-delegation/b2-evidence/attempt-5.log",
+    "docs/saas-delegation/b2-evidence/b1-0028-overlay.py",
+    "docs/saas-delegation/b2-evidence/hash-tests.log",
+    "docs/saas-delegation/b2-evidence/initdb.log",
+    "docs/saas-delegation/b2-evidence/prepare_snapshot.py",
+    "docs/saas-delegation/b2-evidence/summary.json",
+    "docs/saas-delegation/b2-evidence/tests.log",
+    "docs/saas-delegation/integration-evidence/static-preflight.log",
+    "docs/saas-delegation/t0-evidence/FAILURES.md",
+    "docs/saas-delegation/t0-evidence/after-full-summary.txt",
+    "docs/saas-delegation/t0-evidence/baseline-before-summary.txt",
+    "docs/saas-delegation/t0-evidence/baseline-runs.json",
+    "docs/saas-delegation/t0-evidence/before-clean-summary.txt",
+    "docs/saas-delegation/t0-evidence/current-runs.json",
+    "docs/saas-delegation/t0-evidence/harness/history.py",
+    "docs/saas-delegation/t0-evidence/harness/inspect.py",
+    "docs/saas-delegation/t0-evidence/harness/progress.py",
+    "docs/saas-delegation/t0-evidence/harness/report.py",
+    "docs/saas-delegation/t0-evidence/harness/rerun.py",
+    "docs/saas-delegation/t0-evidence/history.json",
+    "docs/saas-delegation/t0-evidence/tool-commands.json",
+    "docs/saas-delegation/t1-evidence/make_snapshot.py",
+    "docs/saas-delegation/t1-evidence/sync_contract.py",
+    "docs/saas-delegation/t1-evidence/tests-attempt-1.log",
+    "docs/saas-delegation/t1-evidence/tests.log",
+    "docs/saas-delegation/t2-evidence/contract.log",
+    "docs/saas-delegation/t2-evidence/make_snapshot.py",
+    "docs/saas-delegation/t2-evidence/tests.log",
+    "docs/saas-delegation/t2-evidence/unittest.log",
+    "docs/security-checklist.md",
+    "docs/whatsapp-outreach-implementation.md",
+    "docs/whatsapp-outreach-migration-rehearsal.json",
+    "docs/whatsapp-outreach-migration.md",
+    "docs/whatsapp-outreach-phase7-report.md",
+    "docs/whatsapp-outreach-predeploy.md",
+    "docs/whatsapp-outreach-verification.json",
+    "follow_gate_event_driven.patch",
+    "nginx/default.conf",
+    "phase-1-foundation-prompt.md",
+    "phase-2-whatsapp-prompt.md",
+    "phase-3-facebook-prompt.md",
+    "popeye access token.txt",
+    "scripts/backup_postgres.ps1",
+    "scripts/canary_preflight.py",
+    "scripts/check_contract_copies.py",
+    "scripts/cleanup_disconnected_usernames.sql",
+    "scripts/preflight_prod.py",
+    "scripts/rehearsal_lifecycle_check.py",
+    "scripts/rehearse_whatsapp_migrations.ps1",
+    "scripts/rehearse_whatsapp_migrations.py",
+    "scripts/restore_postgres.ps1",
+    "scripts/send_mock_instagram_webhook.py",
+    "scripts/send_rehearsal_webhooks.py",
+    "scripts/test_canary_preflight.py",
+    "scripts/test_check_contract_copies.py",
+    "backend/tests/test_model_registry.py",
+    "backend/tests/test_meta_graph_version.py"
+  ],
+  "files": [
+    {
+      "path": ".github/workflows/saas-delegation.yml",
+      "sha256": "e3b80b81175361d2a2397591fe56516511a3b675a97c3eea8e7200204c7c3f0f"
+    },
+    {
+      "path": "README.md",
+      "sha256": "85eda8213ed555b79e05b496d9130b241834621f34f0b298eb18b7a58eebb222"
+    },
+    {
+      "path": "backend/alembic.ini",
+      "sha256": "8ec5f3be56a97a32f20b008454116526b472f753032290f1c9cc85db50ebe406"
+    },
+    {
+      "path": "backend/alembic/__init__.py",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "backend/alembic/env.py",
+      "sha256": "bc7d93f0ba22880329516ca67201637291c5f6c5ea115c6ca8add144bca7658a"
+    },
+    {
+      "path": "backend/alembic/script.py.mako",
+      "sha256": "2ca4e8780429bf9d3f0542948b6f811aec5943523f685c7f3f079e148487ac9b"
+    },
+    {
+      "path": "backend/alembic/versions/0001_initial.py",
+      "sha256": "19b96ad36bdc181ae995a422c65a9c07df592d0eee7a971ef84ff6db47d092c3"
+    },
+    {
+      "path": "backend/alembic/versions/0002_instagram_account_status.py",
+      "sha256": "e5e81b01e1036eadf282767a0425fa97e4a0d80f71df23cf91da9b70f953d852"
+    },
+    {
+      "path": "backend/alembic/versions/0003_follow_prompt_flow.py",
+      "sha256": "9ef03bd2be6ce5e295245f099887c33e44e73161d0450f7e456abe9dc01cca9a"
+    },
+    {
+      "path": "backend/alembic/versions/0004_roles_and_audit_logs.py",
+      "sha256": "e9c370d698a743ee8f888c8e0584d27471c65f4858b4ad49ee62ff3da3d05a10"
+    },
+    {
+      "path": "backend/alembic/versions/0005_processed_webhook_events.py",
+      "sha256": "2c7ae051eb4d47cd6303d465c170ea384d1cc4fcf742ffc4bc384f0a9b489aec"
+    },
+    {
+      "path": "backend/alembic/versions/0006_campaign_target_media.py",
+      "sha256": "3b0d4edc3df74bdbb23bee6d0147e13b3b36cf9d5e8cc1250f54bdb2fa3ffe7f"
+    },
+    {
+      "path": "backend/alembic/versions/0007_add_expires_at_meta_token.py",
+      "sha256": "0832e10941baf2d37ac1c1380e2956bee6be9738273775bf24d3465775528b5b"
+    },
+    {
+      "path": "backend/alembic/versions/0008_campaign_comment_reply.py",
+      "sha256": "ef3ff9e20a0682a603555177766ad7b45b5bde04aa01541e8cec31a1669cfe2b"
+    },
+    {
+      "path": "backend/alembic/versions/0009_ai_conversation_layer.py",
+      "sha256": "93ad563cad2b1b716255d8e9854f5a1e59fde21dcf727e33650abfaa567ccb0e"
+    },
+    {
+      "path": "backend/alembic/versions/0010_cold_dm_ai.py",
+      "sha256": "29d10fc611cc196cbbb72ac4c590869e4b76a01cc8d53f743ecd502ec706a712"
+    },
+    {
+      "path": "backend/alembic/versions/0011_platform_foundation.py",
+      "sha256": "071b1302b3bbcfe1565669a7c403efe4cb7aa90a46368391798b17f679ad1042"
+    },
+    {
+      "path": "backend/alembic/versions/0012_whatsapp_accounts.py",
+      "sha256": "3a6f542c18d657de98a1ad86c8fe0db8f11fb104dddce147e6d9157d4e41124c"
+    },
+    {
+      "path": "backend/alembic/versions/0013_facebook_pages.py",
+      "sha256": "25423c57f64a19f77b49a1de65a067718a92df8f8a2e27a601f4e0ab7821656d"
+    },
+    {
+      "path": "backend/alembic/versions/0014_facebook_psid.py",
+      "sha256": "b63c0348d9609395deca3441e9819ec4dd9502322b593fbf22e4cba163d85527"
+    },
+    {
+      "path": "backend/alembic/versions/0015_conv_cold_dm_uniq.py",
+      "sha256": "cc0c9b852e782171dd907a359a054dd9abd02d87fd3fd46080ecf82f44bae375"
+    },
+    {
+      "path": "backend/alembic/versions/0017_workspace_membership.py",
+      "sha256": "84dfc600c4b79aaa10c650c3f8d6b0b490055387ea3a51b3683489862f54c5ac"
+    },
+    {
+      "path": "backend/alembic/versions/0018_whatsapp_outreach.py",
+      "sha256": "52761e32ba85135271c05cf5b79efbf7d373f1b3ccbe71f4c14c1e46234d16f2"
+    },
+    {
+      "path": "backend/alembic/versions/0019_whatsapp_outreach_settings.py",
+      "sha256": "4d035056e80bc0d83130b9b98698da55677f5a278d98c8c215aa507e8c3a6a0f"
+    },
+    {
+      "path": "backend/alembic/versions/0020_whatsapp_outreach_services.py",
+      "sha256": "45db20895b14989d9be799ef7993294a4af94466eaeea4dbaac4f67170f33659"
+    },
+    {
+      "path": "backend/alembic/versions/0021_whatsapp_campaign_completed_at.py",
+      "sha256": "5e490acc0f7decfaa603b9369115e78c40339ed655f4d1893d5c205de4699d83"
+    },
+    {
+      "path": "backend/alembic/versions/0022_whatsapp_opt_in_unverified.py",
+      "sha256": "8ecd41f0631576914ece749f1e450d4a9f5eb16f433df54c4772e1d78c7987a8"
+    },
+    {
+      "path": "backend/alembic/versions/0023_saas_delegation.py",
+      "sha256": "b4246f009247d46828d1732694bbd7833602cae3921ad166ac92c35f37732772"
+    },
+    {
+      "path": "backend/alembic/versions/0024_saas_forward_events.py",
+      "sha256": "72c25163ef05d878b220d16f7e77e0827eca11534f17953707e8ccd2cfb3b3d5"
+    },
+    {
+      "path": "backend/alembic/versions/0025_saas_outbound_messages.py",
+      "sha256": "ead9fd79142d067fd84283a44109291bab7ef0a4472a2fac07b6a12d037c1ad5"
+    },
+    {
+      "path": "backend/alembic/versions/0026_saas_channel_health.py",
+      "sha256": "990626e8fc94f3ee2fe8a07a6f400f9ff8e888ae47b9be97781fdc68bdc88f7c"
+    },
+    {
+      "path": "backend/alembic/versions/0027_saas_conn_id_lowercase.py",
+      "sha256": "ff44095f782a6b1fb772675a781b2bea4aa87649fe52c106a3e8900b4d1bde60"
+    },
+    {
+      "path": "backend/alembic/versions/0028_meta_compliance.py",
+      "sha256": "9d8b57ac3857ce16f7844aa61f612a3cdd2ef14aa0a3c5e444e95e0d947e9709"
+    },
+    {
+      "path": "backend/alembic/versions/0029_hash_processed_event_keys.py",
+      "sha256": "9c656bde83773f3c5b74a50dea9275e613d02343723ed622313329ab38065e0b"
+    },
+    {
+      "path": "backend/alembic/versions/__init__.py",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "backend/app/__init__.py",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "backend/app/api/__init__.py",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "backend/app/api/routes_auth.py",
+      "sha256": "865b375598fbf1345b970a87cd56046fa49ec3366a5cfd6061e1512bdd8e4c92"
+    },
+    {
+      "path": "backend/app/api/routes_campaigns.py",
+      "sha256": "c0475f8108dd90467e7841872fc62eb0e87f604aee7db0d079a8265b2018a3b2"
+    },
+    {
+      "path": "backend/app/api/routes_contact_erasure.py",
+      "sha256": "d180de7b6e5edf3ccd188ab81a1ecf85d8daab799c393885e1d0854a9166f624"
+    },
+    {
+      "path": "backend/app/api/routes_conversations.py",
+      "sha256": "069724a6eaa9bacdbabee429871ada91c8dcb86f1ffa7aeb6415b9288c6d3c1d"
+    },
+    {
+      "path": "backend/app/api/routes_dashboard.py",
+      "sha256": "dfd445cc1fa9bdbc2a86484fe15defb301c8e82dcc681116b1615ca520f14153"
+    },
+    {
+      "path": "backend/app/api/routes_facebook.py",
+      "sha256": "6641b259e4e2398ed79590514141cb52b5cfea09c3a91eaf1cd5c51ae9eeb6c0"
+    },
+    {
+      "path": "backend/app/api/routes_health.py",
+      "sha256": "9647f93a94caa5d8139187c220bf22055dd1fc96a3d7c2c8b07200b391cfa5aa"
+    },
+    {
+      "path": "backend/app/api/routes_instagram.py",
+      "sha256": "fb0eec7472e91572a67f868eac4769808ce2930b4719e95fcf0722a326ea7eb3"
+    },
+    {
+      "path": "backend/app/api/routes_messages.py",
+      "sha256": "9acd797b1a3f70c78e4447f35b0f77004bb8c9c34b1289c1e89257b8b30d9be6"
+    },
+    {
+      "path": "backend/app/api/routes_meta.py",
+      "sha256": "81ff48bd13f1b797f750f5ad220b2f1500bde5e4b5d5c8de4da97fd0855766d6"
+    },
+    {
+      "path": "backend/app/api/routes_meta_compliance.py",
+      "sha256": "5a982ae6fc89f472275557abca0776d21409d9e60ef46e9d6ecca7d232df9186"
+    },
+    {
+      "path": "backend/app/api/routes_saas_delegation.py",
+      "sha256": "5bef49883bba281798c2803719355345f56dc959d895c287a539517a51b9ae59"
+    },
+    {
+      "path": "backend/app/api/routes_saas_messages.py",
+      "sha256": "e35c705faf04030200a008fce5863bcb037b2936b4afad832449424d5a204627"
+    },
+    {
+      "path": "backend/app/api/routes_webhooks.py",
+      "sha256": "5ccf49e7896d88bc08eb0ee2e7e3f0f296f504b6340d0da12732a839c86727d8"
+    },
+    {
+      "path": "backend/app/api/routes_whatsapp.py",
+      "sha256": "fbea2a1b4ec2c157eb8656c65886f76bc4a6f27f77e46c7d56203110c3fb3fcf"
+    },
+    {
+      "path": "backend/app/api/routes_whatsapp_outreach.py",
+      "sha256": "4e466432be7bf5bdf291055893ad3ec2130e14dffbd1827498888036813cc6ad"
+    },
+    {
+      "path": "backend/app/api/routes_workspaces.py",
+      "sha256": "fffd24db390d230e1f5686189855a88f7b2e666e2a5bcbfa85b0b373445d3c60"
+    },
+    {
+      "path": "backend/app/authz.py",
+      "sha256": "4b7093d21fd96f2227f02b81b4b051381a094f7102c3c6e57fd82efa2fbcec09"
+    },
+    {
+      "path": "backend/app/core/__init__.py",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "backend/app/core/config.py",
+      "sha256": "a49d1e8ab3f530a75b7f7842534805be51180aa102ff5107706cc633e6960785"
+    },
+    {
+      "path": "backend/app/core/logging.py",
+      "sha256": "dd5a786a008237ac139219beec844bb0942109ccc5343bf2ea810020ab9ef9b5"
+    },
+    {
+      "path": "backend/app/core/security.py",
+      "sha256": "f608f3385255420a8af2499d5d50149fda701e61db867e75f803f1b78fbbd7d5"
+    },
+    {
+      "path": "backend/app/db/__init__.py",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "backend/app/db/base.py",
+      "sha256": "7e321baf9b4ae54c4a30d83a081d18281af85991decb974c01da5d392e6c497f"
+    },
+    {
+      "path": "backend/app/db/session.py",
+      "sha256": "22553a86cdc7217f1d31b37a6c5a15cb8764760639cbad063cbd2df2553f2f7a"
+    },
+    {
+      "path": "backend/app/integrations/__init__.py",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "backend/app/integrations/meta/__init__.py",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "backend/app/integrations/meta/accounts.py",
+      "sha256": "c9789472e542279b369e816df56038fed255edf495d6cc589cd09447d5a6297c"
+    },
+    {
+      "path": "backend/app/integrations/meta/client.py",
+      "sha256": "d695ff404119c36192a58a459327d8b5c9208635a1a0f2faeb97568b0cc481fc"
+    },
+    {
+      "path": "backend/app/integrations/meta/errors.py",
+      "sha256": "76a9ae73a32d2f3672fec434765ab7ec2c56773f910c3b44a6e9f1e2fa0ac3f1"
+    },
+    {
+      "path": "backend/app/integrations/meta/facebook_client.py",
+      "sha256": "f9d77db3b03985653596f01e1128ba01e88fe2d13031753389ddde4f71359a58"
+    },
+    {
+      "path": "backend/app/integrations/meta/facebook_oauth.py",
+      "sha256": "813d54d2be1cae38b7a7a48e8acf2fe43200c3b24e63a69b486b7cdc6ca990e4"
+    },
+    {
+      "path": "backend/app/integrations/meta/facebook_webhooks.py",
+      "sha256": "89394659133f18291110739751a6839e5f799735d1fb00b3a62009b0e23ecab6"
+    },
+    {
+      "path": "backend/app/integrations/meta/messaging.py",
+      "sha256": "1442cd11ad0641edda976e88d8e3b7cdff2640daa43bc9f77b9d3df13ffae75e"
+    },
+    {
+      "path": "backend/app/integrations/meta/oauth.py",
+      "sha256": "9c7cc04a4c12392c53beead43edf2dca03ec43069077c484d404748e4da67789"
+    },
+    {
+      "path": "backend/app/integrations/meta/token_refresh.py",
+      "sha256": "eee5c8129d9cbfb6c7865bf391e15f978654c637164777c9b4aa636f32fa08cc"
+    },
+    {
+      "path": "backend/app/integrations/meta/unsupported_messages.py",
+      "sha256": "67b3c3eb2f3a5ecf1bcc21c2e9feb33268aec1e3f8f28fcdea410cf4964a98b4"
+    },
+    {
+      "path": "backend/app/integrations/meta/webhooks.py",
+      "sha256": "88cda0355bbde0514de7a4a89fa01ab39012294a0ffb9e95be5107c201113424"
+    },
+    {
+      "path": "backend/app/integrations/meta/whatsapp_client.py",
+      "sha256": "670597efac1ad6615a7f9925616fb94340a04d914ec877686115d2e4b6106468"
+    },
+    {
+      "path": "backend/app/integrations/meta/whatsapp_ids.py",
+      "sha256": "ecf65dc0e312f5a93f09cbdaee9543dc34a5c4bdb1e93030196741f69d424831"
+    },
+    {
+      "path": "backend/app/integrations/meta/whatsapp_management_client.py",
+      "sha256": "39ba7ee53de576a1e016aec2910c5bfa2efa3bfadf96f93de0fd0bb8e415c250"
+    },
+    {
+      "path": "backend/app/integrations/meta/whatsapp_oauth.py",
+      "sha256": "f4d54f8eec601ff3182407f2e7c4c45d07f0346ca1b39df39e99dadacd0ec009"
+    },
+    {
+      "path": "backend/app/integrations/meta/whatsapp_webhooks.py",
+      "sha256": "3f1ee6e26a12d68a35aed4a92978ed6501a2e69a0c3df264bb40513a6a1b6614"
+    },
+    {
+      "path": "backend/app/main.py",
+      "sha256": "7c1fe85b867e4cbaad1bfe33b21ce6329e6d54f69fe96678fc07ebab1b091b55"
+    },
+    {
+      "path": "backend/app/models/__init__.py",
+      "sha256": "81d554f8da60ecb8ecd250ff3dc00d26f0f655aa171757db1788fe3b7b5a9b39"
+    },
+    {
+      "path": "backend/app/models/audit_log.py",
+      "sha256": "77b13d87d0b607b8383a42e2e93e787e163a69b98fd2448cc8add772f6096b81"
+    },
+    {
+      "path": "backend/app/models/automation_log.py",
+      "sha256": "367b0cc6d79b5e99b64d894a5482ef0386a18803d21760fb1037cc2fb15995c7"
+    },
+    {
+      "path": "backend/app/models/campaign.py",
+      "sha256": "648a35dd88ad80547941858d67a6ac3d8c95b99f977c96130a414df47cbdf194"
+    },
+    {
+      "path": "backend/app/models/campaign_keyword.py",
+      "sha256": "bce5ae9a6a53a8f6de14fdc2ad7f078645174e4c04f9c8bb9126c58f24c80e56"
+    },
+    {
+      "path": "backend/app/models/comment.py",
+      "sha256": "b9135a9b58894203642cca5a959e3907c2ff615ec666de01fe2f098fa2716202"
+    },
+    {
+      "path": "backend/app/models/conversation.py",
+      "sha256": "944858b498a00401b0fd85251f11b00c7c0d273dc28356022723043ede3e249b"
+    },
+    {
+      "path": "backend/app/models/data_deletion_request.py",
+      "sha256": "662b021347739a2e545dd4fcd33fdf4c6026a2f4fac3360d99d083e6eea926d6"
+    },
+    {
+      "path": "backend/app/models/facebook_campaign.py",
+      "sha256": "8e47d0a49be616fb95a0606cdb6365374edffa11de13cfb26e4062c81977c6d5"
+    },
+    {
+      "path": "backend/app/models/facebook_campaign_keyword.py",
+      "sha256": "c10adab133ee0c343060b81688b50a35a929ab1301ce57009549d3cae17fb50e"
+    },
+    {
+      "path": "backend/app/models/facebook_comment.py",
+      "sha256": "8d2fa673baf5748f73a54a068918e431a68c49d92d9d50686c4209905a5fab15"
+    },
+    {
+      "path": "backend/app/models/facebook_page.py",
+      "sha256": "7ef00eb0a083a277f526c550d00a72818092d5d44574efffb729b1762da39213"
+    },
+    {
+      "path": "backend/app/models/facebook_token.py",
+      "sha256": "29ce50e156d0df4b33cbc51464ac5b53e5f76f4379a5cc2289c1ea52b2302ee6"
+    },
+    {
+      "path": "backend/app/models/facebook_user_cooldown.py",
+      "sha256": "10ac92a0d4c170bb0a8ce3428f2c7361358a0cdab2be1377fd2a08f4b1c1b81c"
+    },
+    {
+      "path": "backend/app/models/instagram_account.py",
+      "sha256": "eb467e85bc4ba6bc258db2225729aa2a6f0a29825d906ba6cbacf62bd03f758b"
+    },
+    {
+      "path": "backend/app/models/lead.py",
+      "sha256": "e5ff4f470672e9a0e03d234f005b91178a31d4aeed78cae7918c60c74e85dae3"
+    },
+    {
+      "path": "backend/app/models/message.py",
+      "sha256": "666da9a0bf2cfafb465029a03e317c5263293e420e72026c083fc024a49451ac"
+    },
+    {
+      "path": "backend/app/models/meta_authorization.py",
+      "sha256": "841ff6132670f76746f5b3a22e5b34ad835cada8affb494b901ddbefe5243513"
+    },
+    {
+      "path": "backend/app/models/meta_token.py",
+      "sha256": "6a471e036da586b5b3e3b0641fca96a73d7e7fcff01f55719b23e36913aa20a1"
+    },
+    {
+      "path": "backend/app/models/processed_webhook_event.py",
+      "sha256": "7d175a2deae3ef7e59c6362a661acb9bcc7d7db765f80c37013ed42cce246b41"
+    },
+    {
+      "path": "backend/app/models/saas_delegation.py",
+      "sha256": "e24a387b23ec2e52c17debb386e3fba9c336ef56795773706347ca4c7f75d2e3"
+    },
+    {
+      "path": "backend/app/models/saas_forward_event.py",
+      "sha256": "811345325730f8d10bf5638acaa8e88677e2929b0c3ba264b28174b94c1a3122"
+    },
+    {
+      "path": "backend/app/models/saas_outbound_message.py",
+      "sha256": "913e5c3d9115346ba2db81caf6c72db56b615f7c7f2a45af2084b531f90d5502"
+    },
+    {
+      "path": "backend/app/models/user.py",
+      "sha256": "3118e6c60bb126a3dedbccaa2b61b2853738872c44fa391e2e9876aa7458e189"
+    },
+    {
+      "path": "backend/app/models/user_cooldown.py",
+      "sha256": "0231be691bad60bc2e0e555f88cb0dc01afbe14cd78422785f0d3e48f8f9ed95"
+    },
+    {
+      "path": "backend/app/models/user_workspace_membership.py",
+      "sha256": "6ad4ccaa23edb173e941f1512ae314a3cf9d0c0348f2398bbf5388fbba4bd546"
+    },
+    {
+      "path": "backend/app/models/webhook_event.py",
+      "sha256": "d78d2d77a60f3379bde549584f952e738423ca4f363e61a44884b1f4622e47df"
+    },
+    {
+      "path": "backend/app/models/webhook_health.py",
+      "sha256": "b024ca2f5d847b62ad8467df3f32e391bc350e86fe8067d989cbb3c25f7eaf26"
+    },
+    {
+      "path": "backend/app/models/whatsapp_account.py",
+      "sha256": "63524c55b5cf879efd22011f8855e44143f0dd0c923880a4ae818a861a244fba"
+    },
+    {
+      "path": "backend/app/models/whatsapp_campaign.py",
+      "sha256": "2f55723003f8228d7d655e2dce44e796a885146ae3ad3f3edb1448337abdf208"
+    },
+    {
+      "path": "backend/app/models/whatsapp_campaign_recipient.py",
+      "sha256": "84ff0b98b039e2335455279b2a29a457b03ca42564f400f67b43119a8d443f5a"
+    },
+    {
+      "path": "backend/app/models/whatsapp_consent_event.py",
+      "sha256": "f28a9122ed39cbddcc43490d7003ac80ed3010d73a7731629cb79555ab4633e2"
+    },
+    {
+      "path": "backend/app/models/whatsapp_contact.py",
+      "sha256": "5e2cc537e000b6b91097445eb1cdad9a972f37e394b9215c7f0fbc076484964d"
+    },
+    {
+      "path": "backend/app/models/whatsapp_template.py",
+      "sha256": "7e2dd903d9640979f05f464b577e78949314efd37b1153050881aad26aec1b3a"
+    },
+    {
+      "path": "backend/app/models/whatsapp_token.py",
+      "sha256": "d427d9a848bde990b3fdcfc954eafcc98135ff17c0f265f68d917d357ff46932"
+    },
+    {
+      "path": "backend/app/models/workspace.py",
+      "sha256": "c68fd5712110132459382a2a8e11dfbb01243113090bdc3105fa9a178037e49c"
+    },
+    {
+      "path": "backend/app/roles.py",
+      "sha256": "5586a4c85248b78d68cc5661b4415b30bedfef4d37454af84fedabeaf557b5c8"
+    },
+    {
+      "path": "backend/app/schemas/__init__.py",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "backend/app/schemas/auth.py",
+      "sha256": "d236b7d349349cf3ceb5bad81cce1525c902040b96a70e3e7848a46f2feee58b"
+    },
+    {
+      "path": "backend/app/schemas/campaign.py",
+      "sha256": "32f8e29ed1a32a9774c96d89be2ab61e8351e3189203be4e7fe189866904f929"
+    },
+    {
+      "path": "backend/app/schemas/saas_delegation.py",
+      "sha256": "a99040b8fb3095a286254bd86a14c21ba28883bc2a1f446aa4de1b17fb5d2339"
+    },
+    {
+      "path": "backend/app/schemas/user.py",
+      "sha256": "f72a2f1a504aad9896f378af0167b670cc680086a1940893f550cfdbf8177e57"
+    },
+    {
+      "path": "backend/app/scripts/__init__.py",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "backend/app/scripts/create_admin.py",
+      "sha256": "c0ccfb06274bdde662058f3252f6c750d621cddbb6b8cba28fac793b5dc4d607"
+    },
+    {
+      "path": "backend/app/scripts/seed_rehearsal.py",
+      "sha256": "9acedb4c84926b3f146d7f5e65b00d198dc1be86ffee08491f0a49f3f69d5293"
+    },
+    {
+      "path": "backend/app/services/__init__.py",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "backend/app/services/ai_service.py",
+      "sha256": "22808b2f7cb11e9d21178660ef43c965368254b39775dffbb223ab1141470467"
+    },
+    {
+      "path": "backend/app/services/audit_service.py",
+      "sha256": "92692d839590245f263cf392f1a2333c3aceae9f72fa49950eb179bd69d03661"
+    },
+    {
+      "path": "backend/app/services/campaign_matcher.py",
+      "sha256": "11ef2b9fad42f34f4023f3c5f2ad4da289657605b16c49a2d69969fcb00f5232"
+    },
+    {
+      "path": "backend/app/services/campaign_service.py",
+      "sha256": "b1b6bc2c79fb816940e969da0755b31ba58d094a0eb370f335ed11d16059d08d"
+    },
+    {
+      "path": "backend/app/services/comment_service.py",
+      "sha256": "c35f399560319917b23efb3e879f1a54c8f01349413c453228836c0915c7ab34"
+    },
+    {
+      "path": "backend/app/services/contact_erasure.py",
+      "sha256": "428d1378a11e104dcb32941faf3c983419f3381193fc1940f68047a3d5975e31"
+    },
+    {
+      "path": "backend/app/services/conversation_service.py",
+      "sha256": "baec38928bc25fb13ed7eec8267482426d188490ac3ee63ab348e2d16208113e"
+    },
+    {
+      "path": "backend/app/services/cooldown_service.py",
+      "sha256": "fde891609287085fbf0f5672bd09ad6019f12827af40afba0d80b3a948823446"
+    },
+    {
+      "path": "backend/app/services/facebook_campaign_matcher.py",
+      "sha256": "92805e3bc0a69070397612a9d046e9c74dff12e77ce06a4323d713663d57f151"
+    },
+    {
+      "path": "backend/app/services/facebook_comment_service.py",
+      "sha256": "1eb8c2c984465c740889f0d1779e85cf594e38513934c5989820630704844741"
+    },
+    {
+      "path": "backend/app/services/facebook_cooldown_service.py",
+      "sha256": "fb75baf412d20b38cfe1ee8d861d9589cd69942bed0b354785f153a080b30432"
+    },
+    {
+      "path": "backend/app/services/facebook_lead_service.py",
+      "sha256": "7ffc537dce6d1831a3cc1e8ef9b2c9e03c1677628a0e5f569e855ad23346891d"
+    },
+    {
+      "path": "backend/app/services/facebook_message_service.py",
+      "sha256": "9d24c93dc24263a62300b9b0219fb1a434c0346dc6f7623bea7dbc2f590f8bd1"
+    },
+    {
+      "path": "backend/app/services/facebook_token_service.py",
+      "sha256": "821a14b77cabac45520cb2515b69ac1805453c95aed68ddb00bd5539da1651e6"
+    },
+    {
+      "path": "backend/app/services/lead_service.py",
+      "sha256": "18c20e0db085e633869b86d01afaf1415cb3c5beb672c1546b4ecc7f708bb11f"
+    },
+    {
+      "path": "backend/app/services/log_service.py",
+      "sha256": "41607f9a46c996c1a3d46c7dcf29ff8d06388a0ebb0de32753d507c3fc0c760f"
+    },
+    {
+      "path": "backend/app/services/message_service.py",
+      "sha256": "b4256e3cf7f08cec3f0e08c1f8e9ec9f1294c4ca7cdcc3c61dc029defe781f93"
+    },
+    {
+      "path": "backend/app/services/meta_compliance.py",
+      "sha256": "f4e7ee1802c2f1a84555506ea97be0b72f456e87ff16f20db5b88a2e1366ab7a"
+    },
+    {
+      "path": "backend/app/services/outreach_service.py",
+      "sha256": "149cccbda36aa793d4fc7d3d85ecd3366b0bbf826b73610f68ea36ae88cb31c5"
+    },
+    {
+      "path": "backend/app/services/processed_event_service.py",
+      "sha256": "cd60a10260ff1e694fe188ffc0fc42a04b1a8520c55931ad640dbe7c91bc6e1f"
+    },
+    {
+      "path": "backend/app/services/rate_limit_service.py",
+      "sha256": "ff6f915a507a6a8c292b5afa456ba7d75abc951eae9a8a3358f09e09b67eb864"
+    },
+    {
+      "path": "backend/app/services/saas_delegation_service.py",
+      "sha256": "0a0b8e1976379ae863767d0f16fadcc67e26922cda315148b66d3dc4821c7edb"
+    },
+    {
+      "path": "backend/app/services/saas_error_mapping.py",
+      "sha256": "2c252cb2db53d090bb222316b589ff1e91a69e1d6142236bcf360b82d1f72555"
+    },
+    {
+      "path": "backend/app/services/saas_forwarder.py",
+      "sha256": "8e11f80ecfb88c684d50730c8bced0a7f4a55ef71908d5be5b9fa7cb24070788"
+    },
+    {
+      "path": "backend/app/services/saas_health.py",
+      "sha256": "35cb314e35ba225ede437d5d27784f37e96ff099bac611f9a05f4b5d20bf5fd2"
+    },
+    {
+      "path": "backend/app/services/saas_inbound.py",
+      "sha256": "d5c3b48f44f1aefd34173c8ea8d42e0b4c455b049ce1e275c311bf6dd504e3b6"
+    },
+    {
+      "path": "backend/app/services/saas_outbound.py",
+      "sha256": "938d73c716fd3351b23e3e93f4dfd553d6913789dd70c89ef608ba2d6c849fba"
+    },
+    {
+      "path": "backend/app/services/saas_signing.py",
+      "sha256": "56a75faeee53090bd3e351c43ca6b78e76fc112fc38e8587752cf4a637d40dec"
+    },
+    {
+      "path": "backend/app/services/saas_status.py",
+      "sha256": "1dc5cf7905971451fef34c794906fae77953023804d0cbdaf8e34bbb348de8a7"
+    },
+    {
+      "path": "backend/app/services/template_service.py",
+      "sha256": "01ef70400c12d270105f6ca1d37d79d31dff6ce825dc96ee9bc96040c87db1c1"
+    },
+    {
+      "path": "backend/app/services/token_service.py",
+      "sha256": "82fef5e02d0de4502422281621d6cef1dd5a2f3e445f55b88e1d3eada3f7e4d4"
+    },
+    {
+      "path": "backend/app/services/webhook_event_service.py",
+      "sha256": "7212884aee7d08adb3b8220129226581534217ec028de31be2a8acc38631f35d"
+    },
+    {
+      "path": "backend/app/services/whatsapp_consent_service.py",
+      "sha256": "83d7e44b8cd6d2dbc14557395cfd5b21c6c523beb8cb5589a25a604596269fd5"
+    },
+    {
+      "path": "backend/app/services/whatsapp_template_service.py",
+      "sha256": "f1e8734b64c65e6d1113454057bd79eb2dca83bc5719fffb4e8d4254deed04dc"
+    },
+    {
+      "path": "backend/app/services/whatsapp_token_service.py",
+      "sha256": "d22f8e7c1f8ea1975cb411f32fcc033880932042ad1f1e7d1ebf898269a90552"
+    },
+    {
+      "path": "backend/app/services/whatsapp_webhook_service.py",
+      "sha256": "f39a9295aaa2f868edb16f6ca8df6a4f07f6fbc7eb9fe58126989e39199ef934"
+    },
+    {
+      "path": "backend/app/services/whatsapp_window_service.py",
+      "sha256": "0668c8240511f191100b54ebe240df319b38b56261b476823ec11d9b8b4bbd76"
+    },
+    {
+      "path": "backend/app/utils/__init__.py",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "backend/app/utils/crypto.py",
+      "sha256": "de531d9ea54bd4a2e51c7f1d46767606a597c9acf6c3f18b69d946332fa8e503"
+    },
+    {
+      "path": "backend/app/utils/db.py",
+      "sha256": "3ff1830fcdf85f564fb09958ee3e9e88ad04940fdd4017dbcd6fec13f3f20a02"
+    },
+    {
+      "path": "backend/app/utils/normalization.py",
+      "sha256": "37a5357289f8adc01d55b0a6511575e6e5da7d9bb2a09477e525c43ea0aadb9f"
+    },
+    {
+      "path": "backend/app/utils/templates.py",
+      "sha256": "bb2868cb099a4bed68ae5337336de83101609ab4adfb7bc0840fff7fa1c66784"
+    },
+    {
+      "path": "backend/app/workers/__init__.py",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "backend/app/workers/celery_app.py",
+      "sha256": "1d9da7c44dc6516f9c8eef728898511909107876ce28adffe69b920cafccb94d"
+    },
+    {
+      "path": "backend/app/workers/instagram_token_beat_schedule.py",
+      "sha256": "7bcef241b7fb02ab0875ec355639c16ba549c5df9b7df52c6020046c87f08365"
+    },
+    {
+      "path": "backend/app/workers/instagram_token_tasks.py",
+      "sha256": "eaff234660a1a4d5a50c4072e6ccb5783fd974ab855fc1eefcc5706a7a330e23"
+    },
+    {
+      "path": "backend/app/workers/saas_beat_schedule.py",
+      "sha256": "c053f007bb88a4f0626196f0ab246eba68e9d3cd8bdbda140bd6253920e7ff16"
+    },
+    {
+      "path": "backend/app/workers/saas_forward_tasks.py",
+      "sha256": "0e0ac0de696b852e10a62dfe6ca3cd2a8dca433e5b0cb70984d8c1c092e8af3b"
+    },
+    {
+      "path": "backend/app/workers/saas_health_tasks.py",
+      "sha256": "ce52289d8f1a6449e1a397691fa92fe4377aec3bb33ddaf2321040d0e6f1960a"
+    },
+    {
+      "path": "backend/app/workers/saas_retention_tasks.py",
+      "sha256": "a03223e4ae246d744e50549a303ddada816d5cd41ed9673748af46e5a9f92e3a"
+    },
+    {
+      "path": "backend/app/workers/saas_send_tasks.py",
+      "sha256": "ed48b7cbf57169efb3ee58b2a4f6a8bd541719305d4a19ab813fb09a18b02f93"
+    },
+    {
+      "path": "backend/app/workers/tasks.py",
+      "sha256": "a44f6a4d014c167fcc1070252da580648b11ce1af50e3a5df5476a706f85046c"
+    },
+    {
+      "path": "backend/app/workers/webhook_recovery_beat_schedule.py",
+      "sha256": "29ffe0de8d75a41e45410df43c48e318d2b8ba39289f0df643a38f60c01823be"
+    },
+    {
+      "path": "backend/app/workers/webhook_recovery_tasks.py",
+      "sha256": "5b06d5a737fd3820e85f53b63e9b6f70720f215be445a69d5d621a18d770258a"
+    },
+    {
+      "path": "backend/app/workers/whatsapp_beat_schedule.py",
+      "sha256": "4fefa62fd689cf45e2cf188789e03281d46ae122ac53a747bfa20ef9762670a4"
+    },
+    {
+      "path": "backend/app/workers/whatsapp_tasks.py",
+      "sha256": "caaa9039eb50ec8c14dc6c250f9b3f3806b31876cb06a45f4892fb3d8e0c6025"
+    },
+    {
+      "path": "backend/pyproject.toml",
+      "sha256": "d77210b8116a562e3efb269fb2352569643d8546f0941be178c8496c660da4d4"
+    },
+    {
+      "path": "backend/scripts/verify_0015_merge.py",
+      "sha256": "9d4ca268131571201d209bfd8662bd5d5234a6a94e9f31d19ddbe4f91d211691"
+    },
+    {
+      "path": "backend/tests/__init__.py",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "backend/tests/conftest.py",
+      "sha256": "1ade69549e3a83f272285aff69cce60bb437d2df35de55d77d2aff042891eca4"
+    },
+    {
+      "path": "backend/tests/fake_saas.py",
+      "sha256": "afd6e611d445e3768959ad6076479c58704954600da4f5e09d7b71e90b40badc"
+    },
+    {
+      "path": "backend/tests/fixtures/contract/signing_vectors.json",
+      "sha256": "c2ba7c443c0e7a0edfd9af0d043c3edcdc216e0eb9a3e7ab0c78c909b2ff6802"
+    },
+    {
+      "path": "backend/tests/test_ai_continuation_dispatch.py",
+      "sha256": "af00a58270ad3cc344cca404c0ba68b70824f9f6f5db047389cb3bf3805d424d"
+    },
+    {
+      "path": "backend/tests/test_auth.py",
+      "sha256": "1545d393277f0125399354f63ec6ced9010a4e61d5457d0e2f81509af1b6cfef"
+    },
+    {
+      "path": "backend/tests/test_campaign_routes.py",
+      "sha256": "508af66a9c252d0d92602255622f5ef074f7b50c75e67939a894424a5fdc6459"
+    },
+    {
+      "path": "backend/tests/test_campaigns.py",
+      "sha256": "3cb7de3618d4cabaefa3e73ee2754b3a9c198ec448fea9223c249e287c403180"
+    },
+    {
+      "path": "backend/tests/test_celery.py",
+      "sha256": "897e33201a3e57cdbec0fa6d2a022575ff030b953db269a7608ee201922dab6d"
+    },
+    {
+      "path": "backend/tests/test_closeout_migrations.py",
+      "sha256": "21433ee64ee5d980bdb780caf8cb564e43e25c86277c65a7b1dde19c332f5655"
+    },
+    {
+      "path": "backend/tests/test_cold_dm_ai_dispatch.py",
+      "sha256": "138f10b6941d6412af3b27e541f65d1359cbd6c598a10d46a26373edaf240afd"
+    },
+    {
+      "path": "backend/tests/test_comment_parser.py",
+      "sha256": "33711977ccf12b14e0d538e642652f3f62851cc68306a86622a57b498eb9c222"
+    },
+    {
+      "path": "backend/tests/test_contact_erasure.py",
+      "sha256": "074be434e46835fdcbaf35b4290486d6f82a174dc18af0446b89391bdf7b7f4e"
+    },
+    {
+      "path": "backend/tests/test_conversation_uniqueness.py",
+      "sha256": "6b9bcecc27c207b77064e01f7b1ff5cc8ae59ad712f6bd805aec2370360e2257"
+    },
+    {
+      "path": "backend/tests/test_crypto.py",
+      "sha256": "f232b3ea5694c0adf77c6dc0bc7c24063f461436ed35a91372e1e6c6e94ab27e"
+    },
+    {
+      "path": "backend/tests/test_disconnect_stops_bot.py",
+      "sha256": "440ebb2d7b7fe3f7cb793ad01bc2ec3f2a110b44d1fe77521efaa785c67b0f98"
+    },
+    {
+      "path": "backend/tests/test_facebook_ai_conversation_turn.py",
+      "sha256": "8ea047abd2b55d1b2812861573f5869fd9f687a4e9ab945cb528622fecba99cd"
+    },
+    {
+      "path": "backend/tests/test_facebook_comment_dispatch.py",
+      "sha256": "8f48b0c6e40eceb655488702802e560c9f24df34c8a6d740ebca44bad7a73f8f"
+    },
+    {
+      "path": "backend/tests/test_facebook_message_dispatch.py",
+      "sha256": "a171a2285c18fe4619e76759059e875646aa3e5d820b982376b9dbc834a72fa4"
+    },
+    {
+      "path": "backend/tests/test_facebook_psid_identity.py",
+      "sha256": "b183011044eaa42e9c2f822b9cf71aa6b360428b64dc08ee48246ac7fc44782f"
+    },
+    {
+      "path": "backend/tests/test_facebook_send_recipient.py",
+      "sha256": "67aaf81ecea0f6051f11eef126cc8de198e36aa8d43faa5f2b167072479ec850"
+    },
+    {
+      "path": "backend/tests/test_facebook_token_verification.py",
+      "sha256": "e4915dad8cf0169082ecb3c018b6c71526215e5bb772a0315076c726b7ab055a"
+    },
+    {
+      "path": "backend/tests/test_facebook_webhook_parser.py",
+      "sha256": "2c5ad02ea31b27003c6c9335ee36e8a84973a0545f93acacafd743d7015df8b8"
+    },
+    {
+      "path": "backend/tests/test_forwarded_ip_trust.py",
+      "sha256": "4086878f08705492b6a820a40a7ae7fff1a17ceeff1af8196ecd56af18c1f0e1"
+    },
+    {
+      "path": "backend/tests/test_health.py",
+      "sha256": "c47f35a31d02a5b16579e52c42081202775d64001bfbfb742e51ae263fe01d37"
+    },
+    {
+      "path": "backend/tests/test_instagram_hard_delete.py",
+      "sha256": "475e97fa7575b384b985a2f64159840abc767bed08c4e749e032a0f61522faa5"
+    },
+    {
+      "path": "backend/tests/test_instagram_routes.py",
+      "sha256": "d0cd02830ead1019b1b3984d835ca962e1ee3320d6a55867ec6f027ca07fe905"
+    },
+    {
+      "path": "backend/tests/test_instagram_token_refresh.py",
+      "sha256": "f61002d66ea1292f61ba7f41101a881c6a4b10eeb95b62edfbb61e5990870e34"
+    },
+    {
+      "path": "backend/tests/test_lead_creation_race.py",
+      "sha256": "b87188113783fb805683dc2ea42c1259c290a68d0d4b828e758e54a0844e88b0"
+    },
+    {
+      "path": "backend/tests/test_message_retry.py",
+      "sha256": "219fc4080a6444329206c8f3b14846b4ce59debd838101981e4cae15fa318846"
+    },
+    {
+      "path": "backend/tests/test_message_retry_platform_guard.py",
+      "sha256": "2b88f3167f0925e220cc40f1aa17bb4aef9890164952b4fe8d9acbfda0883525"
+    },
+    {
+      "path": "backend/tests/test_meta_compliance.py",
+      "sha256": "60ebad8a4b22928b8e84af45e1215a65c01f07cc4f773950e5a57840a5b629e0"
+    },
+    {
+      "path": "backend/tests/test_meta_errors.py",
+      "sha256": "5548f67195bb5e281daf9f01d20508fb33e9c74598a559c3526ab061d3808600"
+    },
+    {
+      "path": "backend/tests/test_meta_graph_version.py",
+      "sha256": "86ef2ae3e7a5322f9adc550fe0190910992acdbb9e530dde227dfd1fb83f79cd"
+    },
+    {
+      "path": "backend/tests/test_meta_integration.py",
+      "sha256": "dd0b685f44c21efc5bde9d72ee34e8dfb902d1cfa6b04ad2a502f7be87635dbd"
+    },
+    {
+      "path": "backend/tests/test_meta_webhook_signatures.py",
+      "sha256": "fed176423c42704153cb464976889ecefb54be2a47bee9a645212758b2723729"
+    },
+    {
+      "path": "backend/tests/test_meta_webhooks.py",
+      "sha256": "76a987a136131838a580725944d6c8ab24ae0a25101247e4384da2d57a012da5"
+    },
+    {
+      "path": "backend/tests/test_model_registry.py",
+      "sha256": "676b96d2dfea1fe9227a911fd17b11bb4ffb831f722fd98ac46033d67734735a"
+    },
+    {
+      "path": "backend/tests/test_models.py",
+      "sha256": "fd8a9609a68d8a790289e5124146c145f1a7259b06bba89d4610be6b5d4b4b2e"
+    },
+    {
+      "path": "backend/tests/test_normalization.py",
+      "sha256": "061205eae2a23b8a268673321d1ab3f6ac9b4667308d4102532f45dc76e5c488"
+    },
+    {
+      "path": "backend/tests/test_preflight_prod.py",
+      "sha256": "cf1eb431da4e4bb2d10dfa4f9257194dc1cedf456f07e430f76dc5d973ec5017"
+    },
+    {
+      "path": "backend/tests/test_processed_event_migration.py",
+      "sha256": "9a65f62c9643c68faae4c90eb15cfac8cfc1c2a13981e3ee1358b32e587bbf78"
+    },
+    {
+      "path": "backend/tests/test_processed_event_service.py",
+      "sha256": "781f78a6be582f5c38f47e2de5b3e515a640d011b3ef0623ee0e709d3465e77c"
+    },
+    {
+      "path": "backend/tests/test_production_hardening.py",
+      "sha256": "96e3b1ff492d41ccf17dcac4373708a31eb4fb8b9c6dea428905f9bb7f6c6943"
+    },
+    {
+      "path": "backend/tests/test_rate_limit_isolation.py",
+      "sha256": "03e1bef2f838e09c40d4986a0b0b9710d97631c4ba9b0f5e39bd21f3166f3eec"
+    },
+    {
+      "path": "backend/tests/test_saas_contract.py",
+      "sha256": "80d3093c938d9011bf3c3574e044b97ceeb1d68c73bc034fdf10ec8130c0155a"
+    },
+    {
+      "path": "backend/tests/test_saas_contract_vectors.py",
+      "sha256": "58b2195cc79caf1ea5fe4014f38ff666e18f7b4026110de72e5a5d8e6e07441d"
+    },
+    {
+      "path": "backend/tests/test_saas_delegation_config.py",
+      "sha256": "3b5f3ce0b8d2ccea4c275ab2cb5c192b5c9e576cd22eb6896990e7659c8c5c3f"
+    },
+    {
+      "path": "backend/tests/test_saas_delegation_dispatch.py",
+      "sha256": "e02917ea715f5bda3ad737b3cd48147fd39842947d87a2e5fdeee8a17c039ebe"
+    },
+    {
+      "path": "backend/tests/test_saas_error_mapping.py",
+      "sha256": "1c77ffc78d4500cc47753f34367ecf2b1909a525e4261427e12a32a9c9744a31"
+    },
+    {
+      "path": "backend/tests/test_saas_forwarder.py",
+      "sha256": "39365088132ca7371f318baef04ee56790fcf2edc0d82b9c4a6c5d095482b2af"
+    },
+    {
+      "path": "backend/tests/test_saas_health.py",
+      "sha256": "e3b52626e23d930eeaa1bad93957826cdf1da321ddfd0d03acc10bbf7e338873"
+    },
+    {
+      "path": "backend/tests/test_saas_messages.py",
+      "sha256": "44c5387ae81c18e9469a31a9a9b0f94d065006f901b7e27673629918c237c9d3"
+    },
+    {
+      "path": "backend/tests/test_saas_retention.py",
+      "sha256": "e16056572a2c8006f6f671c903b704165d82432d04ede3b8bcf064362ca52171"
+    },
+    {
+      "path": "backend/tests/test_saas_send_retry.py",
+      "sha256": "c08af5575371fa29c920bb1f7e2e8892fd44b6a6668f36413ca5f6790aeb60da"
+    },
+    {
+      "path": "backend/tests/test_saas_signing.py",
+      "sha256": "fa5834701bb0c7be179121a5ce1b201370bbc7afab6fe5f6df6c5cc371d01747"
+    },
+    {
+      "path": "backend/tests/test_saas_status.py",
+      "sha256": "f7c3490d9a9c751c5271d097ec48f1b12e0cb9c47ba501e1ac555f2c46cd7c07"
+    },
+    {
+      "path": "backend/tests/test_saas_takeover_guard.py",
+      "sha256": "30b4e6b75668e825ce16b7564685b3ea4e257c89c0f7b2eb14c038fddbaafb03"
+    },
+    {
+      "path": "backend/tests/test_saas_unsupported.py",
+      "sha256": "741b47c75bdb064550769b5b7759a7ceff22f2a6b1e90ceffed9b72a59ea2a34"
+    },
+    {
+      "path": "backend/tests/test_saas_unsupported_instagram.py",
+      "sha256": "37f5bc42ca207db7540b87a0affda68d216a7a4befafa664945fbd30aa89cc5f"
+    },
+    {
+      "path": "backend/tests/test_saas_whatsapp_replies.py",
+      "sha256": "05e21e562fd3e1adaf725ea04d145fa271b55f75b1dc2eb8c31a12188db9303b"
+    },
+    {
+      "path": "backend/tests/test_security.py",
+      "sha256": "3aaf3a7dc0228822853ee33581c85a873c7e7079bc8c406051a8feb997a538a0"
+    },
+    {
+      "path": "backend/tests/test_send_private_reply.py",
+      "sha256": "ca03b53b6b2b5af3b25345b8964475352c39a5b596025c8f24fc2ff5a6c4c34d"
+    },
+    {
+      "path": "backend/tests/test_templates.py",
+      "sha256": "5c6d8f8919d741ffd26f847538f5923c8994451170d5a61655fe876e890e710b"
+    },
+    {
+      "path": "backend/tests/test_webhook_object_dispatch.py",
+      "sha256": "ff0c6d9738cf2cd8a7c3a2948b19b5f1b4fa81620da0114ffb1751e1ad4bd321"
+    },
+    {
+      "path": "backend/tests/test_webhook_persistence.py",
+      "sha256": "ec142ddcb27ad269a0f7b47e87529f63db4a8b774026e8f576de4c46089929b7"
+    },
+    {
+      "path": "backend/tests/test_webhook_processed_logging.py",
+      "sha256": "9fe235a493010b6ac4210e4ff9d34f70913a44bdae0d81e0dd8dd07635550b8c"
+    },
+    {
+      "path": "backend/tests/test_webhook_processing.py",
+      "sha256": "40090674df803adee131f4eab2f10458bf365aab84a578e03b34701f1e2bcfb3"
+    },
+    {
+      "path": "backend/tests/test_webhook_recovery.py",
+      "sha256": "23b1c554dba933aff0df4ce05d78bba57cee374f10b9e31df43d8fa54c0a4abe"
+    },
+    {
+      "path": "backend/tests/test_webhook_retention.py",
+      "sha256": "3db34c7d740820f73ae127acb48a2146c31d2910da57705ba27c6fafd768145d"
+    },
+    {
+      "path": "backend/tests/test_webhook_secrets.py",
+      "sha256": "5cd7935b7d7cd0b9ba5a64f207a760cb2d9083150167241bd2667811b2f554fb"
+    },
+    {
+      "path": "backend/tests/test_whatsapp_ai_conversation_turn.py",
+      "sha256": "db21f54094c27efd7d6354270c2abb61f03e5546560b8c347721f1173f13f8b1"
+    },
+    {
+      "path": "backend/tests/test_whatsapp_cloud_client.py",
+      "sha256": "f9c0fb7d8ae9f03da8d1e2e2b2eb1ab28175ad0fcc65cd9787e4948db6c6176a"
+    },
+    {
+      "path": "backend/tests/test_whatsapp_consent_template_services.py",
+      "sha256": "1fad214a7e4b013da9e6f693b4d572b4bedc4ec9dce6566d5438e64bc1ef45fc"
+    },
+    {
+      "path": "backend/tests/test_whatsapp_e2e.py",
+      "sha256": "1a4d4cc925fcc0de9dfe9cfde1b94f48f31a3b58ba49102e0e5b53aaeef6e6b9"
+    },
+    {
+      "path": "backend/tests/test_whatsapp_ids.py",
+      "sha256": "e4a03b81e5b4ba9b16615e84d694eb9be93a568b33debe2b999afa1521e96338"
+    },
+    {
+      "path": "backend/tests/test_whatsapp_management_client.py",
+      "sha256": "cb1fd449f4dd37dad5fc0911c473403d8cb156f0a0f3f1f404fe990e450848c0"
+    },
+    {
+      "path": "backend/tests/test_whatsapp_message_dispatch.py",
+      "sha256": "aa782aa468be98f388937af277ee81f8030ca49ff380f9be3a2c9f050ecae128"
+    },
+    {
+      "path": "backend/tests/test_whatsapp_outreach_invariants.py",
+      "sha256": "3f184b81e696064e319032f661e49106d5c31d81f9475a677b530b9d438c54ac"
+    },
+    {
+      "path": "backend/tests/test_whatsapp_outreach_migration.py",
+      "sha256": "42cd38d66e23430ad49b1fceacfec9b2a67248b01d7dd8806024fadfd6fa33f3"
+    },
+    {
+      "path": "backend/tests/test_whatsapp_outreach_services.py",
+      "sha256": "b853ca0a7e754264c2e35839b1d058e68886e86a0763c4d2608620efd9c73143"
+    },
+    {
+      "path": "backend/tests/test_whatsapp_outreach_settings_migration.py",
+      "sha256": "8ac563166d7804d4706c97c1dbd3ebb24a8d1ed518c78bcc0fa47014ed0e7e2c"
+    },
+    {
+      "path": "backend/tests/test_whatsapp_phase5.py",
+      "sha256": "5696fa83148a90088c56a9b3fed0cd4d0c1577d691f48b2fb4879aedd3b2758e"
+    },
+    {
+      "path": "backend/tests/test_whatsapp_tasks.py",
+      "sha256": "f12ae7edf3747f88da0158fc69baa36af0b56ac33195bdf73e972850a8d44f8f"
+    },
+    {
+      "path": "backend/tests/test_whatsapp_template_send_invariant.py",
+      "sha256": "6fbe6bec639fa8710a37e63942027a31e17590f7f7b3f6cd2a1791639e5551b7"
+    },
+    {
+      "path": "backend/tests/test_whatsapp_webhook_handlers.py",
+      "sha256": "f480d58b3b06ef478a1f3ceeea745d2697478143155441670a9281f1355d76bc"
+    },
+    {
+      "path": "backend/tests/test_whatsapp_webhook_parser.py",
+      "sha256": "cb8289dd6f0e7c6596a8350f9d5258d96e863e2cca9e5be67c42ec6ef4066579"
+    },
+    {
+      "path": "backend/tests/test_workspace_scoping.py",
+      "sha256": "db2a6d93a25c64359cd7a70c97c7a57b453bdf924ad0b1d91f0060de2247cd28"
+    },
+    {
+      "path": "dashboard/.eslintrc.json",
+      "sha256": "a03c6ed6149a2979e9edd6cb5342a6bfb3f4766bdcf0dcf078ed09186ec6349e"
+    },
+    {
+      "path": "dashboard/app/(auth)/login/page.tsx",
+      "sha256": "1ec0496000184713a78a313649a0c211ff20aba3450051e3c0c558a979dd0cbe"
+    },
+    {
+      "path": "dashboard/app/(auth)/privacy/page.tsx",
+      "sha256": "bd80c2d1a40a14cfc293616def1b7ccfb192bf652a137c4b626814968ee5ef63"
+    },
+    {
+      "path": "dashboard/app/(auth)/terms/page.tsx",
+      "sha256": "3e3596327881e880baef1a033ba6e5c07b89a8096ad4a247f534b7f5b1b3c233"
+    },
+    {
+      "path": "dashboard/app/(dashboard)/accounts/page.tsx",
+      "sha256": "8b0fdd96db7e910028a1d1a5c05a0ae485ff36f8775b9140ccfc3c04d04b1e7d"
+    },
+    {
+      "path": "dashboard/app/(dashboard)/campaigns/[id]/page.tsx",
+      "sha256": "44e136fb50f02e9ed995ccde62bb67cff4dc2eb7e3823fb28f47abaa14f3afef"
+    },
+    {
+      "path": "dashboard/app/(dashboard)/campaigns/[id]/stats/page.tsx",
+      "sha256": "90803bb680114a1167002dd966365f19886354c376cbbb47f2553d5a7e525019"
+    },
+    {
+      "path": "dashboard/app/(dashboard)/campaigns/new/page.tsx",
+      "sha256": "7a54943fbcf08b2b41a355ca40d49bee4c287247989f32728245ce8508c08240"
+    },
+    {
+      "path": "dashboard/app/(dashboard)/campaigns/page.tsx",
+      "sha256": "6fce897f8c6aca5eedce3d3ea69fa19360490ebf510d303d9ba1a2e7c87c02c3"
+    },
+    {
+      "path": "dashboard/app/(dashboard)/conversations/page.tsx",
+      "sha256": "4fc43d23aec649725e09f5e27bf78a9ac92c5366f41c81ed5b11d66ae295a082"
+    },
+    {
+      "path": "dashboard/app/(dashboard)/error.tsx",
+      "sha256": "5eed2ab4d5fcea0a8207b23f0765f9d30cd8b575324d366f34eb8cab15e0bcfb"
+    },
+    {
+      "path": "dashboard/app/(dashboard)/facebook-campaigns/page.tsx",
+      "sha256": "a34cca5064e273476c25a297545a07e8a97daed31e1dcedbb7bb5cc21218951c"
+    },
+    {
+      "path": "dashboard/app/(dashboard)/layout.tsx",
+      "sha256": "cb30a371cdd9abfff7d47f548aabb8b24cbbae411fbd1d616def6bcc9512f3b9"
+    },
+    {
+      "path": "dashboard/app/(dashboard)/leads/page.tsx",
+      "sha256": "c5fe961850b6e2dcb55875ff36de3d0621e88abdbf489158e054dd70858a957b"
+    },
+    {
+      "path": "dashboard/app/(dashboard)/logs/page.tsx",
+      "sha256": "1c81737d97a92a48d744693e901df0fcb259c31ee8904143f33d0e15d818d455"
+    },
+    {
+      "path": "dashboard/app/(dashboard)/messages/page.tsx",
+      "sha256": "09c3ccc7c130e8f363d2756918833d70f785fafb28a256b24b5e0a5646e9bc20"
+    },
+    {
+      "path": "dashboard/app/(dashboard)/overview/page.tsx",
+      "sha256": "a2290f8c0ddb03eb1aba4948af64105c5318a34541a94bda9eeab76b5cedb022"
+    },
+    {
+      "path": "dashboard/app/(dashboard)/whatsapp/campaigns/[id]/page.tsx",
+      "sha256": "c9eb6fcd8bba1d67f7bc061b6fc0d7d7e87e12580898c7a1e7cbff3d68f73e8d"
+    },
+    {
+      "path": "dashboard/app/(dashboard)/whatsapp/campaigns/new/page.tsx",
+      "sha256": "f7db07b8c5191fc72edc9361ec550dab4f1c2d75342d58eedac6f5eed2fd6c97"
+    },
+    {
+      "path": "dashboard/app/(dashboard)/whatsapp/campaigns/page.tsx",
+      "sha256": "7bb5124e869a9b6c8bdcf3bd7da5998600a28992a412bac15df31aeb3b2b5927"
+    },
+    {
+      "path": "dashboard/app/(dashboard)/whatsapp/contacts/page.tsx",
+      "sha256": "bb5e073567ed1c7a7728864cc160b3b8320705fd013258d2fc5cc7def2655018"
+    },
+    {
+      "path": "dashboard/app/(dashboard)/whatsapp/health/page.tsx",
+      "sha256": "fbf1e699413f5de8a81d4ad4aa528c8ee741c636d35a19999454066a4feb39b1"
+    },
+    {
+      "path": "dashboard/app/(dashboard)/whatsapp/layout.tsx",
+      "sha256": "ee4685b0031762cfa0b3205fc2817eafba472170c4e86750d30ecb5a1d2a98ee"
+    },
+    {
+      "path": "dashboard/app/(dashboard)/whatsapp/page.tsx",
+      "sha256": "914702afac805ad0aa4d9a3d46e82bd1017e4e3c75202576e92c84628f807079"
+    },
+    {
+      "path": "dashboard/app/(dashboard)/whatsapp/templates/page.tsx",
+      "sha256": "5eb2df442a350250603309f867ceb8ff01f38db16966109c5e582ed1a0d3da8a"
+    },
+    {
+      "path": "dashboard/app/error.tsx",
+      "sha256": "a3d3f4df3717a792183a7e3f6c3d471cbf26b5b7a887875231910d8ff4f6a27f"
+    },
+    {
+      "path": "dashboard/app/globals.css",
+      "sha256": "3e3d216e7fe1633b7b48c55053c69ea8d2603355f65c942e4e522601c899561f"
+    },
+    {
+      "path": "dashboard/app/layout.tsx",
+      "sha256": "a08a771843ecb592638daddd30db65985be25fbabddfa4ed142b2792ed3e20c7"
+    },
+    {
+      "path": "dashboard/app/not-found.tsx",
+      "sha256": "e0ce289a9f474218fc784e02e431b3145c5d5e8f0276d6b4c0ed5c516abe6dc0"
+    },
+    {
+      "path": "dashboard/app/opt-in/[token]/page.tsx",
+      "sha256": "80501db25cb0f069c4b4c65c66576fed5dfa2cd7f9d797aa676ae60d1fddbc28"
+    },
+    {
+      "path": "dashboard/app/page.tsx",
+      "sha256": "f6ad84eb6a4fd483177d13acbc8dd90c06445457c9516fce17847df861a4fa56"
+    },
+    {
+      "path": "dashboard/components/ErrorBoundary.tsx",
+      "sha256": "8b7ea240f1513b6019dc23705d34b4eeb041f9a08b6e205355364b8fe4d6a0cf"
+    },
+    {
+      "path": "dashboard/components/ToastProvider.tsx",
+      "sha256": "60e5224e93f5a03a683e3d5f1e8819fe96b10a1da8c42a79893680d5bcb2184c"
+    },
+    {
+      "path": "dashboard/components/accounts/FacebookConnect.tsx",
+      "sha256": "edd329e211876d9ca516ec5718d77754172f70ab9c8b53d95bca9c0ecdcdb416"
+    },
+    {
+      "path": "dashboard/components/accounts/MockConnect.tsx",
+      "sha256": "ce03296c563fcf413301b070087fa17184115c36a9b73d4d412e22db6136164a"
+    },
+    {
+      "path": "dashboard/components/accounts/SaasDelegationPanel.tsx",
+      "sha256": "a83a949a1f0072a7b5742342d768818cf6c8b8f312ef546aca2ee78481527dcf"
+    },
+    {
+      "path": "dashboard/components/accounts/WhatsappConnect.tsx",
+      "sha256": "2141ff8387696988109c74b135b2a00ed459a84529b18362f18f03fe74fe1976"
+    },
+    {
+      "path": "dashboard/components/activity/ActivityFeed.tsx",
+      "sha256": "e1291ef902b144714f4cbd4ced1692166de05283b8f05ec679df693e8e5d93a8"
+    },
+    {
+      "path": "dashboard/components/campaigns/CampaignForm.tsx",
+      "sha256": "654ac330d93f2a1b3284f5fb392d12385f57ee48e72fe4adfa92b2f40a75e1c0"
+    },
+    {
+      "path": "dashboard/components/campaigns/FacebookCampaignForm.tsx",
+      "sha256": "db2606064570fa96ba10fa56a3174b8ea43000a38d7e873526ee4849f60c9ea5"
+    },
+    {
+      "path": "dashboard/components/campaigns/PostPicker.tsx",
+      "sha256": "1bd52bc98c3f42cb232294abb0b49dd5687aebd79fcfd1f6f1ace98e439dc1d0"
+    },
+    {
+      "path": "dashboard/components/layout/AuthGate.tsx",
+      "sha256": "fa0c36d61b525cf3f00e9178f9a9e43a1247bfeb7a03102872b0e207b3ce2981"
+    },
+    {
+      "path": "dashboard/components/layout/Sidebar.tsx",
+      "sha256": "98e31cbdb3246efe4ea134ef6f34a4fad3ea2fca5e20a483057c460c48ef7906"
+    },
+    {
+      "path": "dashboard/components/leads/LeadFilters.tsx",
+      "sha256": "83ab0bbf186743229889afb738d2200d3293b9614be38a71371c9b1f500940c8"
+    },
+    {
+      "path": "dashboard/components/logs/MetadataBlock.tsx",
+      "sha256": "eeaee420c4121075837eea1aa3d2471901f360d7a75b4684f2afd132a09bcb1c"
+    },
+    {
+      "path": "dashboard/components/ui/Avatar.tsx",
+      "sha256": "b0bad49780a35bbc1a0e4c847f563d8eb816d0e14afa6ef937208f3da849a568"
+    },
+    {
+      "path": "dashboard/components/ui/Badge.tsx",
+      "sha256": "c1556e321c0c15a3f03bc9027bac1740d5d27ab0c7cb47aab4dd54490bb762f8"
+    },
+    {
+      "path": "dashboard/components/ui/Button.tsx",
+      "sha256": "243a48143f7ffcd573e7c08012efab0b4995925b3d880aa6800506b37e22a9af"
+    },
+    {
+      "path": "dashboard/components/ui/DataState.tsx",
+      "sha256": "e7e63c15815c0db33df65e528dc671a87c0751688a3fdaf4b9e68acf4ab9b3c3"
+    },
+    {
+      "path": "dashboard/components/ui/EmptyState.tsx",
+      "sha256": "b80ecfbdbbdc419022b0b95d06050aa394690aa4025f59d81fd66d8ad5c35bba"
+    },
+    {
+      "path": "dashboard/components/ui/Field.tsx",
+      "sha256": "a75405c8ae99bc828d2dd50f543f3f6d20f9787da9b0ce7ef067e0c9d4776b63"
+    },
+    {
+      "path": "dashboard/components/ui/Highlight.tsx",
+      "sha256": "0a280fef4f07115b7586a09161da2a0bf2f3e1094a90eb22d15c728035ea6bb5"
+    },
+    {
+      "path": "dashboard/components/ui/LiveStatusDot.tsx",
+      "sha256": "0e3a9cfeb46dd27cabe44af7de4d50652f241156bf41b397afadd3ec28f67def"
+    },
+    {
+      "path": "dashboard/components/ui/PageHeader.tsx",
+      "sha256": "3c3e2205f39bf374a3627e7f6521f1841a5c6d18975198f88a4b03236baeeaf3"
+    },
+    {
+      "path": "dashboard/components/ui/Panel.tsx",
+      "sha256": "99c2b1f0ef4ae24c945cc1a79f979d489329014ff03858a675fabe944dc6c99e"
+    },
+    {
+      "path": "dashboard/components/ui/PlatformBadge.tsx",
+      "sha256": "0570034730f2bc3fd36a0e983aa1bccfa1a637e8d5e86bab358d3db9bfe53bc9"
+    },
+    {
+      "path": "dashboard/components/ui/Skeleton.tsx",
+      "sha256": "f71d8504c4c86dfedc08cf3be09b132621612f6e9bb2d11c6f0918c021c0fe99"
+    },
+    {
+      "path": "dashboard/components/ui/Table.tsx",
+      "sha256": "0e14751a1f9b67cdbdccb9b49bf6013389e1782f0f2a014510d40de9dcdaf101"
+    },
+    {
+      "path": "dashboard/components/whatsapp/WhatsappShell.tsx",
+      "sha256": "517833b30adcdd63baf90b0ab2325cba548251577fed5297147ba001877dac38"
+    },
+    {
+      "path": "dashboard/lib/api.ts",
+      "sha256": "f92b4986650ade10ad9b469d24d6b30a850176cc58c4e5b6c1e4756bad5af627"
+    },
+    {
+      "path": "dashboard/lib/auth.ts",
+      "sha256": "c9ea5ae0802fc231766caa2d022c2791cedb55b0ef7177e9df67cc36b74b8502"
+    },
+    {
+      "path": "dashboard/lib/eventPresentation.tsx",
+      "sha256": "7b70fe691d369382b5230de0b66ab42877bd1826bb70a5a5db8ae11c6ced69f1"
+    },
+    {
+      "path": "dashboard/lib/facebookSdk.ts",
+      "sha256": "095e1e70f0993ac32222dc1689c915df8ab02dee4d797c947f5e9b2474bf3217"
+    },
+    {
+      "path": "dashboard/lib/logGrouping.ts",
+      "sha256": "98eecd250af0ac0731f918aa8589b3e94ecde3f09a016a282fddd153c840f59b"
+    },
+    {
+      "path": "dashboard/lib/permissions.tsx",
+      "sha256": "0c36dc32c471832a1fb6185e8505cd8b3b458b0c37c8011d71765c6e50842c2a"
+    },
+    {
+      "path": "dashboard/lib/types.ts",
+      "sha256": "12f27eed23cba827c971e08359a4f91eb2ca20abd37ee65febf4a197815b0bbe"
+    },
+    {
+      "path": "dashboard/lib/whatsapp.ts",
+      "sha256": "7db7087a8ad77752baa3b9b6708893b7e4593b4ec4dcebe565f668d740126802"
+    },
+    {
+      "path": "dashboard/lib/workspacePermissions.tsx",
+      "sha256": "28706c4d2f9fb1b516c7580578b917587b93b28a921d87fb9e7d572804bd4bd8"
+    },
+    {
+      "path": "dashboard/next-env.d.ts",
+      "sha256": "e462a655754db9df18b4a657454a7b6a88717ffded4e89403b2b3a47c6603fc3"
+    },
+    {
+      "path": "dashboard/next.config.mjs",
+      "sha256": "7b20780a0a386557e59a5d49abeb979f589b61c2f3a2aaefaafbd7247249acac"
+    },
+    {
+      "path": "dashboard/package-lock.json",
+      "sha256": "333ca8ddd91c43a7550e4cc54aa1f280ec5eac43718588e4034c6c9ab853ace3"
+    },
+    {
+      "path": "dashboard/package.json",
+      "sha256": "c4cb0ef679d7636651b1dd28c69d3414ae73f73d84d9d6e18dbdf1e09fd80437"
+    },
+    {
+      "path": "dashboard/postcss.config.js",
+      "sha256": "b78f5d0a0a449ecf58b6b6252e26cd2216c7aa41235e2d6d01a26b9a065cd439"
+    },
+    {
+      "path": "dashboard/tailwind.config.ts",
+      "sha256": "b8eefbc79fdc99c9ee9d1d7bc0dc0ec883697928d14dc92b62e7282aa00454e4"
+    },
+    {
+      "path": "dashboard/tsconfig.json",
+      "sha256": "9982c6ddbaa86cbc0e67e5cc738c451d1fcf7aa8f51c45ecf46c2f94a4d910b1"
+    },
+    {
+      "path": "docs/backup-and-restore.md",
+      "sha256": "00bcf0f8430a8bed35ac57a7940d8d5cf352b03f98fe58a75928b14823af7cd2"
+    },
+    {
+      "path": "docs/data-deletion-runbook.md",
+      "sha256": "5960650663843e6f38bd0f8b9a5a1af83bce3db7f6915b3c18f242bdfbcefc65"
+    },
+    {
+      "path": "docs/deployment-vps.md",
+      "sha256": "e766f36fc6963dd441ea53f661c9159b03fd832e1b7ce4d9ae0b1a67640474a1"
+    },
+    {
+      "path": "docs/end-customer-erasure-runbook.md",
+      "sha256": "544da07cce5dd4856e6c68fd20eb7b1a5dccfa092e404f736e716a142f7e97ff"
+    },
+    {
+      "path": "docs/meta-app-review-submission.md",
+      "sha256": "e5e8fa92646c92b325e47adae2341601de39015d42d79b99199a49cc624063b2"
+    },
+    {
+      "path": "docs/monitoring.md",
+      "sha256": "a401d70910c1bddb091a14e46bc9b6d1c4b842d4943a30325d4bd2b3139712f6"
+    },
+    {
+      "path": "docs/rate-limiting.md",
+      "sha256": "243135c7c993bdf19047e0ad4957985373ca1104fe3ea98fcb8f211276fe5a0b"
+    },
+    {
+      "path": "docs/rehearsal-testing.md",
+      "sha256": "defe7b839bb99636f3db5a376c93360944628f67bde96c67dfcc83736329d151"
+    },
+    {
+      "path": "docs/saas-delegation/A16-PROPOSED.md",
+      "sha256": "b4c934fa378a71e90ca043322377ceb750d97ea8648877cb81fe4e66aab5be19"
+    },
+    {
+      "path": "docs/saas-delegation/CANARY.md",
+      "sha256": "8353d11bf26d216f237a2efda74ab12e4e041dffbf242777f2b4d2d551ca01c3"
+    },
+    {
+      "path": "docs/saas-delegation/CLOSEOUT-PLAN.md",
+      "sha256": "27b1e0682cde08fba7f662a7f960020d2e66031f6059d1581f426560feb058f2"
+    },
+    {
+      "path": "docs/saas-delegation/CONTRACT-V1.1-DELTA.md",
+      "sha256": "fc40758f78b0e3c38f5d09e6ce05841e0efaacb434f9ddbaa7a98b6dba786b4d"
+    },
+    {
+      "path": "docs/saas-delegation/CONTRACT-V1.md",
+      "sha256": "e59bc65396b652654a2c18dc94fb012a0ab80829f16534f97aebc291906c3e67"
+    },
+    {
+      "path": "docs/saas-delegation/CONTRACT.sha256",
+      "sha256": "a356d6ec2b03bc41e757ea6c27b0ef37eb2fc82eaf0c9913c412beb9dcba6ed1"
+    },
+    {
+      "path": "docs/saas-delegation/FINAL-IMPLEMENTATION-REVIEW.md",
+      "sha256": "8700106e794180a86b42e2dfe20f9ac33d10862a3108debdf480410c02a4c121"
+    },
+    {
+      "path": "docs/saas-delegation/INITIAL-AC-REVIEW.md",
+      "sha256": "84c17edb56f94ac231c7e7273881886c190cf953b812d8b56b4a29226509fa2c"
+    },
+    {
+      "path": "docs/saas-delegation/KNOWN-LIMITS.md",
+      "sha256": "145f6887fa744f7a601d36025cb61d083c272b10dbde0d0c0009aed362ec8cac"
+    },
+    {
+      "path": "docs/saas-delegation/PROGRESS.md",
+      "sha256": "8894c4be5857c9a18f3b9d1125f923980b48823fede10dbe5f4a0cced20ac8e8"
+    },
+    {
+      "path": "docs/saas-delegation/RELEASE-GATES.md",
+      "sha256": "a57b9cf82703452a1dc6363716c08fe40c2e626f0a748e021e88c0ecbf23f7cf"
+    },
+    {
+      "path": "docs/saas-delegation/T1-CONTRACT-AUDIT.md",
+      "sha256": "76b9df44fec2cceba0a4b60763687a6b08439d5f5a6e5c960431c3fcca517a84"
+    },
+    {
+      "path": "docs/saas-delegation/TASK.md",
+      "sha256": "64aef4c36ebb2e2a4d5cb180c45ef87d9041b2d2f31189870a45c6c6488b1136"
+    },
+    {
+      "path": "docs/saas-delegation/TESTING-HANDOFF.md",
+      "sha256": "117c4bcc3fc5532cd2a35e9a9dca2276d636cf9321dd8e510eb046734aee944f"
+    },
+    {
+      "path": "docs/security-checklist.md",
+      "sha256": "ca3bb32efaaeb351aac815643484d0f9b1b8d535a6d430957f11984a2dc7dbb5"
+    },
+    {
+      "path": "docs/whatsapp-outreach-implementation.md",
+      "sha256": "58450f6e7c2834b6eb34896565c8ebd1c47ab246a66e42fc01a983aaa8c56a72"
+    },
+    {
+      "path": "docs/whatsapp-outreach-migration-rehearsal.json",
+      "sha256": "1d25b0fafa46accd87907f294095b2092c504361a897b830b130d7d4a268f361"
+    },
+    {
+      "path": "docs/whatsapp-outreach-migration.md",
+      "sha256": "27549a3bf83e6d7a902eecc6db3ac083e3efe45ee97ea65f0aefb50f0a650c17"
+    },
+    {
+      "path": "docs/whatsapp-outreach-phase7-report.md",
+      "sha256": "7d4a58d9c1260bf08a6bceb52ec766ef95bdd94192f25a39365fcd238c22be4b"
+    },
+    {
+      "path": "docs/whatsapp-outreach-predeploy.md",
+      "sha256": "368fb528e19bf9f1102068bd739ad9e94a8609622d44d606a5581b53fb631b4d"
+    },
+    {
+      "path": "docs/whatsapp-outreach-verification.json",
+      "sha256": "475788eeecdd5f273ea8e13b7aa1b4d750f6b71a546c94a98046fb6c41728e0f"
+    },
+    {
+      "path": "nginx/default.conf",
+      "sha256": "2e9ed2f5af00ef0a79ce7811bb34135d0a97a53a872f9bee8b1e85f33db1697f"
+    },
+    {
+      "path": "scripts/canary_preflight.py",
+      "sha256": "553aca0498178042ac3324d90992cd3bab6915a8731f7c5118e6e5e4d0ac76cf"
+    },
+    {
+      "path": "scripts/check_contract_copies.py",
+      "sha256": "8034800665ed95cad58a4d4bbce1edd9b23afed94e3c306db17c3b7298f343f1"
+    },
+    {
+      "path": "scripts/preflight_prod.py",
+      "sha256": "871bc13753465f621ce1f3115bb34e4f2e2a2704a6e5aa458f44819472de3b45"
+    },
+    {
+      "path": "scripts/rehearsal_lifecycle_check.py",
+      "sha256": "d1eb661bb413a1c3cafea54e5af8fc5cbb744141da07fa036621bc722287e571"
+    },
+    {
+      "path": "scripts/rehearse_whatsapp_migrations.py",
+      "sha256": "600fe53b07e2bde8b3a307d1667aa5c45d7cadb7f398e3a193293f5ab11fadc6"
+    },
+    {
+      "path": "scripts/send_mock_instagram_webhook.py",
+      "sha256": "2eab7a16c01c2947b2460fd86f5f80f65fcfaa489a2152af53ec7e622b2bc378"
+    },
+    {
+      "path": "scripts/send_rehearsal_webhooks.py",
+      "sha256": "2384a81ff3ae053d9aa8e8500f5e9731ad4fdf89f7e07fed93189b17d70f802b"
+    },
+    {
+      "path": "scripts/test_canary_preflight.py",
+      "sha256": "4567c7ce4df94945adf717243c1227a8e31ddb27d56dbbde3ecb48e55eb6560b"
+    },
+    {
+      "path": "scripts/test_check_contract_copies.py",
+      "sha256": "fc31da16ed8ed23797469cb5768de47fc53126bff3cbe2be2c6c1a09c2319310"
+    }
+  ]
+}

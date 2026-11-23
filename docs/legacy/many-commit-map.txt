@@ -1,0 +1,117 @@
+# ManyOsirisChat commit map: original id -> id in this repository.
+# Produced by git filter-branch (removing 2 credential paths from history), see docs/IMPORT-NOTES.md.
+# Format: <old 40-hex> <new 40-hex> <old subject>.  'dropped' would mark commits removed as empty (none).
+f92dcfc593f81ef817610080f21386e6c3cb596c fb8d5d43b03d574fbb7b70682cf792f478175962 feat: ManyOsirisChat v1 - real Meta OAuth, production infrastructure, accounts UI
+dd11f8c0c7123d5cc5e77f20e1d0589873788709 c7f2cbaa15c43a0cd1b7086d6dcba6c38842d612 docs: update README with real OAuth flow, production deployment, and v2 roadmap
+00a1591470845ae18518141b9800ca1338c02a23 e9dde7632364cf8ddb5bb3042a097043f6407829 Delete strict_coding_agent_prompts_instagram_automation.md
+a948d15874b90033fed3211ee800a240baf6a18f fd5f5166820a785d45dddc188a22eff5b3a33369 chore: remove .claude settings, update gitignore
+5f9d63d5fbd31e2e915bff9c417371c227bcfc9b fde99f9f505280f80ea94e89f6fd805a63664cd1 Add privacy policy and terms of service pages
+96c5dc3e9b23942528e4520c31426eaee418d969 42a6df2ea2c7b1da59bbe7ee7fe5b5405333de0a Fix OAuth scopes to use standard Facebook Login scopes
+ea3bf8b66c2098314c49cb3ec2cd634c8f4d1f5e 4f90756cb950389030e7a6ebd98ea69f45813cf4 Fix Traefik PathPrefix syntax - use OR operator for multiple paths
+8960d0f878a4bee7ba1d4d029a52d4002ed88a86 a5fc2d27a43900255787c34a88645d1948d74fba Fix Traefik PathPrefix syntax and API URL
+95888f11543af05222e0b7317aaa5eac0dbdbff3 36d24b1f107a20827997d89dbc4faa902a0389db Fix webhook comment parser + sync Traefik config
+6465b953e8232a36e5f708ba1808a746aa942dc0 10616989df2752f2d8f723aee78af8146466b696 Resolve conflict - use GitHub version
+15338a61257bd2a2fdfd6bb9845d6bed32240688 dc604c4591010867f0a6219d50e9f225fd0aa6cb Add META_WEBHOOK_SECRET for separate webhook signature verification
+869a145b77434b8007ada92f91d2d054d9c9b81a 270af94cd5badc95adef9574b91a8b44739f8a01 Merge branch 'main' of https://github.com/Youssefelsayed148/ManyOsirisChat
+c0e327b39542dec79ced1336b3e9d520304a6c96 683d2b4a5ae697987506e51fcbedd9f7d5b4678d fix: reconnect OAuth, hard delete account/campaign, delete_accounts permission
+678f1f2aca2caa8da24f6813be012a1c13c58720 51d4225e5adca2580e6aad54962ebf60740054c3 Merge branch 'main' of https://github.com/Youssefelsayed148/ManyOsirisChat
+5b7d4073554359c600b23134742a95a26deccf17 c818f8964b0d8238b9f7ca83ac74bc1c6935f1b5 fix: complete FK deletion order for hard delete account
+2aa176d6a30b74dfb883309ece16e09e3a3a340d 9e5cda4cf30d4c1aff2cc6a7b1fc25573795cfe3 Merge branch 'main' of https://github.com/Youssefelsayed148/ManyOsirisChat
+370d08a1de2945329e4b27f9abf3f195d1e9a8f2 17ed4fa6033016d5d3eb1bc5e3a609b9232f55ea fix: remove Lead.comment_id — column does not exist
+cc3b5c9979cb8abac3a65d42bafff948dfa8166e ae69e8cd049fb5d70a94c24dae1e398fcab4b1bb Merge branch 'main' of https://github.com/Youssefelsayed148/ManyOsirisChat
+ceef14aca6f4ca2dfb27f2d222f05adedcc9a484 e40879b11afbc983ad01bbd01c03c9865180a1a0 fix: correct full FK deletion order for hard delete account
+c88ec9c52b510117bc799609084b3f967fa86b6f df23e7abc9efe31e4fd66763b975283afe557817 Merge branch 'main' of https://github.com/Youssefelsayed148/ManyOsirisChat
+28f8d666318945eb7a83750aa4bb335330f21614 700b61f6f9a5fbff03deae85ee08289d0b6fd6f4 fix: use Business app OAuth scopes for instagram_business_manage_messages
+afacc2cf1bbb5a718a0193b9dd2adbd0a29104b5 8f434fb11e54bf847ae9a287be0f1e26d49f9d87 Merge branch 'main' of https://github.com/Youssefelsayed148/ManyOsirisChat
+de0dfd179f5c03a70bb50b187d4c0a4819d2c77a b461d66d3ddf2838d18c5d3a8b137d0d83d8bd87 fix: revert scopes, handle OAuth error_code in callback
+a2b0adadd7fd6cf1d43f8471a68cf496a64ed4ed 60b4bd6fe2230314917cd6534370139d19b5dae3 Merge branch 'main' of https://github.com/Youssefelsayed148/ManyOsirisChat
+58777b6479cb6decd6b2994f2830dd38f42ff2d9 8b6f90d93deb27b43f2511ac81b65c8923c9e190 fix: convert MetaMessagingClient to sync, remove asyncio from Celery tasks
+056161f00301f65b8fcabf96284ce602dffba210 337e784671173b864a0f0dfe1c08c67d5e2bc3da Merge branch 'main' of https://github.com/Youssefelsayed148/ManyOsirisChat
+6d8c3c1dae45970d2116989796c36dcf7a5bc450 e3d488cd9dc8f1e4ddb8f14e8547ba20bc3151ed fix: case-insensitive trim comparison for campaign delete confirmation
+070300aff56c1ba6cc8d12b4f2836f30137d4ac0 c0c09a8ab9d3e199fd167ab911383aff38dcbe65 Merge branch 'main' of https://github.com/Youssefelsayed148/ManyOsirisChat
+2786070d197ca2fe71c275b3e0a4d00acf98063d 23c9858b8c9a97e2c628ead91e23b4aa70c2d751 fix: store page token instead of user token for private_replies support
+1446024bb5d2867f2a429a0e78c6dd411751b53f f58a6bd3c81dd97441e4db5bb9427ba3f894a9b6 Merge branch 'main' of https://github.com/Youssefelsayed148/ManyOsirisChat
+4318529cfd158f0cf8731b668713ed60601a414a c2388309d242526154c546a7e15eb997f8fc5edb fix: migrate IG DM sends to /messages with recipient.comment_id
+c7c211197cb7b9e7754c83acbd7274e5a70bc75d 2f7170dfefa1af06c7f9babc881b54933668f479 wip: DM send endpoint fix + oauth scope updates
+23e9d463c5eb3cfb75cd8c33ea4cbf790e56f31d bfae397b899689291c6e2fcdfcf1c5fbef449a66 Migrate OAuth to Instagram Login (Business Login for Instagram)
+b5c0b54679554e12704a4c3ac8ab6d393a920d6d 38b1183fc0c4f4a6116af729498efff525e308bd Add post picker and comment reply; fix specific_media matching
+80f6bd1f22dec9e337314e5af3eaafeb9d1f9104 9fbb99628e799454f390fef4dba3ff5085565a0c Replace fake 10s follow-gate with event-driven postback follow check
+e9f11b2f07f64b3d2563b4671101378d20371ffe 73c8c0b687c193cde1a81b65db21a267e8e2fd36 Add AI conversation continuation layer
+4ddbede4c217f5415121444b41fbc35c2fb11aee 901cb40fcbe8ed2b0e2ef1e532d2865886302e0d Fix campaign AI toggle not persisting on edit; add AI continuation observability logging
+cff66841b5aad3b1e12b88a737e3548e7c0b0fcd 5c45a4f6fd8930e0afbe973ff5fefcddbba62708 Add cold DM AI conversation support, separate from campaign-triggered AI
+a69ae3783ba216e64018d6a9e9be8bff67f232d2 3026fbb7b83a8901cbcd392d6a6141449b5d14de Fix cold-DM AI: campaign_id crash, missing usernames, None campaign labels
+5bb47bb782980446f9e26549065657fde90d06d5 c0452d7a83f7567dc77867de8ac00cf5a6f44fce Multi-platform expansion: Instagram + WhatsApp + Facebook
+db0fbd90e35d3c8ea56d88a9fb9bee80659b75cd 2f95e3e23ada88b50492e606833f834fef73f41c Fix Meta error misclassification and add JSON logging to Celery workers
+51d13c64bcfdc5fcfbfa41b287c59ddc16591902 ed782b2d9d5c6957d9f933208a3d81d1180501ff Fix multi-platform review findings; stop tests from wiping production DB
+ef02a02ec87d98964a676b50244015f548f88b02 15a67af68c707c58e6758c633e55a4fab3b9916a feat: implement workspace-scoped multi-tenancy with user memberships
+14331898f69dba07708c63a0b849b254a2885fa9 d6fa00ae2b714bb0f49c411782c7f0530206d04a Separate Facebook/Instagram app credentials, verify tokens instead of exchanging codes, stop httpx from logging secrets
+9ccae40a2592114f8cb8925b510409bd933ec333 2ae1e46e5145d16805ede195a3192485c4e0d668 feat: add WhatsApp outreach schema (consent, templates, campaigns) with contact backfill
+968e43d8e84875696fd36b4d1ac719b33e5abd97 40ac2a2d67ad5a96e25e2bb0ede3e082ddcfecea feat: add per-account WhatsApp outreach settings (consent attestations, keywords, daily cap)
+1369b598d9f01e1ca539baaafc137bfe7f24d65a 7111aa98d55ba362fcd28f7db8e95047332c679f feat: WhatsApp webhook ingestion (contacts, consent keywords, statuses, template and phone-health events)
+19904bdc38089e7f37f00a1df9095862dc0b724e 2186a1edaf459af1eb87206b24936e37bef36de8 Reject retry of WhatsApp messages in the Instagram retry endpoint
+c4fbb597777234a4838150ddba6d0917e7e99b7c ffde3c9617086271c76dc73f176b8c507386fc06 Add WhatsApp Cloud API template send and management clients
+d4c72b2dae7f530b3529c9092d2fae86cf5ead47 2a0d46248c1862654193399f0bcedd1422ed4349 Add WhatsApp outreach services: consent, templates, send policy, reaper, circuit breaker
+07e7cd189eca9557c7ac064bdcb81590de049481 9d315d1711d0e0a89b8df43b565bddb94d891f76 Add WhatsApp campaign Celery tasks: dispatcher, token bucket, health poll, reaper, rollup
+fbe0a25027b12a6d21a9d4d14c86e8264ae57d30 94bb9c9c0b64245549ccad9a3c8c451e08e08e7f Add WhatsApp outreach API, opt-in link, resume safeguards, health refresh and dashboard
+818dcc0ca38b523166d4c344e2e391866db66cdf 332e415cb2741c6cdff1e7e85bfa5a3247b48312 Add Phase 7 verification report, pre-deploy checklist, and migration rehearsal scripts
+afab359d9a8919cac020f744f1dd6e3312f30a63 834be37cc79f56824cd54abbed8cdecc8215d4f5 Merge remote-tracking branch 'origin/main' into fix/facebook-instagram-app-separation
+5cc60c731c72cdd4697b8df220536c6eaf335dd8 68bf8e74b3200c93c3ab310cfb85b40ef399d1c7 Add tests for Facebook token verification and dual-secret webhook signatures
+fa750c40d5af1bb095cf81190c8eb54a0c4ce3c5 c5a815f1f933f468ab98f80ed9d5578ee1eb65df docs: SaaS delegation task, contract v1.1 and agent rules
+2b418bc05bf7759401aa8571eda6c8642323e94d 6d6b4dd07a2e64e8ed06b4de023dba97c3c8fff5 Dashboard: SaaS delegation panel and 'Managed in the SaaS inbox' on delegated conversations
+de6ad191ee78cb171abde49daf8d9e75f4949e7a 8b116fe61bc25001a0ae90f61620b700af1ad032 README: SaaS delegation section
+c440a00f1b6e4fb09feb9792bc630077eb5a5e3b 10b3f1e2aaa08041018e0026d6d9a0bfa00c3987 Backend: per-channel SaaS delegation (Many side of contract v1 + v1.1 delta)
+12d3ba79e6f96fc5677f342258904f600bb670f0 edbe332515e91e8ca0547f697c7616685c6ac365 Docs: adopt contract delta (ADR-023), add clauses A14 and A15, start PROGRESS log
+2ead0ea9e46135be37f340d9ba669ef428bd1564 1a5c342ff46a390fead3ae4db20b2b1e577291e8 F-01: normalise saas_connection_id to a lowercase UUID, reject non-UUIDs
+61dfb97dc7530b2f7508496e4dddd530041c9de7 2eda72208956f015f25bc9ae8131e210d07a14c1 F-02: keep failed event payloads 7 days, retention task, failed counts, admin retry
+abbea044da0e5b86804700964d10dfe7a802bf1a 13ec9beb6d44c30eb91b5d0eebc53d3d4cecd7c4 F-03: retry a 401 from the SaaS (contract A15)
+fd268171d0b5d5ac6ffbb0bc76cd7cf6cee49dd4 8614b595b5611dab8d36f1fc1805c4d930aa3da3 F-04: forward non-text customer messages as unsupported (WhatsApp, Facebook)
+59d3442ea5f05973a8905cb6a47f9bbdb7b5f6a7 70e61589003e57a9fde411bd031fb0f504bc555c F-04 (Instagram): forward non-text DMs as unsupported - AWAITING OWNER CONFIRMATION
+132c69b56d275d767e045ca63c4a2866051d9e17 925f3a3ca322a2c13bc7aa7ece7eb2ab3f46a018 F-05: forward inbound WhatsApp messages even when the account is not connected
+13e73ef8f9685f127db37fcf2a1dd03d1f60fd58 842f20ece5d025051cb4cc379694a536808f6c64 F-06: forward only genuine WhatsApp customer replies on delegated channels
+0fe6df8a31a117edd1c0dac60761042b8c153831 d3fb1834753f37b4805b1fbe93c5292de58e910b F-07: retry definite Meta rate limits (max 3), mark error-code table verification
+3d510eac5b811e991425e27430b7bee1036bb853 3604617a5ae47c0af6952f854cc562182d246117 F-08: gzip off for /api/saas and /saas, document known limits
+47d6c9c109698bc43773dd39b78c525887795f9f ee0607b6ec7f1e8d19aeaed86bcc87dea6486374 F-09: shared signing vectors and SaaS payload-rule tests; cap contact fields
+4e8b61c4a9c0f1cccdcdf8cade85c9673b4abc5c 93de8bad1e02fc123b26a7a67463acf68e4e0cc5 F-10 (docs): README SaaS delegation section - rotation runbook, A14/A15, replay, retention
+07706845da916a9ae5756b08fe7405576651fd16 588f52b7668d2fdec720d4d12739eae3155d5810 F-10: update existing SaaS tests for UUID connection ids; fix dedupe tests for the shared-transaction fixture
+8a7837b8442c28a3fbeb0cb996f3c164a23c0afd ef53f77386b4c03ecee3201d5626238aa6d00733 F-10: record full verification in PROGRESS.md
+b7675a3265d4e244a76a938ebc5d91010c26c319 4b4c60d2b12c95e22fd4402031647dfe0e989bab Instagram token refresh: real refresh, daily beat task, expires_at in account response
+8a9b1d37e8a7ecafad15a48411f47d4833292351 ae6032c4f26a0e8b6d6f83e48a67c45d25f4c509 Production preflight script, env example AI/proxy entries, VPS drift check docs
+514f6e5bcc2d993c5d4ea732e4844f6eda38e5e1 a74d955de8cfbfec332be6582e78d0705a66aec0 Webhook recovery sweep: re-enqueue stale pending events, surface failed ones
+46d9ab41bcf0c8b938ccbba8f49a00471f8d5b88 d4e65f0b8075a4ab4b7c3ceab05ce49a81ad771c Privacy/terms: AI replies section, data-deletion anchor, remove unverifiable claims
+25340d0a18ca82f227124606696a6ecb11c3c3a0 f6349b34537e2b9f8d556512eaf19ba928ebccaf docs: Meta App Review submission pack derived from code
+1891f89a2fc901b96c83769bd310a48ad3092363 1aa12df029858f0d6fe3cf9b25c6caedca6f10d6 Merge main into feature/saas-delegation (keep SaaS, Instagram token and webhook recovery beat tasks)
+f1334b71b72fc39d952b2052a082f39c5025ae9c 6fff6225a0c65946cd8a664d6bce5805918fcd68 T0: trustworthy test baseline, test isolation fixes and evidence
+4ddd342525be9423d7b524286f7e300276a603de 80fe68b59b17cb1b99675c22a917c663855cac5d T1: contract copies sync and audit
+dc5c6f40dddcb32aaca062d546b38cd3c1078767 bec72e8f6fa4a7df00da4a11bea1ba9bc6999a33 T2: manual CI workflow and contract drift guard
+823330c9507c1096899032770ede5789abe87448 b110e572e69e03468f36c6f759deb7bbdaa06ce1 T3: independent rate limit zone for public signed endpoints
+80ac7f3f795601199438bc313b7085101aa997cf a59bbc6fc072e06ca31e02084c25cd1f7d395ba3 docs: PROGRESS log for T0-T4 (T4 Instagram review, no code change)
+3199955d364798df35e2fd8878fd62ad71449191 73245a8c302ad6b5c530bad9f88ca96cd3284314 T5: untrack dashboard/.env.local and ignore it (file kept locally)
+9eaadaba72ede528904ae64abfc29d230fec2747 3d0c19f4d91acfa5f980d1a5bae94eb72bb9efa9 T6: staging canary runbook and offline preflight script
+fb2972bbc07fd60ed3c27b095ed30938903a43a2 8cdd43bef50ee383012beb9fa37df56698eeba9c docs: PROGRESS log for T5 and T6
+ed91c048713e5e8e69a3db3ab14b3d06a01abb20 950974a7e0927261a7125a27e1bbad4cd0e33af8 SaaS delegation: Retry-After HTTP-date, 24h budget enforced before send, origin uses only delivered campaign messages
+13c787383ff0e4c7e684f996d8ece9084cff9d1e bbd7cc1fdce31a05865900840ce18892cceb221a docs: close-out plan for Meta approval and delegation
+d3d0303d6365a3ec8f8904b2bcddc1e36b323a41 c38df8136b11e9f55fd40835482d5c735d804598 A1: verify committed T1 fixes in disposable harness
+bfb1cc873656e38e54d3d09fdf6ea0e045d33272 01a39a13b099f4ecc19678b8de286b02984b2a82 B2/C2: adopt owner-approved contact erasure contract A16
+51c0d621d87ce051e5f5b7907bfe8c0836b921f5 f0d29e6929f4a21b97101c29cc232aec3cfe537e Keep disposable harness shell scripts executable under WSL
+db12511754862b7d1a05a8b5ac6ad459045b6a36 063f120a06ef37f1ff3a715a95b4314af59e53d0 Document reviewed close-out implementations and next-session testing prompt
+43e8137f56a8a65f16d57a71929902ed1f6993ec 92cd6bf543ae74350e5c5c9e3d5b763c9a0c11c9 docs: preserve closeout verification evidence and refresh progress
+e0717db229211c396a2a0bfd1d985d41d8d44c52 65c04c3da585f62985543e66cfdc80055f4ca227 docs: confirm D5 and sync close-out plan
+afb604fb69c0bfa6cea379e3736afcdffb5f9a1f 4b9a30a8404e01da8ce7e785dfbf34cd23e49f7f A2/A3/A4: repair migration integrity, fixtures and scoped hard deletion
+e9ff75909b984e80312997b87cf4ebbf6ed7a88b 5959f0e755d25af227fb932e2cea93a911fb0559 Integrate reviewed A2/A3/A4 close-out work
+6e80eaa56c15f284675c88982b452181a2b1382c 1dfedc7a88a41112cdcf33453da01b2c92f79459 A6/A7: harden proxy trust and delegation readiness checks
+0ca1c67a02f936cc2f782925695fb29125622d91 b7eb1bde87339c10833c3f1c8748f42285b798bf Integrate reviewed A6/A7 close-out work
+de865da306ca0bd6ae4f681918c21428c2dd2d43 0d07808b467bdfba7b0b21114bc7d68de3063e91 Record independent A review and align release readiness runbooks
+58b7408a2d71f786182482b56cbe8fb85f54b568 9a249eda8516fc2951704b3649732fd36879ae2f B1/B3/B4: add verified callback intake and honest deletion policies
+7bdab13d60dbeb95a08e53659229f2a7b741c1db b03c52cbece15feb9d0d903774c1610f0221dafe Integrate reviewed callback and policy close-out work
+a7518ae575446a4483ede036212506b65f8cddcd 63c190952dc05c3ed816c1aacfb03243c8cc3095 B2: implement scoped erasure and privacy-safe replay deduplication
+33bde970ef45cde2c9caa1342947a2e52be6ae79 5ca32bf3e981eb221d4c098b991d3a9f4ba18acc Integrate reviewed erasure producer and hashed dedupe migration
+e284afd2d8866dd75c551404306e23c015d8c7cc 0c9bd374150f2e7ef30e22108f75425856ef2b6e Hand off integrated Many close-out for full testing in next session
+f3a7de008333b9f261d3d990ef72a77e15903748 64cb04f4da224881af5613f28d0730e8f2c6f131 Implement R1 verified grants and durable account erasure
+d4734d48b74b2536a8649d18c7b98020e98bab29 b7b495ce7dc2b77e0df27c5a55aa7e3501dd1ca3 Document verified R1 behavior and R17 AI policies
+62bbc9be59d9ea1700d0d0a064f12263b70574ca 303755c39efa56f7afc868390d01545c157f1b4a Bind verified Meta grant proof to its exact account
+66463dcf6b7c71e6ccebd03d9fa69810c2b7d914 efd3abab9136a671a08c8ec661dc5011ef12ffbc Cover R1 callback namespaces and phase-two rollback
+c03ef5683c9117651b23aa87de568e1553043763 6ef490151d5a1d8e6b79823c71ca78af2aa1a867 Harden Many CSV output and persist R19 metadata verification
+6dc4bb9bc7a30735f994cad25c2a0cbdd91cd6cf faac7057f8d6a32f5f0a3c583b1bcdeead28de3f fix: isolate legacy CSV exports and commit reviewed closeout corrections
+f8e9aa70b3fbb0a2af7bd8cff0db3f73f1338f84 f36ce10b65ec2b9eb1f770259e8701a954f76684 docs: refresh verified closeout source heads and testing handoff
+3d3c244f49ddef9bbfe8759494417c3ca7933a25 c8e580826dfa303c834a534bf8a10c4fa281eb8a test: verify Many closeout with isolated full-suite evidence
+da3ed28edcb3ec19b3cb44fc8ddec343147d2f63 da6c17efd00772b18fe770e136b17a5092879d6d Merge closeout/batch-b: Many close-out (erasure, callbacks, A16, Graph v26, CSV scoping)
