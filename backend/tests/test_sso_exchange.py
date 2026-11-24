@@ -1,4 +1,5 @@
 """POST /auth/sso/exchange end to end (flag off and on). Synthetic keys and data only."""
+import base64
 import json
 import time
 import uuid
@@ -124,7 +125,11 @@ def test_bad_assertions_get_one_generic_answer(client, db_session, sso_on, ws, o
 
 def test_tampered_and_garbage_are_refused(client, sso_on, ws):
     head, body, sig = assertion(ws).split(".")
-    for bad in (f"{head}.{body}.{sig[:-2]}AA", "not-a-jwt"):
+    raw = bytearray(base64.urlsafe_b64decode(sig + "=" * (-len(sig) % 4)))
+    raw[0] ^= 0x01  # always changes the signature, unlike overwriting characters
+    flipped = base64.urlsafe_b64encode(bytes(raw)).rstrip(b"=").decode()
+    assert flipped != sig
+    for bad in (f"{head}.{body}.{flipped}", "not-a-jwt"):
         r = client.post(URL, json={"assertion": bad})
         assert (r.status_code, r.json()) == (401, GENERIC)
 
