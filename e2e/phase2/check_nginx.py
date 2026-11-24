@@ -67,8 +67,12 @@ for path in (
 ):
     check("many-signed", "POST" if path.endswith("messages") else "GET", MANY, path, "deny")
 # Spellings that do not normalize to the signed prefix must simply not reach the handler.
-for path in ("/api/%2573aas/messages", "/API/saas/messages", "/api/saas%2fmessages"):
+for path in ("/api/%2573aas/messages", "/api/saas%2fmessages"):
     check("many-signed-unreached", "POST", MANY, path, "deny_or_unreached")
+# Mixed-case spellings: nginx prefix locations are case-sensitive, so case-insensitive
+# regex locations must deny them at the edge.
+for path in ("/API/saas/messages", "/Api/saas/messages"):
+    check("many-signed-mixedcase", "POST", MANY, path, "deny")
 
 # SaaS signed events endpoint: denied on BOTH hosts that reach saas-api.
 for host in (SAAS_API, SAAS_WEB):
@@ -84,6 +88,9 @@ for host in (SAAS_API, SAAS_WEB):
     ):
         check("saas-signed-events", "POST", host, path, "deny")
     check("saas-signed-events-unreached", "POST", host, "/api/channels%2fmanyosiris%2fevents", "deny_or_unreached")
+    for path in ("/API/channels/manyosiris/events", "/Api/channels/manyosiris/events"):
+        check("saas-signed-events-mixedcase", "POST", host, path, "deny")
+    check("saas-signed-events-mixedcase-segment", "POST", host, "/api/CHANNELS/manyosiris/events", "deny_or_unreached")
 
 # (b) Delegation admin routes (JWT) must reach the app and get ITS 401/403, not the edge deny.
 for path in (

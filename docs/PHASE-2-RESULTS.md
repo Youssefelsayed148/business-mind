@@ -105,7 +105,7 @@ Health and config checks:
 - `docker compose config`: base, base + e2e, base + prod all render; the base nginx port is `host_ip: 127.0.0.1`, published 8080 (the e2e overlay publishes nothing).
 - `git diff origin/main -- nginx/default.conf`: empty (never edited). No migration file changed.
 
-### 4.4 Edge checks through nginx (`e2e/phase2/check_nginx.py`): 41 total, 41 passed
+### 4.4 Edge checks through nginx (`e2e/phase2/check_nginx.py`): 48 total, 48 passed (41 before the 4.6 fix)
 (a) Signed routes are denied: HTTP 403, header `X-Edge-Deny: 1`, body `denied at the edge`. (b) JWT/session admin routes reach the app and get ITS 401 (JSON error body, no edge-deny header). Raw paths are sent as-is (no client-side normalisation).
 
 | # | check | host | request | expected | status | edge deny | result |
@@ -160,3 +160,24 @@ Proof that denied requests never reached the apps (access logs of this run): saa
 - `check_policy_copies.py` OK; Many-root and SaaS-root `check_contract_copies.py` OK; no migration file changed since main.
 - GitHub Actions is paused for billing, so every gate here is local.
 
+### 4.6 PR #4 review follow-up: mixed-case bypass of the edge deny (2026-11-24)
+Finding: nginx prefix locations are case-sensitive, Next.js rewrites are not (the rewrite destination uses a literal lowercase `/api/`). Unsigned `POST` with `{}` through nginx, **before** the fix (running `unified-e2e` stack, current `unified.conf`):
+
+| host | path | status | edge deny | body |
+|---|---|---|---|---|
+| `saas.localhost` (web) | `/api/channels/manyosiris/events` | 403 | yes | `denied at the edge` |
+| `saas.localhost` (web) | `/API/channels/manyosiris/events` | **401** | no | `{"error":{"code":"UNAUTHORIZED","message":"Invalid channel request."...}}` (signed handler reached) |
+| `saas.localhost` (web) | `/Api/channels/manyosiris/events` | **401** | no | same (handler reached) |
+| `saas.localhost` (web) | `/api/CHANNELS/manyosiris/events` | 404 | no | `{"detail":"Not Found"}` |
+| `saas-api.localhost` | `/api/channels/manyosiris/events` | 403 | yes | `denied at the edge` |
+| `saas-api.localhost` | `/API/…`, `/Api/…`, `/api/CHANNELS/…` | 404 | no | `{"detail":"Not Found"}` (not reached) |
+| `localhost` (Many) | `/api/saas/messages` | 403 | yes | `denied at the edge` |
+| `localhost` (Many) | `/API/saas/messages`, `/Api/saas/messages` | 404 | no | dashboard 404 page (not reached) |
+
+So the theory held on the SaaS web host only: `/API/channels/...` and `/Api/channels/...` got through the edge to the signed endpoint (rejected by its own signature check, so no data was accepted, but the edge control was bypassed). The Many host and the SaaS API host did not reach the handler.
+
+Fix (`nginx/unified.conf`): case-insensitive `location ~* ^/api/channels(/|$)` on both SaaS server blocks and `location ~* ^/api/saas(/|$)` on the Many block, same `X-Edge-Deny: 1` 403 body; the existing `^~` locations stay. `/saas` page-like paths are untouched (the regex covers `/api/saas` only; the existing `^~ /saas/` deny from `default.conf`'s reserved prefix is unchanged).
+
+`check_nginx.py` additions (7 checks): `/API/saas/messages` and `/Api/saas/messages` on Many (deny; the former `/API/saas/messages` deny_or_unreached check moved here), and on **both** SaaS hosts `/API/channels/manyosiris/events`, `/Api/channels/manyosiris/events` (deny) and `/api/CHANNELS/manyosiris/events` (deny_or_unreached; observed: edge deny). Admin-route checks kept.
+
+After the fix (`NO_BUILD=1 KEEP=1 scripts/dev-up.sh test`): six e2e cases `case1..case6=PASS`; `SUMMARY nginx_checks total=48 passed=48 failed=0`; all `/API`, `/Api` and `/api/CHANNELS` forms return 403 + `X-Edge-Deny: 1` on every host. `nginx -t`: syntax ok, test successful. `docker compose config` renders for base, base + e2e and base + prod. `git diff main -- nginx/default.conf`: empty.

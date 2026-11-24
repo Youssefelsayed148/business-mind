@@ -24,6 +24,11 @@ Nothing in this document has been executed or approved. There is no deploy scrip
 8. Delegation stays OFF per channel until decision 2 is resolved and the owner approves turning it on, one channel at a time.
 9. Rollback: stop the new stack, restore the databases from the step 2 backups, return DNS to the previous target.
 
+## Hardening list before production
+
+- **Redis authentication:** set `requirepass` or ACL users on Redis (Celery broker, rate limits and caches for both apps) before production; the dev and e2e stacks run it unauthenticated on a private network only. Update both apps' Redis URLs and the compose healthchecks together.
+- **Case-insensitive edge denies:** the signed-route denies include `~*` regex locations (PR #4 review); keep them when adding any new route to the edge, and re-run `e2e/phase2/check_nginx.py` after every `unified.conf` change.
+
 ## Out of scope here
 
 Identity, single dashboard shell, unified data (Phases 3 to 5); Many DNS transport pinning and `host:port` allowlist entries (Phase 6 candidates).
