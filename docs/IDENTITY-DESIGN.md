@@ -1,6 +1,6 @@
-# Identity design (Phase 3, task 2): DRAFT for owner review
+# Identity design (Phase 3, task 2): APPROVED with recommended defaults (2026-11-24)
 
-Status: DRAFT, docs only. Nothing here is implemented, run or tested. Facts and citations are in `docs/IDENTITY-DISCOVERY.md` (cited below as "Discovery §n" or "Disc. A/B/C" for the route appendices). Base commit: `cc3b9ab`. Date: 2026-11-24.
+Status: APPROVED by the owner on 2026-11-24 with the recommended defaults for D1 to D10 (record below). Docs only. Nothing here is implemented, run or tested. Facts and citations are in `docs/IDENTITY-DISCOVERY.md` (cited below as "Discovery §n" or "Disc. A/B/C" for the route appendices). Base commit: `cc3b9ab`. Date: 2026-11-24.
 Binding rules still apply: Instagram receive/dispatch/send code is frozen; contract text and the two policy-module copies do not change; Postgres 15 and 17 stay separate; flag off means identical behavior; all gates are local (Actions is paused, nothing here claims a CI pass).
 
 ---
@@ -36,6 +36,10 @@ Binding rules still apply: Instagram receive/dispatch/send code is frozen; contr
 | D8 | **Duplicate-email rule.** Many case variants that collapse to one SaaS user (Discovery §10): survivor = the row with the most recent `login_success` in Many's audit log; others deactivated; roles never unioned; owner reviews the report before apply. | Migration correctness. | As recommended. |
 | D9 | **MFA and lifetimes.** TOTP mandatory for platform staff immediately and for client Owner/Admin after a 14-day grace; session: clients idle 12 h / absolute 14 d, staff idle 30 min / absolute 12 h; Many session token 10 min. | Security posture vs convenience. | As recommended. |
 | D10 | **First platform staff account and Owner assignment.** Who creates the first staff user and who is the first Owner of each existing tenant (the SaaS has no Owner today). | Cutover checklist. | Owner supplies a list; until then Admins keep today's abilities. |
+
+### Owner decision record (2026-11-24): D1 to D10 approved with the defaults in the table above
+D1 (a): no Instagram edit; client users stay off Instagram pages in the unified UI until a later, separately approved edit. D2: `routes_instagram.py`, the webhook receive path, Instagram token tasks, and `routes_campaigns.py`, `routes_conversations.py`, `routes_messages.py` are treated as frozen for client scope. D3 (a): public exchange endpoint, flagged, removed when Phase 4 lands. D4: console `Mailer` and staff-delivered links until a provider is chosen. D5: recommendation applied (clients edit knowledge; bot config stays staff-only). D6: Owner, Admin, Manager, Agent, Viewer; Billing reserved; no custom roles. D7: carry hashes only if the compatibility test passes. D8: survivor = most recent `login_success`. D9: MFA and lifetimes as recommended. D10: the owner supplies the first staff and Owner list; until then Admins keep today's abilities.
+Still binding: any Instagram handler edit needs a new explicit approval (STOP-and-ask).
 
 ---
 
