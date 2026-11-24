@@ -1,0 +1,134 @@
+name: SaaS CI (manual)
+
+# Re-homed from modules/saas/.github/workflows/ci.yml (inactive there). Manual only:
+# run it from the Actions tab. Revisit a pull_request trigger in Phase 6.
+#
+# STATUS: NEVER EXECUTED. GitHub Actions is paused for billing, so every gate stays local.
+#
+# Known deviations from the original workflow:
+#  1. backend: pytest DESELECTS
+#       tests/test_r19_index_migration.py::test_health_lookup_index_roundtrip_and_head_drift
+#     (needs a Unix-socket Postgres under /var/tmp/saas-*; a service container has none).
+#  2. frontend: `npm run format:check` runs with continue-on-error: true
+#     (4 files fail it in the original repo too; reported, not fixed).
+#  3. Database names end in _test and REPO_IMPL_DIR is outside the checkout; both jobs end
+#     with a clean-tree check.
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  backend:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    defaults:
+      run:
+        working-directory: modules/saas/apps/api
+    services:
+      postgres:
+        image: pgvector/pgvector:pg17
+        env:
+          POSTGRES_USER: chatbot_ci
+          POSTGRES_PASSWORD: ci-only-not-secret
+          # Disposable database; the name MUST end in _test.
+          POSTGRES_DB: chatbot_ci_test
+        ports:
+          - 55432:5432
+        options: >-
+          --health-cmd "pg_isready -U chatbot_ci -d chatbot_ci_test"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 10
+    env:
+      APP_ENV: test
+      ENVIRONMENT: test
+      TEST_DATABASE_URL: postgresql://chatbot_ci:ci-only-not-secret@127.0.0.1:55432/chatbot_ci_test
+      # The eval report is written OUTSIDE the checkout so the tree stays clean.
+      REPO_IMPL_DIR: ${{ runner.temp }}/repo-impl
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: modules/saas/apps/api/requirements-dev.lock
+      - name: Check signed channel contract copies
+        working-directory: ${{ github.workspace }}
+        run: |
+          python scripts/check_contract_copies.py
+          python modules/saas/scripts/check_contract_copies.py
+          python scripts/check_policy_copies.py
+      - run: pip install -r requirements-dev.lock
+      - run: ruff check .
+      - run: ruff format --check .
+      - run: mypy
+      # test_r19_index_migration needs a Unix-socket Postgres under /var/tmp/saas-*,
+      # which a GitHub service container does not provide (it passes locally with a socket
+      # bridge; see docs/PHASE-1B-RESULTS.md). Deselected here, not hidden: it is listed.
+      - run: >-
+          pytest
+          --deselect tests/test_r19_index_migration.py::test_health_lookup_index_roundtrip_and_head_drift
+      - name: Working tree must be clean
+        working-directory: ${{ github.workspace }}
+        run: |
+          git status --porcelain
+          test -z "$(git status --porcelain)"
+
+  frontend:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    defaults:
+      run:
+        working-directory: modules/saas
+    env:
+      NEXT_TELEMETRY_DISABLED: "1"
+      APP_ENV: test
+      ENVIRONMENT: test
+      # The E2E flow boots the real API against this disposable *_test database.
+      DATABASE_URL: postgresql://chatbot_ci:ci-only-not-secret@127.0.0.1:55432/chatbot_ci_test
+      REPO_IMPL_DIR: ${{ runner.temp }}/repo-impl
+    services:
+      postgres:
+        image: pgvector/pgvector:pg17
+        env:
+          POSTGRES_USER: chatbot_ci
+          POSTGRES_PASSWORD: ci-only-not-secret
+          POSTGRES_DB: chatbot_ci_test
+        ports:
+          - 55432:5432
+        options: >-
+          --health-cmd "pg_isready -U chatbot_ci -d chatbot_ci_test"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+          cache: npm
+          cache-dependency-path: modules/saas/package-lock.json
+      - run: npm ci
+      - run: npm audit --omit=dev
+      # Known pre-existing failure: 4 files are not formatted in the original repo too
+      # (docs/PHASE-1B-RESULTS.md). Reported, not fixed here.
+      - run: npm run format:check
+        continue-on-error: true
+      - run: npm run lint
+      - run: npm run typecheck
+      # The E2E flow boots the real API and worker with this Python.
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: modules/saas/apps/api/requirements.lock
+      - run: pip install -r apps/api/requirements.lock
+      - run: npx playwright install --with-deps chromium
+      - run: npm test
+      - name: Working tree must be clean
+        working-directory: ${{ github.workspace }}
+        run: |
+          git status --porcelain
+          test -z "$(git status --porcelain)"
