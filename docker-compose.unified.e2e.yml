@@ -1,0 +1,189 @@
+# No-egress overlay for the mock end-to-end run THROUGH nginx (local, throwaway only).
+#   docker compose -f docker-compose.unified.yml -f docker-compose.unified.e2e.yml \
+#       --env-file e2e/phase2/unified-e2e.env up -d --build
+# - Both networks become internal:true: no container can reach the internet.
+# - mock-meta answers as graph.facebook.com / graph.instagram.com with a throwaway CA.
+# - Per-run random fake secrets come from the pki one-shot via e2e/phase2/with_env.py.
+# - The driver talks to nginx only (http://nginx, Host header selects the vhost).
+# scripts/dev-up.sh test runs this end to end.
+name: unified-e2e
+
+x-e2e-volumes: &e2e-volumes
+  - pki:/pki:ro
+  - ./e2e/phase2:/e2e:ro
+
+x-many-e2e-env: &many-e2e-env
+  OPENAI_API_KEY: fake-openai-key-not-real
+  META_WEBHOOK_SECRET: ""
+  FACEBOOK_APP_SECRET: ""
+  HTTP_PROXY: ""
+  HTTPS_PROXY: ""
+  ALL_PROXY: ""
+  http_proxy: ""
+  https_proxy: ""
+  all_proxy: ""
+  PYTHONDONTWRITEBYTECODE: "1"
+
+x-saas-e2e-env: &saas-e2e-env
+  EMBEDDING_TEST_STUB: "true"
+  CHAT_STUB_MODEL: "true"
+  HTTP_PROXY: ""
+  HTTPS_PROXY: ""
+  ALL_PROXY: ""
+  http_proxy: ""
+  https_proxy: ""
+  all_proxy: ""
+  PYTHONDONTWRITEBYTECODE: "1"
+
+networks:
+  edge:
+    internal: true
+  internal:
+    internal: true
+
+volumes:
+  pki:
+
+services:
+  nginx:
+    ports: !reset []
+
+  pki:
+    image: unified-many:local
+    networks: [internal]
+    command: ["python", "/e2e/make_pki.py", "/pki"]
+    volumes:
+      - pki:/pki
+      - ./e2e/phase2:/e2e:ro
+    restart: "no"
+
+  mock-meta:
+    image: unified-many:local
+    networks:
+      internal:
+        aliases: [graph.facebook.com, graph.instagram.com]
+    command: ["python", "/e2e/mock_meta.py"]
+    volumes: *e2e-volumes
+    depends_on:
+      pki: {condition: service_completed_successfully}
+
+  many-migrate:
+    command: ["python", "/e2e/with_env.py", "alembic", "upgrade", "head"]
+    environment: *many-e2e-env
+    volumes: *e2e-volumes
+    depends_on:
+      pki: {condition: service_completed_successfully}
+
+  many-api:
+    command: ["python", "/e2e/with_env.py", "uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
+    environment: *many-e2e-env
+    volumes: *e2e-volumes
+    depends_on:
+      mock-meta: {condition: service_started}
+
+  many-worker:
+    command: ["python", "/e2e/with_env.py", "celery", "-A", "app.workers.celery_app", "worker", "--loglevel=info", "--concurrency=2"]
+    environment: *many-e2e-env
+    volumes: *e2e-volumes
+    depends_on:
+      saas-api: {condition: service_healthy}
+      mock-meta: {condition: service_started}
+
+  many-beat:
+    command: ["python", "/e2e/with_env.py", "celery", "-A", "app.workers.celery_app", "beat", "--loglevel=info"]
+    environment: *many-e2e-env
+    volumes: *e2e-volumes
+
+  saas-migrate:
+    command: ["python", "/e2e/with_env.py", "alembic", "upgrade", "head"]
+    environment: *saas-e2e-env
+    volumes: *e2e-volumes
+    depends_on:
+      pki: {condition: service_completed_successfully}
+
+  saas-seed:
+    image: unified-saas:local
+    networks: [internal]
+    command: ["python", "/e2e/with_env.py", "python", "/e2e/seed_saas.py"]
+    environment:
+      ENVIRONMENT: ${SAAS_ENVIRONMENT:-test}
+      DATABASE_URL: postgresql://saas:${SAAS_DB_PASSWORD}@pg17:5432/saas
+      STORAGE_ROOT: /tmp/storage
+      COOKIE_SECURE: "false"
+      <<: *saas-e2e-env
+    volumes: *e2e-volumes
+    restart: "no"
+    depends_on:
+      saas-migrate: {condition: service_completed_successfully}
+
+  saas-api:
+    command: ["python", "/e2e/with_env.py", "uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
+    environment: *saas-e2e-env
+    volumes:
+      - saas_data:/data
+      - pki:/pki:ro
+      - ./e2e/phase2:/e2e:ro
+    depends_on:
+      saas-seed: {condition: service_completed_successfully}
+
+  saas-worker:
+    command: ["python", "/e2e/with_env.py", "python", "-m", "app.worker"]
+    environment: *saas-e2e-env
+    volumes:
+      - saas_data:/data
+      - pki:/pki:ro
+      - ./e2e/phase2:/e2e:ro
+    depends_on:
+      saas-seed: {condition: service_completed_successfully}
+
+  many-seed:
+    image: unified-many:local
+    networks: [internal]
+    command: ["python", "/e2e/with_env.py", "python", "/e2e/seed_many.py"]
+    environment:
+      APP_ENV: ${MANY_APP_ENV:-development}
+      DATABASE_URL: postgresql+psycopg://many:${MANY_DB_PASSWORD}@pg15:5432/many
+      REDIS_URL: redis://redis:6379/0
+      CHANNEL_INTERNAL_ALLOWED_HOSTS: saas-api
+      SENTRY_DSN: ""
+      <<: *many-e2e-env
+    volumes: *e2e-volumes
+    restart: "no"
+    depends_on:
+      many-migrate: {condition: service_completed_successfully}
+      saas-api: {condition: service_healthy}
+
+  driver:
+    image: unified-many:local
+    profiles: ["drive"]
+    networks: [edge, internal]
+    command: ["python", "/e2e/with_env.py", "python", "/e2e/run_cases.py"]
+    restart: "no"
+    volumes: *e2e-volumes
+    environment:
+      <<: *many-e2e-env
+      APP_ENV: ${MANY_APP_ENV:-development}
+      DATABASE_URL: postgresql+psycopg://many:${MANY_DB_PASSWORD}@pg15:5432/many
+      REDIS_URL: redis://redis:6379/0
+      SAAS_DATABASE_URL: postgresql://saas:${SAAS_DB_PASSWORD}@pg17:5432/saas
+      # Webhooks enter THROUGH nginx (default vhost = Many).
+      MANY_API_URL: http://nginx
+      # Ignore beat-driven channel.status health events when counting SaaS events.
+      SAAS_EVENT_TYPE_LIKE: "message.%"
+    depends_on:
+      nginx: {condition: service_healthy}
+      many-seed: {condition: service_completed_successfully}
+
+  nginx-checks:
+    image: unified-many:local
+    profiles: ["drive"]
+    networks: [edge]
+    command: ["python", "/e2e/check_nginx.py"]
+    restart: "no"
+    volumes: *e2e-volumes
+    environment:
+      EDGE_HOST: nginx
+      EDGE_PORT: "80"
+      PYTHONDONTWRITEBYTECODE: "1"
+    depends_on:
+      nginx: {condition: service_healthy}

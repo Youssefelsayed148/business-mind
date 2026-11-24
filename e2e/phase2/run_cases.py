@@ -16,14 +16,18 @@ from ids import MANY_CHANNELS  # noqa: E402
 
 from app.db.session import SessionLocal  # noqa: E402
 
-MANY = os.environ["MANY_API_URL"]
-META = "https://graph.facebook.com"
+# Defaults are the original values; override to send the webhooks through nginx.
+MANY = os.environ.get("MANY_API_URL", "http://many-api:8000")
+META = os.environ.get("META_API_URL", "https://graph.facebook.com")
 saas_db = create_engine(
     os.environ["SAAS_DATABASE_URL"].replace("postgresql://", "postgresql+psycopg://")
 )
 many_db = SessionLocal()
 APP_SECRET = os.environ["META_APP_SECRET"]
 TIMEOUT = float(os.environ.get("CASE_TIMEOUT", "120"))
+# Default counts every SaaS event (original behaviour). The unified stack runs celery beat, whose
+# periodic health sweep adds `channel.status` events, so its overlay sets this to `message.%`.
+EVENT_TYPE_LIKE = os.environ.get("SAAS_EVENT_TYPE_LIKE", "%")
 TABLES = {
     "instagram": ("instagram_accounts", "ig_user_id"),
     "whatsapp": ("whatsapp_accounts", "phone_number_id"),
@@ -103,7 +107,9 @@ def run_case(n: int, platform: str, on: bool) -> dict:
     ref = MANY_CHANNELS[(platform, on)]
     cid = channel_id(platform, ref)
     sender = "1631555" + str(1000 + n) if platform == "whatsapp" else "9000" + str(n) + "0011"
-    saas_events_before = saas_rows("SELECT count(*) AS c FROM channel_events")[0]["c"]
+    saas_events_before = saas_rows(
+        "SELECT count(*) AS c FROM channel_events WHERE event_type LIKE :t", t=EVENT_TYPE_LIKE
+    )[0]["c"]
     meta_before = len(meta_requests())
     response = post_webhook(webhook_payload(platform, ref, sender, f"hello from e2e case {n}"))
     record: dict = {
@@ -140,7 +146,10 @@ def run_case(n: int, platform: str, on: bool) -> dict:
                 break
     record["many_forward_events"] = [dict(r) for r in forwarded]
     record["saas_channel_events_delta"] = (
-        saas_rows("SELECT count(*) AS c FROM channel_events")[0]["c"] - saas_events_before
+        saas_rows(
+            "SELECT count(*) AS c FROM channel_events WHERE event_type LIKE :t", t=EVENT_TYPE_LIKE
+        )[0]["c"]
+        - saas_events_before
     )
     record["many_outbound_from_saas"] = [dict(r) for r in outbound]
     record["mock_meta_requests"] = [

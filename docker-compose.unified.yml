@@ -1,0 +1,240 @@
+# Unified stack for Many + SaaS (Phase 2b). DEV defaults; nothing here is deployed.
+#
+#   cp .env.unified.example .env.unified   # placeholders only; edit locally, never commit
+#   docker compose -f docker-compose.unified.yml --env-file .env.unified up -d --build
+#
+# - Two Postgres databases (pg15 for Many, pg17+pgvector for SaaS), two migration chains.
+# - Both dashboards run (Many dashboard, SaaS web); no shell choice before Phase 4.
+# - nginx is the only published service, bound to 127.0.0.1 (dev). Hosts:
+#     MANY_HOST (localhost), SAAS_WEB_HOST (saas.localhost), SAAS_API_HOST (saas-api.localhost).
+# - Signed service-to-service calls stay on the internal network:
+#     many-worker -> http://saas-api:8000, saas-worker -> http://many-api:8000.
+# - CHANNEL_INTERNAL_ALLOWED_HOSTS: exactly saas-api (Many side) and many-api (SaaS side).
+# - Secrets: only placeholders in .env.unified.example. App secrets are read from the
+#   optional .env.unified; database passwords are required (compose fails without them).
+# - The base `internal` network is NOT internal:true (builds and dev need egress); the
+#   e2e overlay (docker-compose.unified.e2e.yml) makes every network no-egress.
+name: unified
+
+x-many-image: &many-image
+  image: unified-many:local
+  build:
+    context: ./backend
+
+x-saas-image: &saas-image
+  image: unified-saas:local
+  build:
+    context: ./modules/saas
+    dockerfile: apps/api/Dockerfile
+    target: runtime
+
+x-env-file: &env-file
+  - path: .env.unified
+    required: false
+
+x-many-env: &many-env
+  APP_ENV: ${MANY_APP_ENV:-development}
+  DATABASE_URL: postgresql+psycopg://many:${MANY_DB_PASSWORD:?set MANY_DB_PASSWORD}@pg15:5432/many
+  REDIS_URL: redis://redis:6379/0
+  CHANNEL_INTERNAL_ALLOWED_HOSTS: saas-api
+  SENTRY_DSN: ""
+
+x-saas-env: &saas-env
+  ENVIRONMENT: ${SAAS_ENVIRONMENT:-development}
+  DATABASE_URL: postgresql://saas:${SAAS_DB_PASSWORD:?set SAAS_DB_PASSWORD}@pg17:5432/saas
+  STORAGE_ROOT: /data/storage
+  COOKIE_SECURE: ${COOKIE_SECURE:-false}
+  CHANNEL_INTERNAL_ALLOWED_HOSTS: many-api
+
+networks:
+  edge: {}
+  internal: {}
+
+volumes:
+  pg15_data:
+  pg17_data:
+  redis_data:
+  saas_data:
+
+services:
+  pg15:
+    image: postgres:15
+    networks: [internal]
+    environment:
+      POSTGRES_USER: many
+      POSTGRES_DB: many
+      POSTGRES_PASSWORD: ${MANY_DB_PASSWORD:?set MANY_DB_PASSWORD}
+    volumes: [pg15_data:/var/lib/postgresql/data]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U many -d many"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  pg17:
+    image: pgvector/pgvector:pg17
+    networks: [internal]
+    environment:
+      POSTGRES_USER: saas
+      POSTGRES_DB: saas
+      POSTGRES_PASSWORD: ${SAAS_DB_PASSWORD:?set SAAS_DB_PASSWORD}
+    volumes: [pg17_data:/var/lib/postgresql/data]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U saas -d saas"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  redis:
+    image: redis:7-alpine
+    networks: [internal]
+    volumes: [redis_data:/data]
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  many-migrate:
+    <<: *many-image
+    networks: [internal]
+    env_file: *env-file
+    environment: *many-env
+    command: ["alembic", "upgrade", "head"]
+    restart: "no"
+    depends_on:
+      pg15: {condition: service_healthy}
+
+  saas-migrate:
+    <<: *saas-image
+    networks: [internal]
+    env_file: *env-file
+    environment: *saas-env
+    command: ["alembic", "upgrade", "head"]
+    restart: "no"
+    depends_on:
+      pg17: {condition: service_healthy}
+
+  many-api:
+    <<: *many-image
+    networks: [internal]
+    env_file: *env-file
+    environment: *many-env
+    command: ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
+    depends_on:
+      many-migrate: {condition: service_completed_successfully}
+      redis: {condition: service_healthy}
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health', timeout=5)"]
+      interval: 5s
+      timeout: 6s
+      retries: 20
+      start_period: 15s
+
+  many-worker:
+    <<: *many-image
+    networks: [internal]
+    env_file: *env-file
+    environment: *many-env
+    command: ["celery", "-A", "app.workers.celery_app", "worker", "--loglevel=info", "--concurrency=2"]
+    depends_on:
+      many-migrate: {condition: service_completed_successfully}
+      redis: {condition: service_healthy}
+
+  many-beat:
+    <<: *many-image
+    networks: [internal]
+    env_file: *env-file
+    environment: *many-env
+    command: ["celery", "-A", "app.workers.celery_app", "beat", "--loglevel=info"]
+    depends_on:
+      many-migrate: {condition: service_completed_successfully}
+      redis: {condition: service_healthy}
+
+  many-dashboard:
+    image: unified-many-dashboard:local
+    build:
+      context: ./dashboard
+      args:
+        # Same-origin through nginx (MANY_HOST); the dashboard calls /instagram/, /campaigns/, ...
+        NEXT_PUBLIC_API_URL: ${MANY_PUBLIC_URL:-http://localhost:8080}
+        NEXT_PUBLIC_APP_ENV: ${MANY_APP_ENV:-development}
+    networks: [internal]
+    depends_on:
+      many-api: {condition: service_healthy}
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3000').then(r => process.exit(r.status < 500 ? 0 : 1)).catch(() => process.exit(1))"]
+      interval: 10s
+      timeout: 6s
+      retries: 10
+      start_period: 20s
+
+  saas-api:
+    <<: *saas-image
+    networks: [internal]
+    env_file: *env-file
+    environment: *saas-env
+    volumes: [saas_data:/data]
+    depends_on:
+      saas-migrate: {condition: service_completed_successfully}
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/ready', timeout=5)"]
+      interval: 10s
+      timeout: 6s
+      retries: 10
+      start_period: 30s
+
+  saas-worker:
+    <<: *saas-image
+    networks: [internal]
+    env_file: *env-file
+    environment:
+      <<: *saas-env
+      WORKER_HEARTBEAT_FILE: /tmp/worker-heartbeat
+    command: ["python", "-m", "app.worker"]
+    volumes: [saas_data:/data]
+    depends_on:
+      saas-migrate: {condition: service_completed_successfully}
+
+  saas-web:
+    image: unified-saas-web:local
+    build:
+      context: ./modules/saas
+      dockerfile: apps/web/Dockerfile
+      args:
+        # Baked into the Next build (rewrites manifest): /api/* -> saas-api. No SaaS code change.
+        API_PROXY_TARGET: http://saas-api:8000
+    networks: [internal]
+    environment:
+      API_PROXY_TARGET: http://saas-api:8000
+    depends_on:
+      saas-api: {condition: service_healthy}
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3000').then(r => process.exit(r.status < 500 ? 0 : 1)).catch(() => process.exit(1))"]
+      interval: 10s
+      timeout: 6s
+      retries: 10
+      start_period: 20s
+
+  nginx:
+    image: nginx:1.27-alpine
+    networks: [edge, internal]
+    environment:
+      MANY_HOST: ${MANY_HOST:-localhost}
+      SAAS_WEB_HOST: ${SAAS_WEB_HOST:-saas.localhost}
+      SAAS_API_HOST: ${SAAS_API_HOST:-saas-api.localhost}
+    volumes:
+      - ./nginx/unified.conf:/etc/nginx/templates/default.conf.template:ro
+    ports:
+      # Dev: loopback only. The prod overlay replaces this list.
+      - "127.0.0.1:${UNIFIED_HTTP_PORT:-8080}:80"
+    depends_on:
+      many-api: {condition: service_healthy}
+      many-dashboard: {condition: service_healthy}
+      saas-api: {condition: service_healthy}
+      saas-web: {condition: service_healthy}
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1/health"]
+      interval: 5s
+      timeout: 4s
+      retries: 20
