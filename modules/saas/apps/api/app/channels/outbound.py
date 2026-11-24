@@ -16,6 +16,7 @@ from pydantic import BaseModel, Field
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from app.channels import internal_channel_policy
 from app.channels.config import (
     REPLY_BYTE_LIMITS,
     REPLY_CHAR_LIMITS,
@@ -180,7 +181,9 @@ def resolve_target(
             url.host, url.port or (443 if url.scheme == "https" else 80), type=socket.SOCK_STREAM
         )
         ips = [str(answer[4][0]) for answer in addresses]
-        if not ips or any(not ipaddress.ip_address(ip).is_global for ip in ips):
+        if internal_channel_policy.enabled():
+            internal_channel_policy.check_addresses(base_url, ips)
+        elif not ips or any(not ipaddress.ip_address(ip).is_global for ip in ips):
             raise UnsafeTarget
         return url.copy_with(host=ips[0]), url.host
     except (ApiError, ValueError, httpx.InvalidURL) as exc:

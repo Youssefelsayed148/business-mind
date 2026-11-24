@@ -1,0 +1,452 @@
+--- /dev/null
++++ b/backend/app/services/internal_channel_policy.py
+@@ -0,0 +1,73 @@
++"""Explicit internal-channel policy; an empty setting selects legacy behavior."""
++import ipaddress
++import logging
++import os
++import re
++from urllib.parse import urlsplit
++
++SETTING = "CHANNEL_INTERNAL_ALLOWED_HOSTS"
++_LABEL = re.compile(r"[a-z](?:[a-z0-9-]{0,61}[a-z0-9])?\Z")
++_PRIVATE = tuple(ipaddress.ip_network(value) for value in (
++    "10.0.0.0/8", "172.16.0.0/12", "192.168.0.0/16", "fc00::/7",
++))
++
++
++def parse_hosts(raw: str) -> frozenset[str]:
++    if not raw:
++        return frozenset()
++    entries = raw.split(",")
++    for host in entries:
++        if (not host or len(host) > 253
++                or any(not _LABEL.fullmatch(label) for label in host.split("."))
++                or host == "localhost"
++                or host.endswith((".localhost", ".local", ".internal", ".lan", ".home.arpa"))):
++            raise ValueError("Invalid CHANNEL_INTERNAL_ALLOWED_HOSTS: use canonical DNS names only")
++    if len(entries) != len(set(entries)):
++        raise ValueError("Duplicate CHANNEL_INTERNAL_ALLOWED_HOSTS entry")
++    return frozenset(entries)
++
++
++HOSTS = parse_hosts(os.environ.get(SETTING, ""))
++if HOSTS:
++    logging.getLogger(__name__).warning(
++        "Internal channel host allowlist enabled: %s", ",".join(sorted(HOSTS))
++    )
++
++
++def enabled() -> bool:
++    return bool(HOSTS)
++
++
++def parse_url(raw: str, *, require_https: bool = False) -> str:
++    # Deliberately reject aliases/spellings rather than normalize them into a grant.
++    if not raw or any(ord(char) <= 32 or ord(char) >= 127 for char in raw):
++        raise ValueError("Channel URL must be ASCII without whitespace or controls")
++    parsed = urlsplit(raw)
++    if parsed.scheme not in ("http", "https") or not parsed.hostname:
++        raise ValueError("Invalid channel URL")
++    if require_https and parsed.scheme != "https":
++        raise ValueError("Channel URL must use HTTPS in production")
++    if (parsed.username is not None or parsed.password is not None
++            or "@" in parsed.netloc or "%" in parsed.netloc or "\\" in raw
++            or "?" in raw or "#" in raw):
++        raise ValueError("Channel URL must not include credentials, escapes, query or fragment")
++    host = parsed.hostname
++    # Reject every IP literal and alternate numeric encoding under the opt-in policy.
++    if (host != host.lower() or not all(_LABEL.fullmatch(label) for label in host.split("."))
++            or parsed.netloc.split(":", 1)[0] != host):
++        raise ValueError("Channel URL must use a canonical lowercase DNS hostname")
++    if parsed.port is not None and not 1 <= parsed.port <= 65535:
++        raise ValueError("Invalid channel URL port")
++    return host
++
++
++def check_addresses(raw: str, addresses: list[str]) -> None:
++    host = parse_url(raw)
++    if not addresses:
++        raise ValueError("Channel host resolved to no addresses")
++    for value in addresses:
++        address = ipaddress.ip_address(value)
++        if address.is_global and not (address.is_multicast or address.is_reserved):
++            continue
++        if host not in HOSTS or not any(address in subnet for subnet in _PRIVATE):
++            raise ValueError("Channel host resolved to a forbidden address")
+--- /dev/null
++++ b/modules/saas/apps/api/app/channels/internal_channel_policy.py
+@@ -0,0 +1,73 @@
++"""Explicit internal-channel policy; an empty setting selects legacy behavior."""
++import ipaddress
++import logging
++import os
++import re
++from urllib.parse import urlsplit
++
++SETTING = "CHANNEL_INTERNAL_ALLOWED_HOSTS"
++_LABEL = re.compile(r"[a-z](?:[a-z0-9-]{0,61}[a-z0-9])?\Z")
++_PRIVATE = tuple(ipaddress.ip_network(value) for value in (
++    "10.0.0.0/8", "172.16.0.0/12", "192.168.0.0/16", "fc00::/7",
++))
++
++
++def parse_hosts(raw: str) -> frozenset[str]:
++    if not raw:
++        return frozenset()
++    entries = raw.split(",")
++    for host in entries:
++        if (not host or len(host) > 253
++                or any(not _LABEL.fullmatch(label) for label in host.split("."))
++                or host == "localhost"
++                or host.endswith((".localhost", ".local", ".internal", ".lan", ".home.arpa"))):
++            raise ValueError("Invalid CHANNEL_INTERNAL_ALLOWED_HOSTS: use canonical DNS names only")
++    if len(entries) != len(set(entries)):
++        raise ValueError("Duplicate CHANNEL_INTERNAL_ALLOWED_HOSTS entry")
++    return frozenset(entries)
++
++
++HOSTS = parse_hosts(os.environ.get(SETTING, ""))
++if HOSTS:
++    logging.getLogger(__name__).warning(
++        "Internal channel host allowlist enabled: %s", ",".join(sorted(HOSTS))
++    )
++
++
++def enabled() -> bool:
++    return bool(HOSTS)
++
++
++def parse_url(raw: str, *, require_https: bool = False) -> str:
++    # Deliberately reject aliases/spellings rather than normalize them into a grant.
++    if not raw or any(ord(char) <= 32 or ord(char) >= 127 for char in raw):
++        raise ValueError("Channel URL must be ASCII without whitespace or controls")
++    parsed = urlsplit(raw)
++    if parsed.scheme not in ("http", "https") or not parsed.hostname:
++        raise ValueError("Invalid channel URL")
++    if require_https and parsed.scheme != "https":
++        raise ValueError("Channel URL must use HTTPS in production")
++    if (parsed.username is not None or parsed.password is not None
++            or "@" in parsed.netloc or "%" in parsed.netloc or "\\" in raw
++            or "?" in raw or "#" in raw):
++        raise ValueError("Channel URL must not include credentials, escapes, query or fragment")
++    host = parsed.hostname
++    # Reject every IP literal and alternate numeric encoding under the opt-in policy.
++    if (host != host.lower() or not all(_LABEL.fullmatch(label) for label in host.split("."))
++            or parsed.netloc.split(":", 1)[0] != host):
++        raise ValueError("Channel URL must use a canonical lowercase DNS hostname")
++    if parsed.port is not None and not 1 <= parsed.port <= 65535:
++        raise ValueError("Invalid channel URL port")
++    return host
++
++
++def check_addresses(raw: str, addresses: list[str]) -> None:
++    host = parse_url(raw)
++    if not addresses:
++        raise ValueError("Channel host resolved to no addresses")
++    for value in addresses:
++        address = ipaddress.ip_address(value)
++        if address.is_global and not (address.is_multicast or address.is_reserved):
++            continue
++        if host not in HOSTS or not any(address in subnet for subnet in _PRIVATE):
++            raise ValueError("Channel host resolved to a forbidden address")
+--- a/backend/app/services/saas_delegation_service.py
++++ b/backend/app/services/saas_delegation_service.py
+@@ -13,6 +13,7 @@
+ from sqlalchemy.orm import Session
+ 
+ from app.core.config import settings
++from app.services import internal_channel_policy
+ from app.utils.crypto import decrypt_text, encrypt_text
+ 
+ SECRET_GRACE = timedelta(hours=24)
+@@ -47,6 +48,19 @@
+     address). Outside production http and local hosts are allowed so the
+     fake SaaS server in the contract tests can run on localhost.
+     """
++    if internal_channel_policy.enabled():
++        try:
++            host = internal_channel_policy.parse_url(raw, require_https=_is_production())
++            parts = urlsplit(raw)
++            infos = socket.getaddrinfo(
++                host, parts.port or (443 if parts.scheme == "https" else 80),
++                type=socket.SOCK_STREAM,
++            )
++            internal_channel_policy.check_addresses(raw, [info[4][0] for info in infos])
++        except (ValueError, OSError) as exc:
++            raise DelegationConfigError("Internal channel URL policy rejected target.") from exc
++        return raw.rstrip("/")
++
+     value = (raw or "").strip()
+     parts = urlsplit(value)
+     if parts.scheme not in ("http", "https") or not parts.hostname:
+--- a/modules/saas/apps/api/app/channels/router.py
++++ b/modules/saas/apps/api/app/channels/router.py
+@@ -5,6 +5,8 @@
+ from datetime import UTC, datetime, timedelta
+ from typing import Annotated, Literal, cast
+ from urllib.parse import urlsplit
++
++from app.channels import internal_channel_policy
+ from uuid import UUID, uuid4
+ 
+ from fastapi import APIRouter, Depends, Query, status
+@@ -120,6 +122,15 @@
+ 
+ 
+ def _validate_base_url(value: str, settings: Settings) -> str:
++    if internal_channel_policy.enabled():
++        try:
++            internal_channel_policy.parse_url(
++                value, require_https=settings.environment == "production"
++            )
++        except ValueError as exc:
++            raise ApiError(422, "INVALID_MANY_URL", "Channel URL policy rejected target.") from exc
++        return value.rstrip("/")
++
+     parsed = urlsplit(value.strip())
+     if parsed.scheme not in {"https", "http"} or not parsed.hostname:
+         raise ApiError(422, "INVALID_MANY_URL", "Many base URL must use HTTP or HTTPS.")
+--- a/modules/saas/apps/api/app/channels/outbound.py
++++ b/modules/saas/apps/api/app/channels/outbound.py
+@@ -28,6 +28,7 @@
+     UNCONFIRMED_AFTER_SECONDS,
+ )
+ from app.channels.router import _validate_base_url
++from app.channels import internal_channel_policy
+ from app.channels.secrets import decrypt_secret
+ from app.channels.signing import sign
+ from app.core.config import Settings
+@@ -180,7 +181,9 @@
+             url.host, url.port or (443 if url.scheme == "https" else 80), type=socket.SOCK_STREAM
+         )
+         ips = [str(answer[4][0]) for answer in addresses]
+-        if not ips or any(not ipaddress.ip_address(ip).is_global for ip in ips):
++        if internal_channel_policy.enabled():
++            internal_channel_policy.check_addresses(base_url, ips)
++        elif not ips or any(not ipaddress.ip_address(ip).is_global for ip in ips):
+             raise UnsafeTarget
+         return url.copy_with(host=ips[0]), url.host
+     except (ApiError, ValueError, httpx.InvalidURL) as exc:
+--- /dev/null
++++ b/backend/tests/test_internal_channel_policy.py
+@@ -0,0 +1,107 @@
++import pytest
++
++from app.services import internal_channel_policy as policy
++
++
++@pytest.fixture(autouse=True)
++def configured(monkeypatch):
++    monkeypatch.setattr(policy, "HOSTS", frozenset({"saas-api", "many-api"}))
++
++
++@pytest.mark.parametrize("host", ["saas-api", "many-api"])
++def test_exact_internal_host(host):
++    policy.check_addresses(f"http://{host}:8000", ["172.30.0.4", "fd00::4"])
++
++
++@pytest.mark.parametrize("url", [
++    "http://SaAs-Api:8000", "http://saas-api.:8000", "http://saas-api..:8000",
++    "http://saas-api@evil.example", "http://@saas-api", "http://saas-api:pass@evil.example",
++    "http://saas-api.evil.example", "http://other-api", "http://prefix-saas-api",
++    "http://127.0.0.1", "http://10.0.0.4", "http://8.8.8.8", "http://[fd00::1]",
++    "http://2130706433", "http://0x7f000001", "http://0177.0.0.1",
++    "http://saas-api%2eevil.example", "http://saas-api\\@evil.example",
++    "http://saas-api\n", "http://saas-api?x=1", "http://saas-api#fragment",
++])
++def test_private_target_aliases_and_tricks_rejected(url):
++    with pytest.raises(ValueError):
++        policy.check_addresses(url, ["172.30.0.4"])
++
++
++@pytest.mark.parametrize("address", [
++    "127.0.0.1", "::1", "169.254.169.254", "fe80::1", "0.0.0.0", "::",
++    "224.0.0.1", "ff02::1", "192.0.2.1", "::ffff:172.30.0.4",
++])
++def test_special_ranges_not_granted(address):
++    with pytest.raises(ValueError):
++        policy.check_addresses("http://saas-api", [address])
++
++
++def test_mixed_dns_fails_closed():
++    with pytest.raises(ValueError):
++        policy.check_addresses("http://saas-api", ["172.30.0.4", "169.254.169.254"])
++    with pytest.raises(ValueError):
++        policy.check_addresses("http://saas-api", [])
++
++
++@pytest.mark.parametrize("raw", [
++    "*", "*.example", ".example", "SAAS-API", "saas-api.", "127.0.0.1", "[::1]",
++    "saas-api@evil.example", "saas-api:8000", "saas-api,", "saas-api,saas-api",
++    "localhost", "svc.local", "saas-api, many-api",
++])
++def test_bad_setting_rejected(raw):
++    with pytest.raises(ValueError):
++        policy.parse_hosts(raw)
++
++
++def test_empty_and_production_tls(monkeypatch):
++    assert policy.parse_hosts("") == frozenset()
++    monkeypatch.setattr(policy, "HOSTS", frozenset())
++    assert not policy.enabled()
++    with pytest.raises(ValueError):
++        policy.parse_url("http://saas-api", require_https=True)
++    assert policy.parse_url("https://saas-api", require_https=True) == "saas-api"
++
++
++def test_public_dns_still_allowed():
++    policy.check_addresses("https://public.example", ["8.8.8.8"])
++
++
++def test_many_validation_integration(monkeypatch):
++    from app.services import saas_delegation_service as svc
++    monkeypatch.setattr(svc.settings, "APP_ENV", "production")
++    monkeypatch.setattr(svc.socket, "getaddrinfo", lambda *a, **k: [(2, 1, 6, "", ("172.30.0.4", 443))])
++    assert svc.validate_base_url("https://saas-api") == "https://saas-api"
++    with pytest.raises(svc.DelegationConfigError):
++        svc.validate_base_url("https://other-api")
++    monkeypatch.setattr(policy, "HOSTS", frozenset())
++    with pytest.raises(svc.DelegationConfigError):
++        svc.validate_base_url("https://saas-api")
++
++
++def test_redirect_not_followed(monkeypatch):
++    import httpx
++    from app.services import saas_forwarder
++    seen = []
++    def handler(request):
++        seen.append(str(request.url))
++        return httpx.Response(302, headers={"Location": "http://other-api/steal"})
++    original = httpx.Client
++    monkeypatch.setattr(httpx, "Client", lambda **kwargs: original(transport=httpx.MockTransport(handler), **kwargs))
++    with saas_forwarder.new_http_client() as client:
++        response = client.post("http://saas-api/start", content=b"fake")
++    assert response.status_code == 302
++    assert seen == ["http://saas-api/start"]
++
++
++def test_startup_validation_and_warning():
++    import subprocess
++    import sys
++    command = [sys.executable, "-c", "import runpy, sys; runpy.run_path(sys.argv[1])", policy.__file__]
++    result = subprocess.run(command, env={policy.SETTING: "many-api"}, capture_output=True, text=True)
++    assert result.returncode == 0
++    assert "Internal channel host allowlist enabled: many-api" in result.stderr
++    result = subprocess.run(command, env={policy.SETTING: "*"}, capture_output=True, text=True)
++    assert result.returncode != 0
++    result = subprocess.run(command, env={policy.SETTING: ""}, capture_output=True, text=True)
++    assert result.returncode == 0
++    assert "allowlist enabled" not in result.stderr
+--- /dev/null
++++ b/modules/saas/apps/api/tests/test_internal_channel_policy.py
+@@ -0,0 +1,109 @@
++import pytest
++
++from app.channels import internal_channel_policy as policy
++
++
++@pytest.fixture(autouse=True)
++def configured(monkeypatch):
++    monkeypatch.setattr(policy, "HOSTS", frozenset({"saas-api", "many-api"}))
++
++
++@pytest.mark.parametrize("host", ["saas-api", "many-api"])
++def test_exact_internal_host(host):
++    policy.check_addresses(f"http://{host}:8000", ["172.30.0.4", "fd00::4"])
++
++
++@pytest.mark.parametrize("url", [
++    "http://SaAs-Api:8000", "http://saas-api.:8000", "http://saas-api..:8000",
++    "http://saas-api@evil.example", "http://@saas-api", "http://saas-api:pass@evil.example",
++    "http://saas-api.evil.example", "http://other-api", "http://prefix-saas-api",
++    "http://127.0.0.1", "http://10.0.0.4", "http://8.8.8.8", "http://[fd00::1]",
++    "http://2130706433", "http://0x7f000001", "http://0177.0.0.1",
++    "http://saas-api%2eevil.example", "http://saas-api\\@evil.example",
++    "http://saas-api\n", "http://saas-api?x=1", "http://saas-api#fragment",
++])
++def test_private_target_aliases_and_tricks_rejected(url):
++    with pytest.raises(ValueError):
++        policy.check_addresses(url, ["172.30.0.4"])
++
++
++@pytest.mark.parametrize("address", [
++    "127.0.0.1", "::1", "169.254.169.254", "fe80::1", "0.0.0.0", "::",
++    "224.0.0.1", "ff02::1", "192.0.2.1", "::ffff:172.30.0.4",
++])
++def test_special_ranges_not_granted(address):
++    with pytest.raises(ValueError):
++        policy.check_addresses("http://saas-api", [address])
++
++
++def test_mixed_dns_fails_closed():
++    with pytest.raises(ValueError):
++        policy.check_addresses("http://saas-api", ["172.30.0.4", "169.254.169.254"])
++    with pytest.raises(ValueError):
++        policy.check_addresses("http://saas-api", [])
++
++
++@pytest.mark.parametrize("raw", [
++    "*", "*.example", ".example", "SAAS-API", "saas-api.", "127.0.0.1", "[::1]",
++    "saas-api@evil.example", "saas-api:8000", "saas-api,", "saas-api,saas-api",
++    "localhost", "svc.local", "saas-api, many-api",
++])
++def test_bad_setting_rejected(raw):
++    with pytest.raises(ValueError):
++        policy.parse_hosts(raw)
++
++
++def test_empty_and_production_tls(monkeypatch):
++    assert policy.parse_hosts("") == frozenset()
++    monkeypatch.setattr(policy, "HOSTS", frozenset())
++    assert not policy.enabled()
++    with pytest.raises(ValueError):
++        policy.parse_url("http://saas-api", require_https=True)
++    assert policy.parse_url("https://saas-api", require_https=True) == "saas-api"
++
++
++def test_public_dns_still_allowed():
++    policy.check_addresses("https://public.example", ["8.8.8.8"])
++
++
++def test_saas_validation_and_pinning(monkeypatch):
++    from app.channels import outbound
++    from app.core.config import Settings
++    settings = Settings(_env_file=None, environment="production")
++    monkeypatch.setattr(outbound.socket, "getaddrinfo", lambda *a, **k: [(2, 1, 6, "", ("172.30.0.4", 443))])
++    url, hostname = outbound.resolve_target("https://many-api", settings)
++    assert url.host == "172.30.0.4" and hostname == "many-api"
++    with pytest.raises(outbound.UnsafeTarget):
++        outbound.resolve_target("https://other-api", settings)
++    monkeypatch.setattr(policy, "HOSTS", frozenset())
++    with pytest.raises(outbound.UnsafeTarget):
++        outbound.resolve_target("https://many-api", settings)
++
++
++def test_redirect_not_followed(monkeypatch):
++    import httpx
++    from app.channels import outbound
++    seen = []
++    def handler(request):
++        seen.append(str(request.url))
++        return httpx.Response(302, headers={"Location": "http://other-api/steal"})
++    original = httpx.Client
++    monkeypatch.setattr(httpx, "Client", lambda **kwargs: original(transport=httpx.MockTransport(handler), **kwargs))
++    with outbound._client() as client:
++        response = client.post("http://many-api/start", content=b"fake")
++    assert response.status_code == 302
++    assert seen == ["http://many-api/start"]
++
++
++def test_startup_validation_and_warning():
++    import subprocess
++    import sys
++    command = [sys.executable, "-c", "import runpy, sys; runpy.run_path(sys.argv[1])", policy.__file__]
++    result = subprocess.run(command, env={policy.SETTING: "many-api"}, capture_output=True, text=True)
++    assert result.returncode == 0
++    assert "Internal channel host allowlist enabled: many-api" in result.stderr
++    result = subprocess.run(command, env={policy.SETTING: "*"}, capture_output=True, text=True)
++    assert result.returncode != 0
++    result = subprocess.run(command, env={policy.SETTING: ""}, capture_output=True, text=True)
++    assert result.returncode == 0
++    assert "allowlist enabled" not in result.stderr

@@ -12,6 +12,13 @@
   - [x] gitleaks 8.30.1 scan of the branch history: 34 findings, all fake test fixtures (see IMPORT-NOTES).
 
 ## In progress
+- **Phase 2 internal-service allowlist IMPLEMENTED (2026-11-24, Claude Code), branch `phase-2/one-infrastructure`, DRAFT PR pending owner review**: approved patch applied with the owner's conditions (single-label entries only, dotted entries rejected in `parse_hosts`). Opt-in `CHANNEL_INTERNAL_ALLOWED_HOSTS` (deployment config only); empty = legacy behavior. New byte-identical `internal_channel_policy.py` in Many (`backend/app/services/`) and SaaS (`modules/saas/apps/api/app/channels/`); helper edits only in `saas_delegation_service.py`, `channels/router.py`, `channels/outbound.py`; no Instagram code or call site changed (diff vs `8450ae5` proof below). Design: `docs/design/INTERNAL-SERVICE-ALLOWLIST.md`.
+  - **Security notes (binding for docs and reviewers):**
+    - (a) Many resolves DNS twice (the validator, then httpx at send time): a PRE-EXISTING DNS-rebinding gap for public hosts. A transport-pinning design is deferred to Phase 6 and needs owner approval.
+    - (b) Phase 2 accepts the trusted compose-DNS boundary for the two listed service names. This is **NOT full SSRF parity** and must not be described as such.
+    - (c) The allowlist is deployment configuration only, never tenant data.
+  - **Phase 6 candidates:** (1) Many transport pinning (see a); (2) optional `host:port` allowlist entries: a workspace admin can currently choose any port and path on a listed host.
+- **Phase 2 preflight (2026-11-23, Codex), branch `phase-2/one-infrastructure`**: created from main at `8450ae5` after verifying merge commits `047ba53` and `8450ae5` (two parents each), Phase 1b ancestry, Many/SaaS history counts 114/457, and empty `git log --all -- "popeye access token.txt" dashboard/.env.local`. Implementation stopped at the internal-network security-policy conflict below; no application or workflow changes.
 - **Phase 1b (verification) done on branch `phase-1b/verification`**: for every suite present in both trees the merged repo equals the original; see `docs/PHASE-1B-RESULTS.md` (draft PR against `phase-1/foundation`).
 - Phase 1 exit criteria: history yes; suites match originals yes (with the caveats in PHASE-1B-RESULTS); draft PR #1 yes; no secrets yes. Pending: owner review/merge of PR #1 and the Phase 1b PR.
 
@@ -29,12 +36,30 @@
 
 NOT RUN: SaaS Playwright e2e, npm audit, next build, full SaaS pytest re-run with PGHOST (reasons in PHASE-1B-RESULTS).
 
+### Phase 2 allowlist results (2026-11-24, WSL + `unshare -rn` no-egress netns, Docker Postgres via socket bridges; observed values only)
+| Check | Result |
+|---|---|
+| Many full suite, allowlist empty | 1007 passed / 0 failed / 0 skipped (matches baseline) |
+| SaaS full suite, allowlist empty, DB name `saas_p2_full_test`, socket env set (re-run 2026-11-24) | 1277 passed / 0 failed / 0 skipped (includes the 61 new tests; excluding them: 1216 passed / 0 failed). The earlier 1215/1 was my runner's DB name, not app code |
+| New policy tests | Many 61 passed; SaaS 61 passed |
+| SaaS ruff check / ruff format --check / mypy (4 touched files) | clean / clean / no issues |
+| Many lint | the repo has no ruff configuration; none run |
+| `scripts/check_policy_copies.py` | OK, byte-identical |
+| `scripts/check_contract_copies.py` | OK (3 LF-normalised hashes) |
+| Alembic heads (read from the scripts, no DB) | Many `0030_meta_account_erasure`; SaaS `0031_contact_erasure` (no migration added) |
+| Six compose e2e cases (3 channels x delegation ON/OFF), re-run 2026-11-24 | `SUMMARY case1..case6 = PASS`; health: many-api `/health` 200, saas-api `/ready` 200, pg15/pg17/redis healthy; Many worker -> `saas-api` (6 event POSTs), SaaS worker -> `many-api` (3 `/api/saas/messages`), 3 Meta sends to mock-meta. Full output and per-call destinations saved in `docs/PHASE-2-RESULTS.md` |
+| Security review | no confirmed finding at confidence >= 8; limitations (a), (b) above |
+
+NOT DONE / open (owner confirmation needed before starting any): unified compose stack (dev + prod), nginx routing for the unified stack, CI re-home of the SaaS workflow, constraints file from the saved Many freeze, `docs/RUNBOOK-DEV.md`, deploy script outline; one-command wrapper (proposed, not added). In PR #3 so far: allowlist, mock e2e for all three channels (test-only compose), policy/contract copy CI workflow `.github/workflows/phase2-policy-copies.yml`, `docs/PHASE-2-RESULTS.md`. Independent `/code-review` (owner).
+
 ## Next
 - Review/merge PR #1 and the Phase 1b PR (owner).
-- Phase 2: One infrastructure (also: re-home SaaS CI from `modules/saas/.github/`, which is inactive; the SaaS has no CI here until then).
+- Phase 2: owner review of the draft PR and the CI workflow proposal; then the remaining One infrastructure work (also: re-home SaaS CI from `modules/saas/.github/`, which is inactive; the SaaS has no CI here until then).
 
 ## Decisions needed
-- (none open) Owner decided: tests move to Linux (Phase 1b); no relocation of venvs / node_modules on Windows; Application Control policy left alone.
+- (Resolved by owner 2026-11-24: patch approved with single-label entries; accepted trusted compose-DNS boundary; transport pinning deferred to Phase 6.) Allowlist design review: accept the documented owner-controlled compose DNS boundary for Many (its existing validator and HTTP client resolve separately), or authorize a separate transport-pinning design. The proposal retains production HTTPS and gives each side only its one outbound service hostname. Empty preserves legacy behavior; enabled policy rejects case/trailing-dot variants rather than granting aliases. Docker engine remains unavailable on all three design-session `docker info` checks; recheck before any container operation.
+- Phase 2 blocker: `modules/saas/apps/api/app/channels/outbound.py::resolve_target` rejects every non-global resolved address in every environment. Replies to a compose service name therefore fail even in tests. Many's `saas_delegation_service.validate_base_url` also rejects private targets in production. Internal signed calls cannot meet the approved requirements with application code unchanged. Owner decision required on a narrowly scoped internal-service allowlist/security design and the application-code exception; any shared Many changes affecting Instagram need explicit frozen-code approval. Do not bypass these guards in the mock harness or disable production protections.
+- Previous owner decision: tests move to Linux (Phase 1b); no relocation of venvs / node_modules on Windows; Application Control policy left alone.
 
 ## Open choices
 - SaaS Next 16 as dashboard shell [default yes]
@@ -51,6 +76,11 @@ NOT RUN: SaaS Playwright e2e, npm audit, next build, full SaaS pytest re-run wit
 - Root `.gitignore` does not ignore a root-level `.env.local` (only `dashboard/.env.local`).
 
 ## Last session
+- 2026-11-24 (later), Claude Code: owner follow-up. Re-ran the full SaaS suite (1277/0, see table) and the six e2e cases (all PASS, saved in `docs/PHASE-2-RESULTS.md`), added the approved CI workflow `phase2-policy-copies.yml` (policy copies + both contract-copy checks, paths filter includes contract docs), audited the remaining Phase 2 scope (statuses in the PR comment/report; nothing started). Local state left for owner OK: p2e2e stack running, merge-dev DB containers started again, images, WSL scratch.
+- 2026-11-24, Claude Code: implemented the approved allowlist on `phase-2/one-infrastructure` (results table above). Added `docker-compose.phase2-e2e.yml` and `e2e/phase2/` (mock Meta, throwaway CA, per-run random fake secrets, internal-only network), `scripts/check_policy_copies.py`, and 61 tests per side. Security review run in-session. Stopped with Docker Desktop not running; the r19 re-run and any compose step are pending. CI workflow file proposed to the owner, not added. Local leftovers from this session: `p2e2e-*` images, `merge-dev-*` containers if still present, WSL `~/phase2/` scratch and socket bridges.
+- 2026-11-23, Codex (docs-only handoff): owner requested committing and pushing only this progress record, the allowlist design and the unapplied proposed patch on `phase-2/one-infrastructure`, with no PR, tags or force-push. Application implementation remains unapproved; next step is owner review of the design and DNS trust-boundary decision.
+- 2026-11-23, Codex (design follow-up): produced only the allowlist design and unapplied diff above, plus this progress update. Verified all seven proposed Python targets parse, `git apply --check` succeeds, and working-tree diff under application paths is empty. No application implementation, pytest, security review, workflow creation, container operations, push or PR. Await exact design/diff approval; the requested post-implementation security review remains pending.
+- 2026-11-23, Codex: Phase 2 preflight stopped on the internal-address guards above. Current feature branch starts at main `8450ae5`; only this progress record changed. `git fetch origin main` succeeded; both supplied merge commits verified locally. Saved freeze `/home/youssef/phase1b/venvs/many-freeze.txt`: 68 packages, MD5 `4c30f8edc6ffa514c5e3c7e2237be481`, SHA256 `49c4c703ecc08ea606a113815ffc8872b4b9ccf17b74ba7aa51d37dc10a7aa45`; both saved Many venv freezes have the identical MD5, matching PHASE-1B-RESULTS. `python -m pip freeze` was unavailable in the uv-managed venv (no pip); verification succeeded with `uv pip freeze --python ...`. Docker CLI is installed but Docker Desktop engine was unavailable and WSL reported Docker integration unavailable; no containers, volumes, migrations, tests, API calls, push, or PR created. Next: resolve the internal-service policy exception, restore Docker availability, then continue the approved Phase 2 work and show all workflow files for approval before adding them.
 - 2026-11-23, Claude Code: Phase 1b verification (branch `phase-1b/verification`). All results in `docs/PHASE-1B-RESULTS.md`. Stopped before Phase 2.
 - Docker objects created by this session and removed: containers `merge-dev-pg15-1`, `merge-dev-pg17_vector-1`, `merge-dev-redis-1`; volumes `merge-dev_pg15_data`, `merge-dev_pg17_data`; network `merge-dev_default` (`docker compose down -v`). Pulled images (`postgres:15`, `pgvector/pgvector:pg17`, `redis:7-alpine`) were left in place.
 - Scratch (outside the repo): WSL `~/phase1b/` (clones, venvs, results logs) and `~/tools/` (node 24.22.3, uv 0.13.9). Windows scratchpad from Phase 1 (incl. Postgres data dir) untouched.
