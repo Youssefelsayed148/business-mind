@@ -1,0 +1,209 @@
+# Phase 2 mock end-to-end stack (LOCAL, THROWAWAY ONLY).
+# - One internal-only network (no route out): containers cannot reach the internet.
+# - mock-meta answers as graph.facebook.com / graph.instagram.com using a throwaway CA.
+# - Every secret is generated per run by the pki one-shot into a volume; none is in git.
+# - Fake channel rows use http://saas-api:8000 and http://many-api:8000 (dev/test only).
+# Run (Docker Desktop must be running):
+#   docker compose -f docker-compose.phase2-e2e.yml up -d --build
+#   MSYS_NO_PATHCONV=1 docker compose -f docker-compose.phase2-e2e.yml run --rm --no-deps driver
+#   docker compose -f docker-compose.phase2-e2e.yml down -v
+# Do not use `run driver` without --no-deps: it re-runs the one-shot services and regenerates secrets.
+name: p2e2e
+
+x-many: &many
+  image: p2e2e-many:local
+  build:
+    context: ./backend
+  networks: [internal]
+  volumes:
+    - pki:/pki:ro
+    - ./e2e/phase2:/e2e:ro
+  environment: &many-env
+    APP_ENV: development
+    DATABASE_URL: postgresql+psycopg://e2e:e2e_not_a_secret@pg15:5432/many_e2e
+    REDIS_URL: redis://redis:6379/0
+    OPENAI_API_KEY: fake-openai-key-not-real
+    META_WEBHOOK_SECRET: ""
+    FACEBOOK_APP_SECRET: ""
+    SENTRY_DSN: ""
+    CHANNEL_INTERNAL_ALLOWED_HOSTS: saas-api
+    HTTP_PROXY: ""
+    HTTPS_PROXY: ""
+    ALL_PROXY: ""
+    http_proxy: ""
+    https_proxy: ""
+    all_proxy: ""
+    PYTHONDONTWRITEBYTECODE: "1"
+
+x-saas: &saas
+  image: p2e2e-saas:local
+  build:
+    context: ./modules/saas
+    dockerfile: apps/api/Dockerfile
+    target: runtime
+  networks: [internal]
+  volumes:
+    - pki:/pki:ro
+    - ./e2e/phase2:/e2e:ro
+  environment: &saas-env
+    ENVIRONMENT: test
+    DATABASE_URL: postgresql://e2e:e2e_not_a_secret@pg17:5432/saas_e2e_test
+    STORAGE_ROOT: /tmp/storage
+    COOKIE_SECURE: "false"
+    EMBEDDING_TEST_STUB: "true"
+    CHAT_STUB_MODEL: "true"
+    CHANNEL_INTERNAL_ALLOWED_HOSTS: many-api
+    HTTP_PROXY: ""
+    HTTPS_PROXY: ""
+    ALL_PROXY: ""
+    http_proxy: ""
+    https_proxy: ""
+    all_proxy: ""
+    PYTHONDONTWRITEBYTECODE: "1"
+
+networks:
+  internal:
+    internal: true
+
+volumes:
+  pki:
+
+services:
+  pki:
+    <<: *many
+    command: ["python", "/e2e/make_pki.py", "/pki"]
+    volumes:
+      - pki:/pki
+      - ./e2e/phase2:/e2e:ro
+    restart: "no"
+
+  pg15:
+    image: postgres:15
+    networks: [internal]
+    environment:
+      POSTGRES_USER: e2e
+      POSTGRES_PASSWORD: e2e_not_a_secret
+      POSTGRES_DB: many_e2e
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U e2e -d many_e2e"]
+      interval: 3s
+      timeout: 3s
+      retries: 30
+
+  pg17:
+    image: pgvector/pgvector:pg17
+    networks: [internal]
+    environment:
+      POSTGRES_USER: e2e
+      POSTGRES_PASSWORD: e2e_not_a_secret
+      POSTGRES_DB: saas_e2e_test
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U e2e -d saas_e2e_test"]
+      interval: 3s
+      timeout: 3s
+      retries: 30
+
+  redis:
+    image: redis:7-alpine
+    networks: [internal]
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 3s
+      timeout: 3s
+      retries: 30
+
+  mock-meta:
+    <<: *many
+    command: ["python", "/e2e/mock_meta.py"]
+    networks:
+      internal:
+        aliases: [graph.facebook.com, graph.instagram.com]
+    depends_on:
+      pki:
+        condition: service_completed_successfully
+
+  many-migrate:
+    <<: *many
+    command: ["python", "/e2e/with_env.py", "alembic", "upgrade", "head"]
+    restart: "no"
+    depends_on:
+      pki: {condition: service_completed_successfully}
+      pg15: {condition: service_healthy}
+
+  saas-migrate:
+    <<: *saas
+    command: ["python", "/e2e/with_env.py", "alembic", "upgrade", "head"]
+    restart: "no"
+    depends_on:
+      pki: {condition: service_completed_successfully}
+      pg17: {condition: service_healthy}
+
+  saas-seed:
+    <<: *saas
+    command: ["python", "/e2e/with_env.py", "python", "/e2e/seed_saas.py"]
+    restart: "no"
+    depends_on:
+      saas-migrate: {condition: service_completed_successfully}
+
+  saas-api:
+    <<: *saas
+    command: ["python", "/e2e/with_env.py", "uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
+    depends_on:
+      saas-seed: {condition: service_completed_successfully}
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/ready', timeout=5)"]
+      interval: 5s
+      timeout: 6s
+      retries: 20
+      start_period: 15s
+
+  saas-worker:
+    <<: *saas
+    command: ["python", "/e2e/with_env.py", "python", "-m", "app.worker"]
+    depends_on:
+      saas-seed: {condition: service_completed_successfully}
+
+  many-api:
+    <<: *many
+    command: ["python", "/e2e/with_env.py", "uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
+    depends_on:
+      many-migrate: {condition: service_completed_successfully}
+      redis: {condition: service_healthy}
+      saas-api: {condition: service_healthy}
+      mock-meta: {condition: service_started}
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health', timeout=5)"]
+      interval: 5s
+      timeout: 6s
+      retries: 20
+      start_period: 15s
+
+  many-worker:
+    <<: *many
+    command: ["python", "/e2e/with_env.py", "celery", "-A", "app.workers.celery_app", "worker", "--loglevel=info", "--concurrency=2"]
+    depends_on:
+      many-migrate: {condition: service_completed_successfully}
+      redis: {condition: service_healthy}
+      saas-api: {condition: service_healthy}
+      mock-meta: {condition: service_started}
+
+  many-seed:
+    <<: *many
+    command: ["python", "/e2e/with_env.py", "python", "/e2e/seed_many.py"]
+    restart: "no"
+    depends_on:
+      many-migrate: {condition: service_completed_successfully}
+      saas-api: {condition: service_healthy}
+
+  driver:
+    <<: *many
+    profiles: ["drive"]
+    command: ["python", "/e2e/with_env.py", "python", "/e2e/run_cases.py"]
+    restart: "no"
+    environment:
+      <<: *many-env
+      SAAS_DATABASE_URL: postgresql://e2e:e2e_not_a_secret@pg17:5432/saas_e2e_test
+      MANY_API_URL: http://many-api:8000
+    depends_on:
+      many-api: {condition: service_healthy}
+      many-seed: {condition: service_completed_successfully}

@@ -1,6 +1,10 @@
 # Internal channel service allowlist — design only
 
-2026-11-23, Codex. Status: **PROPOSED; NOT IMPLEMENTED; owner approval required**.
+2026-11-23, Codex. Status: **IMPLEMENTED 2026-11-24 on `phase-2/one-infrastructure` (draft PR; owner review pending)**.
+
+Owner amendment: allowlist entries must be **single-label** service names (no dots); dotted entries are rejected in `parse_hosts`. The text below that allows multi-label DNS names is superseded.
+
+This is the trusted compose-DNS boundary and is **NOT full SSRF parity**: Many still resolves DNS twice (pre-existing rebinding gap for public hosts; pinning deferred to Phase 6). The allowlist is deployment config only, never tenant data. Phase 6 candidate: optional `host:port` entries.
 
 The exact proposed application/test diff is `internal-service-allowlist.proposed.patch`.
 It is a review artifact, not an applied change. No workflow files are included.

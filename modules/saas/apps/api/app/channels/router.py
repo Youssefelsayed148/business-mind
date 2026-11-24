@@ -13,6 +13,7 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session as OrmSession
 
 from app.auth import cookies
+from app.channels import internal_channel_policy
 from app.channels.health import check_health, effective_health
 from app.channels.secrets import encrypt_secret
 from app.core.audit import record_audit
@@ -120,6 +121,15 @@ class ClientChannelListOut(BaseModel):
 
 
 def _validate_base_url(value: str, settings: Settings) -> str:
+    if internal_channel_policy.enabled():
+        try:
+            internal_channel_policy.parse_url(
+                value, require_https=settings.environment == "production"
+            )
+        except ValueError as exc:
+            raise ApiError(422, "INVALID_MANY_URL", "Channel URL policy rejected target.") from exc
+        return value.rstrip("/")
+
     parsed = urlsplit(value.strip())
     if parsed.scheme not in {"https", "http"} or not parsed.hostname:
         raise ApiError(422, "INVALID_MANY_URL", "Many base URL must use HTTP or HTTPS.")

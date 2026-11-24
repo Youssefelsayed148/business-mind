@@ -13,6 +13,7 @@ from urllib.parse import urlsplit
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
+from app.services import internal_channel_policy
 from app.utils.crypto import decrypt_text, encrypt_text
 
 SECRET_GRACE = timedelta(hours=24)
@@ -47,6 +48,19 @@ def validate_base_url(raw: str) -> str:
     address). Outside production http and local hosts are allowed so the
     fake SaaS server in the contract tests can run on localhost.
     """
+    if internal_channel_policy.enabled():
+        try:
+            host = internal_channel_policy.parse_url(raw, require_https=_is_production())
+            parts = urlsplit(raw)
+            infos = socket.getaddrinfo(
+                host, parts.port or (443 if parts.scheme == "https" else 80),
+                type=socket.SOCK_STREAM,
+            )
+            internal_channel_policy.check_addresses(raw, [info[4][0] for info in infos])
+        except (ValueError, OSError) as exc:
+            raise DelegationConfigError("Internal channel URL policy rejected target.") from exc
+        return raw.rstrip("/")
+
     value = (raw or "").strip()
     parts = urlsplit(value)
     if parts.scheme not in ("http", "https") or not parts.hostname:
