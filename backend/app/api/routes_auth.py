@@ -3,6 +3,8 @@ from fastapi import Request
 from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
 from sqlalchemy.orm import Session
 
+from app.core.client_scope import client_scope_allows
+from app.core.config import settings
 from app.core.security import create_access_token, decode_access_token, verify_password
 from app.db.session import get_db
 from app.models.user import User
@@ -17,7 +19,7 @@ oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/auth/login")
 
 
 async def get_current_user(
-    token: str = Depends(oauth2_scheme), db: Session = Depends(get_db)
+    request: Request, token: str = Depends(oauth2_scheme), db: Session = Depends(get_db)
 ) -> User:
     credentials_exception = HTTPException(
         status_code=status.HTTP_401_UNAUTHORIZED,
@@ -29,12 +31,34 @@ async def get_current_user(
         user_id: str = payload.get("sub")
         if user_id is None:
             raise credentials_exception
+        token_type = payload.get("type")
     except Exception:
+        raise credentials_exception
+
+    # Token types: "access" (legacy login, also accepted without a type claim
+    # exactly as before) and "sso_access" (SSO exchange, off unless the flag is
+    # on). Any other explicit type is refused.
+    if token_type == "sso_access":
+        if not settings.SSO_ASSERTION_ENABLED:
+            raise credentials_exception
+    elif token_type not in (None, "access"):
         raise credentials_exception
 
     user = db.query(User).filter(User.id == user_id).first()
     if user is None or not user.is_active:
         raise credentials_exception
+
+    if token_type == "sso_access":
+        scope = payload.get("scope")
+        if scope == "client":
+            route = request.scope.get("route")
+            if not client_scope_allows(getattr(route, "path", None), request.scope.get("path")):
+                raise HTTPException(
+                    status_code=status.HTTP_403_FORBIDDEN,
+                    detail="This session cannot access this resource",
+                )
+        elif scope != "staff":
+            raise credentials_exception
     return user
 
 
