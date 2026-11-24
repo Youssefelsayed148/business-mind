@@ -4,6 +4,8 @@ Nothing in this document has been executed or approved. There is no deploy scrip
 
 ## Open decisions before any deployment
 
+**Owner decision 2026-11-24:** the production HTTPS requirement stays (not relaxed). Decisions 1 and 2 below (edge TLS; internal TLS with a private CA) are Phase 6 items and remain OPEN. Until they are done the prod overlay is written but not deployable.
+
 1. **TLS at the edge.** `nginx/unified.conf` is plain HTTP. Choose: TLS terminated by a load balancer in front, or a TLS server block in nginx with certificates.
 2. **Internal TLS.** In production the allowlist policy still requires HTTPS for the listed service names, so the internal URLs stored on the channel rows (`http://saas-api:8000`, `http://many-api:8000`) are rejected. Production needs `https://` internal URLs (internal CA or service certificates) before delegation can be enabled. Without it, delegation stays off.
 3. **Domains and cookies.** Real `MANY_HOST`, `SAAS_WEB_HOST`, `SAAS_API_HOST`. SaaS session cookies are host-only, `HttpOnly`, `SameSite=Lax`, `Secure` when `COOKIE_SECURE=true` (set by the prod overlay); the SaaS web talks to its API same-origin through the Next `/api` rewrite, so the dashboard uses the SaaS web host only.
