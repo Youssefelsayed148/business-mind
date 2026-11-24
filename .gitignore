@@ -32,3 +32,6 @@ backend/app/workers/tasks.py.server
 
 # merge-dev local compose env (real file; only .example is tracked)
 .env.merge-dev
+
+# unified compose local env (real file; only .example is tracked)
+.env.unified

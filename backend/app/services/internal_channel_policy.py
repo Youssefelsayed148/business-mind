@@ -81,9 +81,14 @@ def check_addresses(raw: str, addresses: list[str]) -> None:
     host = parse_url(raw)
     if not addresses:
         raise ValueError("Channel host resolved to no addresses")
+    listed = host in HOSTS
     for value in addresses:
         address = ipaddress.ip_address(value)
-        if address.is_global and not (address.is_multicast or address.is_reserved):
-            continue
-        if host not in HOSTS or not any(address in subnet for subnet in _PRIVATE):
+        if listed:
+            # A listed host must resolve ONLY to private addresses: any public or
+            # other address in the answer rejects the whole answer.
+            allowed = any(address in subnet for subnet in _PRIVATE)
+        else:
+            allowed = address.is_global and not (address.is_multicast or address.is_reserved)
+        if not allowed:
             raise ValueError("Channel host resolved to a forbidden address")

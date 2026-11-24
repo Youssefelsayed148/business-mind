@@ -112,6 +112,51 @@ def test_empty_and_production_tls(monkeypatch: pytest.MonkeyPatch) -> None:
     assert policy.parse_url("https://saas-api", require_https=True) == "saas-api"
 
 
+@pytest.mark.parametrize(
+    "addresses",
+    [
+        ["8.8.8.8", "172.30.0.4"],
+        ["172.30.0.4", "8.8.8.8"],
+        ["fd00::4", "2001:4860:4860::8888"],
+        ["172.30.0.4", "2001:4860:4860::8888"],
+    ],
+)
+def test_listed_host_mixed_public_and_private_rejected(addresses: list[str]) -> None:
+    with pytest.raises(ValueError):
+        policy.check_addresses("http://saas-api:8000", addresses)
+
+
+@pytest.mark.parametrize(
+    "addresses", [["8.8.8.8"], ["2001:4860:4860::8888"], ["8.8.8.8", "1.1.1.1"]]
+)
+def test_listed_host_public_only_rejected(addresses: list[str]) -> None:
+    with pytest.raises(ValueError):
+        policy.check_addresses("http://saas-api:8000", addresses)
+
+
+@pytest.mark.parametrize(
+    "addresses",
+    [["172.30.0.4"], ["10.1.2.3", "192.168.0.9"], ["fd00::4"], ["172.30.0.4", "fd00::4"]],
+)
+def test_listed_host_private_only_allowed(addresses: list[str]) -> None:
+    policy.check_addresses("http://saas-api:8000", addresses)
+
+
+@pytest.mark.parametrize(
+    "addresses",
+    [["100.64.0.1"], ["100.127.255.254"], ["172.30.0.4", "100.64.0.1"], ["100.100.100.100"]],
+)
+def test_listed_host_cgnat_tailscale_rejected(addresses: list[str]) -> None:
+    # 100.64.0.0/10 (CGNAT / Tailscale) is neither RFC1918 nor ULA.
+    with pytest.raises(ValueError):
+        policy.check_addresses("http://saas-api:8000", addresses)
+
+
+def test_unlisted_host_private_rejected_even_with_public(monkeypatch: pytest.MonkeyPatch) -> None:
+    with pytest.raises(ValueError):
+        policy.check_addresses("http://other-svc:8000", ["172.30.0.4", "8.8.8.8"])
+
+
 def test_public_dns_still_allowed() -> None:
     policy.check_addresses("https://public.example", ["8.8.8.8"])
 
