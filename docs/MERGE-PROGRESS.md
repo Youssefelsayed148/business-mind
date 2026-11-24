@@ -40,17 +40,17 @@ NOT RUN: SaaS Playwright e2e, npm audit, next build, full SaaS pytest re-run wit
 | Check | Result |
 |---|---|
 | Many full suite, allowlist empty | 1007 passed / 0 failed / 0 skipped (matches baseline) |
-| SaaS full suite, allowlist empty, new test file excluded | 1215 passed / **1 failed** / 0 skipped: `test_r19_index_migration.py::test_health_lookup_index_roundtrip_and_head_drift`. Cause is the runner, not app code: PGHOST/PGPORT were supplied, but my scratch DB was named `saas_p2_baseline` and the test requires a name ending `_test`. NOT re-run: Docker Desktop was stopped when the result was reviewed |
+| SaaS full suite, allowlist empty, DB name `saas_p2_full_test`, socket env set (re-run 2026-11-24) | 1277 passed / 0 failed / 0 skipped (includes the 61 new tests; excluding them: 1216 passed / 0 failed). The earlier 1215/1 was my runner's DB name, not app code |
 | New policy tests | Many 61 passed; SaaS 61 passed |
 | SaaS ruff check / ruff format --check / mypy (4 touched files) | clean / clean / no issues |
 | Many lint | the repo has no ruff configuration; none run |
 | `scripts/check_policy_copies.py` | OK, byte-identical |
 | `scripts/check_contract_copies.py` | OK (3 LF-normalised hashes) |
 | Alembic heads (read from the scripts, no DB) | Many `0030_meta_account_erasure`; SaaS `0031_contact_erasure` (no migration added) |
-| Six compose e2e cases (3 channels x delegation ON/OFF) | `SUMMARY case1..case6 = PASS`; Many signed calls went to `http://saas-api:8000`, SaaS replies to `http://many-api:8000`; Meta calls hit the mock only |
+| Six compose e2e cases (3 channels x delegation ON/OFF), re-run 2026-11-24 | `SUMMARY case1..case6 = PASS`; health: many-api `/health` 200, saas-api `/ready` 200, pg15/pg17/redis healthy; Many worker -> `saas-api` (6 event POSTs), SaaS worker -> `many-api` (3 `/api/saas/messages`), 3 Meta sends to mock-meta. Full output and per-call destinations saved in `docs/PHASE-2-RESULTS.md` |
 | Security review | no confirmed finding at confidence >= 8; limitations (a), (b) above |
 
-NOT DONE / open: re-run of the `_test`-named r19 test; one-command bring-up script (none exists in the repo; the e2e stack is `docker compose -f docker-compose.phase2-e2e.yml up -d --build`, then `run --rm --no-deps driver`, then `down -v`); CI workflow for the copy checks (needs owner approval, none added); independent `/code-review` (owner).
+NOT DONE / open (owner confirmation needed before starting any): unified compose stack (dev + prod), nginx routing for the unified stack, CI re-home of the SaaS workflow, constraints file from the saved Many freeze, `docs/RUNBOOK-DEV.md`, deploy script outline; one-command wrapper (proposed, not added). In PR #3 so far: allowlist, mock e2e for all three channels (test-only compose), policy/contract copy CI workflow `.github/workflows/phase2-policy-copies.yml`, `docs/PHASE-2-RESULTS.md`. Independent `/code-review` (owner).
 
 ## Next
 - Review/merge PR #1 and the Phase 1b PR (owner).
@@ -76,6 +76,7 @@ NOT DONE / open: re-run of the `_test`-named r19 test; one-command bring-up scri
 - Root `.gitignore` does not ignore a root-level `.env.local` (only `dashboard/.env.local`).
 
 ## Last session
+- 2026-11-24 (later), Claude Code: owner follow-up. Re-ran the full SaaS suite (1277/0, see table) and the six e2e cases (all PASS, saved in `docs/PHASE-2-RESULTS.md`), added the approved CI workflow `phase2-policy-copies.yml` (policy copies + both contract-copy checks, paths filter includes contract docs), audited the remaining Phase 2 scope (statuses in the PR comment/report; nothing started). Local state left for owner OK: p2e2e stack running, merge-dev DB containers started again, images, WSL scratch.
 - 2026-11-24, Claude Code: implemented the approved allowlist on `phase-2/one-infrastructure` (results table above). Added `docker-compose.phase2-e2e.yml` and `e2e/phase2/` (mock Meta, throwaway CA, per-run random fake secrets, internal-only network), `scripts/check_policy_copies.py`, and 61 tests per side. Security review run in-session. Stopped with Docker Desktop not running; the r19 re-run and any compose step are pending. CI workflow file proposed to the owner, not added. Local leftovers from this session: `p2e2e-*` images, `merge-dev-*` containers if still present, WSL `~/phase2/` scratch and socket bridges.
 - 2026-11-23, Codex (docs-only handoff): owner requested committing and pushing only this progress record, the allowlist design and the unapplied proposed patch on `phase-2/one-infrastructure`, with no PR, tags or force-push. Application implementation remains unapproved; next step is owner review of the design and DNS trust-boundary decision.
 - 2026-11-23, Codex (design follow-up): produced only the allowlist design and unapplied diff above, plus this progress update. Verified all seven proposed Python targets parse, `git apply --check` succeeds, and working-tree diff under application paths is empty. No application implementation, pytest, security review, workflow creation, container operations, push or PR. Await exact design/diff approval; the requested post-implementation security review remains pending.

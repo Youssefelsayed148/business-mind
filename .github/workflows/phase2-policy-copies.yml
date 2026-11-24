@@ -1,0 +1,36 @@
+name: Phase 2 policy and contract copies
+
+on:
+  pull_request:
+    paths:
+      - "backend/app/services/internal_channel_policy.py"
+      - "modules/saas/apps/api/app/channels/internal_channel_policy.py"
+      - "scripts/check_policy_copies.py"
+      - "scripts/check_contract_copies.py"
+      - "modules/saas/scripts/check_contract_copies.py"
+      - "docs/saas-delegation/**"
+      - "backend/tests/fixtures/contract/**"
+      - "modules/saas/docs/17*"
+      - "modules/saas/implementation/PHASE-06-V2/**"
+      - ".github/workflows/phase2-policy-copies.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  copies:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      # Standard library only; no secrets, services or network.
+      - name: Internal channel policy copies are byte-identical
+        run: python scripts/check_policy_copies.py
+      - name: Contract copies (Many root)
+        run: python scripts/check_contract_copies.py
+      - name: Contract copies (SaaS root)
+        run: python modules/saas/scripts/check_contract_copies.py
