@@ -139,3 +139,60 @@ def test_shadow_password_hash_never_verifies_and_never_raises(db_session):
     assert user.password_hash.startswith("$argon2")
     for guess in ["", "password", "!", user.email, str(user.sso_subject)]:
         assert verify_password(guess, user.password_hash) is False
+
+
+def _lose_the_race(monkeypatch):
+    """First lookup misses (the other request has not committed yet), later ones see the row."""
+    import app.services.sso_session as mod
+
+    real = mod._find_by_subject
+    calls = {"n": 0}
+
+    def racing(db, sub):
+        calls["n"] += 1
+        return None if calls["n"] == 1 else real(db, sub)
+
+    monkeypatch.setattr(mod, "_find_by_subject", racing)
+
+
+def test_concurrent_first_exchange_for_the_same_sub_reuses_the_winner(db_session, monkeypatch):
+    ws = workspace(db_session)
+    a = client_assertion(ws)
+    winner = User(
+        email="winner@example.test", password_hash="x", role="viewer", is_active=True,
+        sso_subject=a.sub, auth_source="sso",
+    )
+    db_session.add(winner)
+    db_session.flush()
+    _lose_the_race(monkeypatch)
+    user = sync_shadow_user(db_session, a)
+    assert user.id == winner.id
+    assert len(memberships(db_session, user)) == 1
+    assert db_session.query(User).filter_by(sso_subject=a.sub).count() == 1
+
+
+def test_race_loser_never_revives_an_inactive_winner(db_session, monkeypatch):
+    ws = workspace(db_session)
+    a = client_assertion(ws)
+    db_session.add(User(
+        email="winner@example.test", password_hash="x", role="viewer", is_active=False,
+        sso_subject=a.sub, auth_source="sso",
+    ))
+    db_session.flush()
+    _lose_the_race(monkeypatch)
+    with pytest.raises(SSOAssertionError) as e:
+        sync_shadow_user(db_session, a)
+    assert e.value.reason == "user_inactive"
+
+
+def test_unresolvable_insert_conflict_is_a_refusal_not_a_500(db_session, monkeypatch):
+    import app.services.sso_session as mod
+
+    db_session.add(User(email="taken@example.test", password_hash="x", role="viewer", is_active=True))
+    db_session.flush()
+    monkeypatch.setattr(mod, "_shadow_email", lambda db, a: "taken@example.test")
+    with pytest.raises(SSOAssertionError) as e:
+        sync_shadow_user(db_session, client_assertion(workspace(db_session)))
+    assert e.value.reason == "user_conflict"
+    # The request transaction is still usable afterwards.
+    assert db_session.query(User).filter_by(email="taken@example.test").count() == 1

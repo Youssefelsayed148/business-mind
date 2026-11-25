@@ -24,9 +24,10 @@ from app.core.config import settings
 ALGORITHM = "EdDSA"
 MAX_LIFETIME_SECONDS = 60
 CLOCK_SKEW_SECONDS = 30
-# Covers lifetime + skew on both sides of the window, so a jti can never be
-# forgotten while its assertion could still verify.
-JTI_TTL_SECONDS = 120
+# The widest verifiable window is skew + lifetime + skew (30 + 60 + 30 = 120 s).
+# The TTL adds a 30 s margin so a jti is never forgotten while its assertion
+# could still verify, whatever the Redis expiry rounding or clock drift.
+JTI_TTL_SECONDS = 150
 SCOPES = {"staff", "client"}
 ORG_ROLES = {"owner", "admin", "manager", "agent", "viewer"}
 ADMIN_ROLES = {"owner", "admin"}
