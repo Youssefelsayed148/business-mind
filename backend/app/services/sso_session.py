@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import secrets
 
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.core.security import hash_password
@@ -39,8 +40,12 @@ def _shadow_email(db: Session, a: Assertion) -> str:
     return f"{a.sub}@sso.invalid"
 
 
+def _find_by_subject(db: Session, sub) -> User | None:
+    return db.query(User).filter(User.sso_subject == sub).first()
+
+
 def sync_shadow_user(db: Session, a: Assertion) -> User:
-    user = db.query(User).filter(User.sso_subject == a.sub).first()
+    user = _find_by_subject(db, a.sub)
     if user is None:
         user = User(
             email=_shadow_email(db, a),
@@ -54,8 +59,17 @@ def sync_shadow_user(db: Session, a: Assertion) -> User:
             sso_subject=a.sub,
             auth_source=SSO_SOURCE,
         )
-        db.add(user)
-        db.flush()
+        # Savepoint: two first exchanges for the same sub (or the same email) can
+        # race. The loser must not 500 or poison the request's transaction.
+        try:
+            with db.begin_nested():
+                db.add(user)
+        except IntegrityError:
+            user = _find_by_subject(db, a.sub)
+            if user is None:
+                raise SSOAssertionError("user_conflict")
+            if not user.is_active:
+                raise SSOAssertionError("user_inactive")
     elif not user.is_active:
         raise SSOAssertionError("user_inactive")
     elif user.auth_source == SSO_SOURCE:

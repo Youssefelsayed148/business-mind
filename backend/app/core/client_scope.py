@@ -14,10 +14,10 @@ and both must agree; a mismatch denies.
 CLIENT_SCOPED_ROUTE_PREFIXES = (
     "/whatsapp",
     "/facebook",
-    "/workspaces",
     "/privacy/contact-erasure",
 )
-CLIENT_SCOPED_EXACT_ROUTES = ("/auth/me",)
+# Exact, not a prefix: a route added later under /workspaces stays denied until reviewed.
+CLIENT_SCOPED_EXACT_ROUTES = ("/auth/me", "/workspaces/me")
 
 
 def _matches(path: str | None) -> bool:

@@ -85,8 +85,8 @@ def test_allowlist_contains_only_workspace_scoped_routes():
 
 
 def test_allowlist_is_the_reviewed_constant():
-    assert CLIENT_SCOPED_ROUTE_PREFIXES == ("/whatsapp", "/facebook", "/workspaces", "/privacy/contact-erasure")
-    assert CLIENT_SCOPED_EXACT_ROUTES == ("/auth/me",)
+    assert CLIENT_SCOPED_ROUTE_PREFIXES == ("/whatsapp", "/facebook", "/privacy/contact-erasure")
+    assert CLIENT_SCOPED_EXACT_ROUTES == ("/auth/me", "/workspaces/me")
 
 
 def test_instagram_and_other_global_routes_are_never_allowed():
@@ -110,6 +110,9 @@ def test_instagram_and_other_global_routes_are_never_allowed():
         ("/whatsappx/accounts", "/whatsappx/accounts", False),
         ("/WhatsApp/accounts", "/WhatsApp/accounts", False),
         ("/auth/me/extra", "/auth/me/extra", False),
+        ("/workspaces", "/workspaces", False),
+        ("/workspaces/{workspace_id}", "/workspaces/abc", False),
+        ("/workspaces/me/extra", "/workspaces/me/extra", False),
         ("/auth/login", "/auth/login", False),
         ("", "", False),
     ],

@@ -14,7 +14,13 @@ from cryptography.hazmat.primitives.serialization import Encoding, PublicFormat
 from redis.exceptions import ConnectionError as RedisConnectionError
 
 from app.core.config import settings
-from app.services.sso_assertion import SSOAssertionError, verify_assertion
+from app.services.sso_assertion import (
+    CLOCK_SKEW_SECONDS,
+    JTI_TTL_SECONDS,
+    MAX_LIFETIME_SECONDS,
+    SSOAssertionError,
+    verify_assertion,
+)
 
 KID = "k1"
 PRIVATE = Ed25519PrivateKey.generate()
@@ -199,3 +205,7 @@ def test_mfa_requirement_only_when_flag_on(monkeypatch):
 def test_malformed_key_config(monkeypatch):
     monkeypatch.setattr(settings, "SSO_PUBLIC_KEYS", "not json")
     assert reason(mint()) == "keys_misconfigured"
+
+
+def test_jti_ttl_outlives_the_widest_verifiable_window():
+    assert JTI_TTL_SECONDS >= MAX_LIFETIME_SECONDS + 2 * CLOCK_SKEW_SECONDS + 30
