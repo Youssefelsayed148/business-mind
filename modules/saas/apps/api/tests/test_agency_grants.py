@@ -352,3 +352,63 @@ def test_database_refuses_owner_cap_and_cross_tenant_grant_location(
     with pytest.raises(IntegrityError):
         db.execute(text("UPDATE agency_grants SET role_cap='owner' WHERE id=:g"), {"g": grant.id})
     db.rollback()
+
+
+def test_duplicate_grant_conflict_keeps_the_rest_of_the_request(
+    v2_app: FastAPI, db: Session
+) -> None:
+    s = _setup(v2_app, db)
+    svc.create_grant(_ctx(db, s.tenant_id, s.owner), agency_id=s.agency.id, role_cap="viewer")
+    db.commit()
+    pending = Location(id=uuid4(), tenant_id=s.tenant_id, name="Written earlier in the request")
+    db.add(pending)
+    with pytest.raises(ApiError) as dup:
+        svc.create_grant(_ctx(db, s.tenant_id, s.owner), agency_id=s.agency.id, role_cap="agent")
+    assert dup.value.status_code == 409
+    db.commit()
+    assert db.get(Location, pending.id) is not None
+
+
+def test_two_grants_with_the_same_cap_resolve_to_the_narrowest_deterministically(
+    v2_app: FastAPI, db: Session
+) -> None:
+    s = _setup(v2_app, db)
+    place = Location(id=uuid4(), tenant_id=s.tenant_id, name="Only here")
+    db.add(place)
+    db.commit()
+    second = svc.create_agency(db, actor=_user(db, s.staff), name="Second studio")
+    svc.add_agency_member(
+        db,
+        actor=_user(db, s.staff),
+        agency_id=second.id,
+        user_id=s.agent.user_id,
+        role="agency_admin",
+    )
+    db.commit()
+    unrestricted = s.grant("manager")
+    restricted = svc.create_grant(
+        _ctx(db, s.tenant_id, s.owner),
+        agency_id=second.id,
+        role_cap="manager",
+        location_ids=[place.id],
+    )
+    svc.assign_grantee(
+        db, actor=_user(db, s.agent), grant_id=restricted.id, user_id=s.agent.user_id
+    )
+    db.commit()
+    for _ in range(3):
+        found = svc.active_grant_for(db, user_id=s.agent.user_id, tenant_id=s.tenant_id)
+        assert found is not None
+        assert found.grant_id == restricted.id != unrestricted.id
+        assert found.location_ids == frozenset({place.id})
+    # A lower cap still beats a narrower location scope.
+    svc.revoke_grant(_ctx(db, s.tenant_id, s.owner), grant_id=unrestricted.id)
+    lower = svc.create_grant(
+        _ctx(db, s.tenant_id, s.owner), agency_id=s.agency.id, role_cap="viewer"
+    )
+    svc.assign_grantee(
+        db, actor=_user(db, s.agency_admin), grant_id=lower.id, user_id=s.agent.user_id
+    )
+    db.commit()
+    winner = svc.active_grant_for(db, user_id=s.agent.user_id, tenant_id=s.tenant_id)
+    assert winner is not None and winner.grant_id == lower.id and winner.role_cap == "viewer"

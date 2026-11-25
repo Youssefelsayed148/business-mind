@@ -34,7 +34,7 @@ if TYPE_CHECKING:
     from app.core.tenancy import TenantContext
 
 # Narrowest first: if one person reaches a client through two agencies, the
-# lowest cap wins (never the broadest).
+# lowest cap wins (never the broadest); ties are broken in active_grant_for.
 _CAP_RANK = {"viewer": 0, "agent": 1, "manager": 2, "admin": 3}
 
 
@@ -91,18 +91,28 @@ def active_grant_for(
     ]
     if not candidates:
         return None
-    grant, agency = min(candidates, key=lambda pair: _CAP_RANK[pair[0].role_cap])
-    location_ids = frozenset(
-        db.execute(
-            select(AgencyGrantLocation.location_id).where(AgencyGrantLocation.grant_id == grant.id)
-        ).scalars()
-    )
+    located: dict[UUID, set[UUID]] = {grant.id: set() for grant, _ in candidates}
+    for grant_id, location_id in db.execute(
+        select(AgencyGrantLocation.grant_id, AgencyGrantLocation.location_id).where(
+            AgencyGrantLocation.grant_id.in_(list(located))
+        )
+    ).tuples():
+        located[grant_id].add(location_id)
+
+    def narrowness(pair: tuple[AgencyGrant, Agency]) -> tuple[int, int, int, str]:
+        # Lowest cap first; then a location-restricted grant beats an unrestricted
+        # one, then fewer locations; the id makes the choice deterministic.
+        grant = pair[0]
+        count = len(located[grant.id])
+        return (_CAP_RANK[grant.role_cap], 0 if count else 1, count, str(grant.id))
+
+    grant, agency = min(candidates, key=narrowness)
     return ActiveGrant(
         grant_id=grant.id,
         agency_id=agency.id,
         agency_name=agency.name,
         role_cap=grant.role_cap,
-        location_ids=location_ids or None,
+        location_ids=frozenset(located[grant.id]) or None,
     )
 
 
@@ -180,11 +190,11 @@ def create_grant(
         expires_at=expires_at,
         granted_by_user_id=ctx.user.id,
     )
-    ctx.db.add(grant)
     try:
-        ctx.db.flush()
+        # Savepoint: a duplicate must not roll back the rest of the request.
+        with ctx.db.begin_nested():
+            ctx.db.add(grant)
     except IntegrityError:
-        ctx.db.rollback()
         raise ApiError(409, "CONFLICT", "This agency already has an active grant.") from None
     for location_id in scoped:
         ctx.db.add(
