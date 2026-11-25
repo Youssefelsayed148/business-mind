@@ -147,7 +147,7 @@ What changed (all behind `IDENTITY_V2_ENABLED`, default OFF):
 
 Gate results (each run once; details in the PR):
 - SaaS full suite on commits 1-2: 1452 passed, 7 failed (4 inbox-sweep fake taking 3 args, 2 audit-metadata shape, 1 DB name needing the `_test` suffix from my run tag). All 7 fixed in commit 4 and re-run: 62 passed in the affected files plus the new location files. The full suite was NOT re-run end to end after commits 3 and 4.
-- Channel tests after commit 3: 59 passed. New tests: 31 (filters 14, assignment 7 and others in the same files, plus a migration check).
+- Channel tests after commit 3: 59 passed. New tests: 21 (14 in `test_location_filters.py`, 7 in `test_location_assignment.py`); two old tests that expected the refusal were replaced and the migration test now expects head 0035.
 - ruff, ruff format, strict mypy over `app tests alembic`: clean. Frozen-Instagram, policy-copy and contract-copy checks: OK. Secret scan of added lines: clean.
 
 Not done / open:
