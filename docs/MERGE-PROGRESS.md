@@ -136,6 +136,26 @@ Notes:
 
 Not built or not applied (details in the final report): any web UI (team, invite acceptance, reset, MFA pages); an API to create agencies or add agency people (staff only via the service layer); memberships and the org-to-workspace mapping in `identity_migrate.py`; an enrollment-only session state for MFA (enforcement happens when an assertion is minted); an in-app rate limit on the Many exchange (the edge zone only).
 
+## Phase 3 PR D: location filters (branch `phase-3/identity-impl-d`, stacked on `phase-3/identity-impl-c`, 2026-11-25, WSL + Docker, observed values only)
+
+What changed (all behind `IDENTITY_V2_ENABLED`, default OFF):
+- Location filters on inbox (list, counts, detail, actions, SSE stream), bot conversations, follow-ups, contacts (list, detail, update, export, merge, erase, stage rename), knowledge sources and documents, channels list, and analytics (bot-level and organization-level raw SQL). Conversations take their connection's location; website conversations and NULL-location rows are organization-wide, so limited callers never see them. Contacts take a location at creation (API body, or the connection's location for channel contacts).
+- Limited callers get 403 on jobs, revisions, contact stage rename, and merge/erase of a contact that has conversations outside their locations. Team changes need unrestricted access.
+- Team API: invitations, role change and agency grants take `location_scope` / `location_ids`; migration `0035_invitation_locations`; accepted invitations (new or existing account) copy the scope; Owners are never limited; a limited Admin does not count as the last Admin; role change keeps the scope when omitted and revokes the member's sessions.
+- `LOCATION_SCOPE_UNSUPPORTED` removed from the tenant context. The SSO exchange for Many still refuses limited people (design 4.2).
+- Staff can set a channel connection's location (honored only with the flag on).
+
+Gate results (each run once; details in the PR):
+- SaaS full suite on commits 1-2: 1452 passed, 7 failed (4 inbox-sweep fake taking 3 args, 2 audit-metadata shape, 1 DB name needing the `_test` suffix from my run tag). All 7 fixed in commit 4 and re-run: 62 passed in the affected files plus the new location files. The full suite was NOT re-run end to end after commits 3 and 4.
+- Channel tests after commit 3: 59 passed. New tests: 31 (filters 14, assignment 7 and others in the same files, plus a migration check).
+- ruff, ruff format, strict mypy over `app tests alembic`: clean. Frozen-Instagram, policy-copy and contract-copy checks: OK. Secret scan of added lines: clean.
+
+Not done / open:
+- No API to change a source's or an existing contact's location after creation (staff upload leaves sources organization-wide, so limited people see no sources until one exists).
+- Duplicate-contact checks (409) still look across the whole organization.
+- Many-side `channel_location_map` and limited access to Many routes stay deferred.
+- The SSE stream fixes the caller's scope when it connects.
+
 ## Next
 - Phase 3 (owner decisions on PR B, 2026-11-25, recommendations accepted): (1) agency users get a narrow read-only `GET /api/v1/tenants/{id}/summary` (organization name, caller's effective role and cap, `via_agency`) under a new permission `org.summary` held by every role incl. agency; still no `org.read` or other `org.*` for agency; added to PR C. (2) Location filters are a separate PR D (inbox, contacts, knowledge, analytics, channels query sites; then remove the `LOCATION_SCOPE_UNSUPPORTED` refusal); until PR D merges, PR C must not expose any way to assign `limited` scope (team UI/API keep it disabled) and the flag stays off. (3) Deviations accepted: grant locations as a join table, stored `editor` is the Agent alias, a direct membership wins over an agency grant.
 - Phase 3 order: PR C is implemented on `phase-3/identity-impl-c` (draft PR, stacked on B); the owner reviews A (#6), B (#7) and C and merges them together (A, then B, then C); then PR D (location filters, plan first). Do not start PR D before the owner says C was reviewed.
@@ -163,6 +183,7 @@ Not built or not applied (details in the final report): any web UI (team, invite
 - Root `.gitignore` does not ignore a root-level `.env.local` (only `dashboard/.env.local`).
 
 ## Last session
+- 2026-11-25 (Phase 3 PR D), Claude Code on WSL + Docker: implemented location filters and scope assignment on `phase-3/identity-impl-d`, gated as above, pushed, opened the draft PR. Stopped for review; nothing merged. Full suite not re-run after the last two commits.
 - 2026-11-25 (Phase 3 PR C), Claude Code on WSL + Docker: reviewed PRs #6 and #7, fixed the five nits, implemented PR C commits (a) to (h) on `phase-3/identity-impl-c`, ran the end-of-PR gate (table above), pushed, opened the draft PR. Stopped for the owner's review; PR D not started. Nothing merged. Local leftovers: containers `phase3-pg15` and `phase3-pg17`, WSL `~/phase3/` (snapshot, results), the rebuilt `unified-*` images, session scratchpad scripts (outside the repo). The unified e2e stack was torn down by `dev-up.sh test`.
 - 2026-11-25 (Phase 3 PR B), Claude Code on WSL + Docker: branch `phase-3/identity-impl-b` from the PR A head (PR #6 still open, `main` unchanged at the #5 merge). SaaS migrations 0032 to 0034, models, `app/identity/{roles,locations,agency,access}.py`, flagged `TenantContext` permission checks, route-permission map, 32 new tests (results table above). Stopped before PR C, awaiting owner review. Local leftovers: containers `phase3-pg15` and `phase3-pg17`, WSL `~/phase3/` (snapshots, results). A stale socket bridge had to be cleared after the WSL restart.
 - 2026-11-24 (Phase 3 PR A), Claude Code on WSL + Docker: PR #5 merged by the owner's approval; implemented commits 1 to 7 of the identity plan on `phase-3/identity-impl-a` (results table above). Stopped before PR B, awaiting owner review. Local leftovers: Docker containers `phase3-pg15` and `phase3-pg17` (ports 55415 and 55417), WSL `~/phase3/` (clone `repo`, snapshots, results logs, harness scripts), the rebuilt `unified-*` images.
