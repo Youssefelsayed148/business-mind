@@ -158,6 +158,8 @@ class Source(Base):
     row_errors: Mapped[list[dict[str, int | str]] | None] = mapped_column(JSONB)
     valid_rows: Mapped[int | None] = mapped_column()
     total_rows: Mapped[int | None] = mapped_column()
+    # Optional location/brand (0032); NULL = organization-wide.
+    location_id: Mapped[UUID | None] = mapped_column()
     created_by: Mapped[UUID] = mapped_column(
         ForeignKey("users.id", ondelete="RESTRICT"), nullable=False
     )

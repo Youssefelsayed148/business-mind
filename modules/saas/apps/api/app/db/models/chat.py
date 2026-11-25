@@ -61,6 +61,8 @@ class Contact(Base):
     custom_fields: Mapped[dict[str, object]] = mapped_column(JSONB, nullable=False, default=dict)
     # Consent per channel: {"whatsapp": true, ...} (doc/14 §16).
     consent: Mapped[dict[str, object]] = mapped_column(JSONB, nullable=False, default=dict)
+    # Optional location/brand (0032); NULL = organization-wide.
+    location_id: Mapped[UUID | None] = mapped_column()
     source_channel: Mapped[str | None] = mapped_column(Text)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, default=utcnow
