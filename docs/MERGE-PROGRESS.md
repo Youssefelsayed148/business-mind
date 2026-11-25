@@ -80,8 +80,24 @@ Local state kept for the owner (no cleanup until Phase 2b is done): `unified-e2e
 
 Deviations from the design: `channel_location_map` not created (nothing reads it yet); migration steps are guarded because `0001_initial` bootstraps from current models; a shadow user whose email collides with an existing Many user gets a placeholder email and is never linked. Known gaps: GET on `/auth/sso/exchange` answers 405 with the flag off (POST gives the unknown-route 404); no in-app rate limit on the exchange (edge zone is PR C); a user's SSO membership is exactly one workspace at a time, so two orgs in two tabs would flip it.
 
+## Phase 3 PR B: identity, SaaS side (branch `phase-3/identity-impl-b`, stacked on `phase-3/identity-impl-a`, 2026-11-25, WSL + Docker, observed values only)
+
+| Check | Result |
+|---|---|
+| Migrations 0032 / 0033 / 0034 | chain on `0031_contact_erasure`; single head; up, down, up with legacy rows intact; backfill maps viewer, editor to agent, admin and promotes nobody; downgrade clears only the mapped values (`tests/test_identity_migrations.py`, 5 tests) |
+| `alembic check` drift | first full run failed `test_r19_index_migration` because the models lacked the `location_id` FK and index; fixed in the models; that file and 9 related migration/drift tests pass (10 passed) |
+| SaaS full suite (flags off, throwaway DB, no egress) | 1325 tests, 0 errors, 1 failure (the drift above, since fixed). 1293 baseline + 32 new. The full suite was not re-run after the model fix; 91 tests touching contacts, channels, knowledge, inbox and the new files re-ran green |
+| Role matrix | golden design table vs `roles.py`; every live tenant route (92 + `POST /tenants`) has one permission; 7 roles/actors x every route over HTTP with the flag on; legacy viewer/editor/admin responses per route with the flag off; no legacy ability lost, only knowledge routes widen (D5) |
+| Flag-off identical | `org_role`, location scope and agency grants are ignored with `IDENTITY_V2_ENABLED` off (tested); streaming routes (inbox events, playground stream) are not called live for allowed roles in the matrix |
+| Agency grants / locations | 13 + 6 tests: no access without grant and assignment, cap below Owner, no team/agency/billing/org, expiry per request, immediate revocation, audit with both ids, cross-tenant FKs refused by the database |
+| Lint / types | `ruff check`, `ruff format --check`, strict `mypy` (305 files): clean |
+| `check_instagram_frozen.py`, `check_policy_copies.py` | OK, OK; no Many or Instagram file touched |
+| Secret scan | regex scan of added lines: only identifier names (token_hash, password_hash), no values |
+
+Deviations from the design: `agency_grants.location_ids` is a join table (`agency_grant_locations`) for referential integrity; the stored `editor` role is the Agent role (alias, no data rewrite); a direct membership wins over an agency grant (can only narrow). Known gaps: location-limited callers are refused on every tenant route with the flag on until query sites use `locations.location_filter`; agency users hold no `org.read`, so they cannot open the tenant detail route; the permission map is enforced only through `get_tenant_context` (platform routes unchanged); no grant management routes yet (service functions only; routes belong with PR C team/agency UI).
+
 ## Next
-- Phase 3: owner review of the PR A draft PR and an independent review; then PR B (SaaS migrations 0032 to 0034, roles, locations, agencies), then PR C (issuing, team, reset, MFA, mailer, `identity_migrate.py` with a per-row hash-algorithm report, nginx and `check_nginx.py`, docs).
+- Phase 3: owner review of PR A (#6) and PR B drafts; then PR C (issuing, team, reset, MFA, mailer, `identity_migrate.py` with a per-row hash-algorithm report, nginx and `check_nginx.py`, docs).
 - Review/merge PR #1 and the Phase 1b PR (owner).
 - Phase 2: owner review of the draft PR and the CI workflow proposal; then the remaining One infrastructure work (also: re-home SaaS CI from `modules/saas/.github/`, which is inactive; the SaaS has no CI here until then).
 
@@ -106,6 +122,7 @@ Deviations from the design: `channel_location_map` not created (nothing reads it
 - Root `.gitignore` does not ignore a root-level `.env.local` (only `dashboard/.env.local`).
 
 ## Last session
+- 2026-11-25 (Phase 3 PR B), Claude Code on WSL + Docker: branch `phase-3/identity-impl-b` from the PR A head (PR #6 still open, `main` unchanged at the #5 merge). SaaS migrations 0032 to 0034, models, `app/identity/{roles,locations,agency,access}.py`, flagged `TenantContext` permission checks, route-permission map, 32 new tests (results table above). Stopped before PR C, awaiting owner review. Local leftovers: containers `phase3-pg15` and `phase3-pg17`, WSL `~/phase3/` (snapshots, results). A stale socket bridge had to be cleared after the WSL restart.
 - 2026-11-24 (Phase 3 PR A), Claude Code on WSL + Docker: PR #5 merged by the owner's approval; implemented commits 1 to 7 of the identity plan on `phase-3/identity-impl-a` (results table above). Stopped before PR B, awaiting owner review. Local leftovers: Docker containers `phase3-pg15` and `phase3-pg17` (ports 55415 and 55417), WSL `~/phase3/` (clone `repo`, snapshots, results logs, harness scripts), the rebuilt `unified-*` images.
 - 2026-11-24 (Phase 3 design), Claude Code, cloud container without Docker or installed Python dependencies: created branch `phase-3/identity-design` from `origin/main` (`cc3b9ab`); wrote `docs/IDENTITY-DISCOVERY.md` and `docs/IDENTITY-DESIGN.md`; updated this file. Observed: Alembic heads read from the files (Many `0030_meta_account_erasure`, SaaS `0031_contact_erasure`, one head each); `scripts/check_policy_copies.py` OK; `scripts/check_contract_copies.py` (Many root) OK; the SaaS-root contract check was not run (my `--root modules/saas` guess failed because the manifest is under the repo-root `docs/`). Test baselines NOT verified here (no dependencies); numbers above are from the Phase 2b gate. Only docs files changed. Nothing merged.
 - 2026-11-24 (PR #4 review follow-up), Claude Code: tested mixed-case paths through nginx: `/API/channels/...` and `/Api/channels/...` on the SaaS web host reached the signed events handler (401 from its signature check); the other hosts did not. Added case-insensitive `~*` deny locations (both SaaS hosts, Many `/api/saas`), 7 new edge checks (48 total, 48 pass), six e2e cases pass, `default.conf` untouched; Redis auth added to the DEPLOY-OUTLINE hardening list. Details in `docs/PHASE-2-RESULTS.md` 4.6. Local state: unified-e2e stack left running (KEEP=1); cleanup still on hold.
