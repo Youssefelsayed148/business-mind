@@ -55,6 +55,12 @@ class ChannelConnection(Base):
     )
 
     __table_args__ = (
+        ForeignKeyConstraint(
+            ["tenant_id", "location_id"],
+            ["locations.tenant_id", "locations.id"],
+            name="fk_channel_connections_location",
+        ),
+        Index("ix_channel_connections_location", "tenant_id", "location_id"),
         CheckConstraint(
             "channel IN ('whatsapp', 'messenger', 'instagram')",
             name="ck_channel_connections_channel",

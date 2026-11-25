@@ -72,6 +72,12 @@ class Contact(Base):
     )
 
     __table_args__ = (
+        ForeignKeyConstraint(
+            ["tenant_id", "location_id"],
+            ["locations.tenant_id", "locations.id"],
+            name="fk_contacts_location",
+        ),
+        Index("ix_contacts_location", "tenant_id", "location_id"),
         CheckConstraint(
             "email IS NOT NULL OR phone IS NOT NULL OR source_channel IS NOT NULL",
             name="ck_contacts_reachable",

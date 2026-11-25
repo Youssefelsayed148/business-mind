@@ -145,9 +145,7 @@ class Membership(Base):
     )
     # New role vocabulary (0032/0034). NULL = derive from the legacy role.
     org_role: Mapped[str | None] = mapped_column(Text)
-    location_scope: Mapped[str] = mapped_column(
-        Text, nullable=False, server_default=text("'all'")
-    )
+    location_scope: Mapped[str] = mapped_column(Text, nullable=False, server_default=text("'all'"))
 
     __table_args__ = (
         CheckConstraint("role IN ('admin', 'editor', 'viewer')", name="ck_memberships_role"),
@@ -155,7 +153,9 @@ class Membership(Base):
             "org_role IS NULL OR org_role IN ('owner','admin','manager','agent','viewer')",
             name="ck_memberships_org_role",
         ),
-        CheckConstraint("location_scope IN ('all','limited')", name="ck_memberships_location_scope"),
+        CheckConstraint(
+            "location_scope IN ('all','limited')", name="ck_memberships_location_scope"
+        ),
         CheckConstraint("status IN ('active', 'revoked')", name="ck_memberships_status"),
         Index("ix_memberships_tenant_id", "tenant_id"),
         Index("ix_memberships_user_id", "user_id"),
@@ -250,12 +250,8 @@ class Invitation(Base):
         DateTime(timezone=True), nullable=False, default=utcnow
     )
     org_role: Mapped[str | None] = mapped_column(Text)
-    location_scope: Mapped[str] = mapped_column(
-        Text, nullable=False, server_default=text("'all'")
-    )
-    new_account: Mapped[bool] = mapped_column(
-        Boolean, nullable=False, server_default=text("false")
-    )
+    location_scope: Mapped[str] = mapped_column(Text, nullable=False, server_default=text("'all'"))
+    new_account: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default=text("false"))
 
     __table_args__ = (
         CheckConstraint("role IN ('admin', 'editor', 'viewer')", name="ck_invitations_role"),
@@ -263,7 +259,9 @@ class Invitation(Base):
             "org_role IS NULL OR org_role IN ('owner','admin','manager','agent','viewer')",
             name="ck_invitations_org_role",
         ),
-        CheckConstraint("location_scope IN ('all','limited')", name="ck_invitations_location_scope"),
+        CheckConstraint(
+            "location_scope IN ('all','limited')", name="ck_invitations_location_scope"
+        ),
         Index("ix_invitations_tenant_id", "tenant_id"),
         Index("ix_invitations_email", "email"),
     )

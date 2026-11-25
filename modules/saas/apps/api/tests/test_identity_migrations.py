@@ -1,12 +1,12 @@
 """Migrations 0032 to 0034: single head, up/down/up, backfill, legacy columns intact."""
 
-from uuid import uuid4
+from uuid import UUID, uuid4
 
 import pytest
 from alembic.config import Config
 from alembic.script import ScriptDirectory
 from sqlalchemy import inspect, text
-from sqlalchemy.engine import Engine
+from sqlalchemy.engine import Connection, Engine
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
@@ -40,6 +40,13 @@ def _url(engine: Engine) -> str:
     return engine.url.render_as_string(hide_password=False)
 
 
+def _roles(conn: Connection, tenant_id: UUID) -> dict[str, str | None]:
+    rows = conn.execute(
+        text("SELECT role, org_role FROM memberships WHERE tenant_id = :t"), {"t": tenant_id}
+    ).all()
+    return {str(role): org_role for role, org_role in rows}
+
+
 def _seed_memberships(db: Session) -> tuple[Tenant, dict[str, User]]:
     tenant = Tenant(id=uuid4(), name="Identity Org", slug=f"identity-{uuid4().hex[:10]}")
     db.add(tenant)
@@ -61,7 +68,12 @@ def test_single_head_chains_on_previous_head() -> None:
     script = ScriptDirectory.from_config(config)
     assert script.get_heads() == ["0034_roles_backfill"]
     chain = [rev.revision for rev in script.walk_revisions()][:4]
-    assert chain == ["0034_roles_backfill", "0033_auth_security", "0032_identity_orgs", PREVIOUS_HEAD]
+    assert chain == [
+        "0034_roles_backfill",
+        "0033_auth_security",
+        "0032_identity_orgs",
+        PREVIOUS_HEAD,
+    ]
 
 
 def test_up_down_up_with_backfill_keeps_legacy_columns(db: Session, engine: Engine) -> None:
@@ -71,12 +83,7 @@ def test_up_down_up_with_backfill_keeps_legacy_columns(db: Session, engine: Engi
 
     # Backfill ran on the freshly migrated head: legacy role stays, org_role is mapped.
     with engine.connect() as conn:
-        rows = dict(
-            conn.execute(
-                text("SELECT role, org_role FROM memberships WHERE tenant_id = :t"),
-                {"t": tenant.id},
-            ).all()
-        )
+        rows = _roles(conn, tenant.id)
     # Rows inserted after the backfill have no org_role: the backfill is one-shot.
     assert rows == {"admin": None, "editor": None, "viewer": None}
 
@@ -99,12 +106,7 @@ def test_up_down_up_with_backfill_keeps_legacy_columns(db: Session, engine: Engi
     run_migrations(url)  # up again: the backfill now maps existing rows
     assert NEW_TABLES <= _tables(engine)
     with engine.connect() as conn:
-        mapped = dict(
-            conn.execute(
-                text("SELECT role, org_role FROM memberships WHERE tenant_id = :t"),
-                {"t": tenant.id},
-            ).all()
-        )
+        mapped = _roles(conn, tenant.id)
     assert mapped == {"admin": "admin", "editor": "agent", "viewer": "viewer"}
     # Nobody was promoted to owner or manager by the backfill.
     with engine.connect() as conn:
@@ -135,12 +137,7 @@ def test_backfill_downgrade_clears_only_mapped_values(db: Session, engine: Engin
 
     run_migrations(url, upgrade_to="", downgrade_to="0033_auth_security")
     with engine.connect() as conn:
-        after = dict(
-            conn.execute(
-                text("SELECT role, org_role FROM memberships WHERE tenant_id = :t"),
-                {"t": tenant.id},
-            ).all()
-        )
+        after = _roles(conn, tenant.id)
     assert after == {"admin": None, "editor": "manager", "viewer": "agent"}
     run_migrations(url)
 

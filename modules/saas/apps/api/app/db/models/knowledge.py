@@ -168,6 +168,12 @@ class Source(Base):
     )
 
     __table_args__ = (
+        ForeignKeyConstraint(
+            ["tenant_id", "location_id"],
+            ["locations.tenant_id", "locations.id"],
+            name="fk_sources_location",
+        ),
+        Index("ix_sources_location", "tenant_id", "location_id"),
         CheckConstraint("kind IN ('pdf', 'docx', 'txt', 'md', 'qa_csv')", name="ck_sources_kind"),
         CheckConstraint(
             "status IN ('stored', 'queued', 'ingested', 'failed', 'removed')",
