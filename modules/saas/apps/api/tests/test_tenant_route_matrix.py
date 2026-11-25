@@ -68,6 +68,7 @@ FLAG_ON_ONLY_ROUTES = {
     ("PATCH", "/api/v1/tenants/{tenant_id}/team/members/{user_id}"),
     ("DELETE", "/api/v1/tenants/{tenant_id}/team/members/{user_id}"),
     ("GET", "/api/v1/tenants/{tenant_id}/agency/grants"),
+    ("POST", "/api/v1/tenants/{tenant_id}/team/members/{user_id}/mfa-reset"),
     ("POST", "/api/v1/tenants/{tenant_id}/agency/grants"),
     ("DELETE", "/api/v1/tenants/{tenant_id}/agency/grants/{grant_id}"),
 }
@@ -439,7 +440,7 @@ def test_exact_route_contract_and_operator_knowledge(app: Any) -> None:
         for method, operation in methods.items()
         if method.upper() in {"GET", "POST", "PUT", "PATCH", "DELETE"}
     }
-    assert len(actual) == len(TENANT_ROUTE_ROLES) == 101
+    assert len(actual) == len(TENANT_ROUTE_ROLES) == 102
     assert actual == TENANT_ROUTE_ROLES
     base = "/api/v1/tenants/{tenant_id}/bots/{bot_id}"
     for suffix in (

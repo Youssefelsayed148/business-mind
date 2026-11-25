@@ -49,6 +49,22 @@ class Settings(BaseSettings):
     # sends nothing. Links are built from this base URL, never from a request Host header.
     mailer_backend: Literal["console"] = "console"
     public_base_url: str = "http://localhost:3000"
+    # Identity-v2 credentials and sessions (design 6.3 to 6.6, D9). Only read with the flag on.
+    # Fernet keys, newest first (same pattern as channel secrets); TOTP stays off without them.
+    mfa_secret_encryption_keys: SecretStr | None = Field(default=None, repr=False)
+    mfa_verify_attempts: int = Field(default=5, ge=1, le=100)
+    mfa_verify_window_seconds: int = Field(default=300, ge=1, le=86400)
+    login_email_ip_attempts: int = Field(default=5, ge=1, le=1000)
+    login_email_ip_window_seconds: int = Field(default=900, ge=1, le=86400)
+    login_email_attempts: int = Field(default=20, ge=1, le=10000)
+    login_email_window_seconds: int = Field(default=3600, ge=1, le=86400)
+    reset_ip_attempts: int = Field(default=10, ge=1, le=1000)
+    reset_window_seconds: int = Field(default=900, ge=1, le=86400)
+    reset_email_attempts: int = Field(default=3, ge=1, le=100)
+    password_reset_ttl_seconds: int = Field(default=1800, ge=60, le=86400)
+    client_session_idle_seconds: int = Field(default=12 * 3600, ge=60)
+    staff_session_idle_seconds: int = Field(default=1800, ge=60)
+    staff_session_absolute_seconds: int = Field(default=12 * 3600, ge=300)
     # MFA enforcement (design 6.4, D9). Off: MFA stays optional everywhere.
     mfa_enforce_staff: bool = False
     mfa_enforce_admins: bool = False
@@ -228,6 +244,10 @@ def validate_startup_settings(settings: Settings) -> None:
             "EMBEDDING_PROVIDER must be set explicitly when environment=production "
             "(openai is the default model family; ollama is optional)."
         )
+    if (settings.mfa_enforce_staff or settings.mfa_enforce_admins) and (
+        settings.mfa_secret_encryption_keys is None
+    ):
+        raise RuntimeError("MFA enforcement needs MFA_SECRET_ENCRYPTION_KEYS to be set.")
     if settings.sso_issuer_enabled:
         from app.identity.sso import load_signing_key
 

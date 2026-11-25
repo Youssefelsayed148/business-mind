@@ -25,6 +25,7 @@ from app.core.errors import ApiError
 from app.core.ratelimit import enforce_or_429
 from app.core.tenancy import TenantContext
 from app.db.models import Invitation, Membership, User
+from app.identity import mfa as mfa_service
 from app.identity.mailer import MailMessage, get_mailer, link
 from app.identity.roles import ORG_ROLES, ORG_TO_LEGACY_ROLE, org_role_of
 from app.identity.sessions import revoke_user_sessions
@@ -318,3 +319,21 @@ def accept_into_new_account(
     _session, cookie_token = AuthService(db, settings).start_session(user)
     db.commit()
     return user, cookie_token
+
+
+def reset_member_mfa(ctx: TenantContext, user_id: UUID) -> None:
+    """Remove a member's MFA: an Owner for anyone but an Owner, staff for anyone (design 6.4)."""
+    _require_team_actor(ctx)
+    ctx.require_permission("team.manage_admins")
+    if user_id == ctx.user.id:
+        raise ApiError(403, "SELF_EDIT", "You cannot reset your own MFA.")
+    target = _target(ctx, user_id)
+    current = org_role_of(target.role, target.org_role)
+    if current == "owner" and not ctx.user.is_platform_staff:
+        raise ApiError(403, "STAFF_REQUIRED", "Only platform staff can reset an Owner's MFA.")
+    member = ctx.db.get(User, user_id)
+    assert member is not None  # the membership foreign key guarantees it
+    mfa_service.reset(
+        ctx.db, actor=ctx.user, tenant_id=ctx.tenant_id, target=member, was_role=current
+    )
+    ctx.db.commit()

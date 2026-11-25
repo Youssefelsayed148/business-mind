@@ -223,6 +223,9 @@ class AuthService:
             .values(revoked_at=datetime.now(UTC))
         )
 
+    def revoke_token(self, token: str) -> None:
+        self._revoke_token(token)
+
     def _revoke_token(self, token: str) -> None:
         row = self.db.execute(
             select(Session).where(Session.token_hash == hash_token(token))

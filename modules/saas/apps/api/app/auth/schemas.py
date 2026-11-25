@@ -19,6 +19,8 @@ class LoginRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
     email: EmailStr
     password: str = Field(min_length=1, max_length=200)
+    # Identity v2 only: a TOTP or recovery code, for people who enrolled MFA.
+    mfa_code: str | None = Field(default=None, min_length=6, max_length=32)
 
 
 class ChangePasswordRequest(BaseModel):

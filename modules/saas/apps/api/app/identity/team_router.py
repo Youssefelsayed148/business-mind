@@ -93,6 +93,14 @@ def team_deactivate(
     return Response(status_code=204)
 
 
+@router.post(_T + "/team/members/{user_id}/mfa-reset", status_code=204)
+def team_reset_mfa(
+    _on: IdentityV2On, user_id: UUID, context: TenantContextDep, _csrf: CsrfOk
+) -> Response:
+    team_service.reset_member_mfa(context, user_id)
+    return Response(status_code=204)
+
+
 @router.get(_T + "/agency/grants")
 def list_grants(_on: IdentityV2On, context: TenantContextDep) -> list[dict[str, object]]:
     return agency_service.list_grants(context)
