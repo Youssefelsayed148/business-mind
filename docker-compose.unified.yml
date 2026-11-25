@@ -38,6 +38,9 @@ x-many-env: &many-env
   REDIS_URL: redis://redis:6379/0
   CHANNEL_INTERNAL_ALLOWED_HOSTS: saas-api
   SENTRY_DSN: ""
+  # Phase 3 identity (off by default). SSO_PUBLIC_KEYS comes from .env.unified only.
+  SSO_ASSERTION_ENABLED: ${SSO_ASSERTION_ENABLED:-false}
+  SSO_REQUIRE_MFA_FOR_ADMIN: ${SSO_REQUIRE_MFA_FOR_ADMIN:-false}
 
 x-saas-env: &saas-env
   ENVIRONMENT: ${SAAS_ENVIRONMENT:-development}
@@ -45,6 +48,14 @@ x-saas-env: &saas-env
   STORAGE_ROOT: /data/storage
   COOKIE_SECURE: ${COOKIE_SECURE:-false}
   CHANNEL_INTERNAL_ALLOWED_HOSTS: many-api
+  # Phase 3 identity (off by default). Keys (SSO_SIGNING_KEY_PEM, MFA_SECRET_ENCRYPTION_KEYS)
+  # come from .env.unified only, never from a default here.
+  IDENTITY_V2_ENABLED: ${IDENTITY_V2_ENABLED:-false}
+  SSO_ISSUER_ENABLED: ${SSO_ISSUER_ENABLED:-false}
+  MFA_ENFORCE_STAFF: ${MFA_ENFORCE_STAFF:-false}
+  MFA_ENFORCE_ADMINS: ${MFA_ENFORCE_ADMINS:-false}
+  PUBLIC_BASE_URL: ${PUBLIC_BASE_URL:-http://localhost:3000}
+  MAILER_BACKEND: ${MAILER_BACKEND:-console}
 
 networks:
   edge: {}
