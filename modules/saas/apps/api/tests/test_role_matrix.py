@@ -37,6 +37,7 @@ GOLDEN: dict[str, set[str]] = {
     "analytics.read": ALL5,
     "channels.read": ALL5,
     "org.read": ALL5,
+    "org.summary": ALL5,
     "bots.read": ALL5,
     "knowledge.read": ALL5,
     "campaigns.read": ALL5,

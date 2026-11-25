@@ -155,7 +155,9 @@ def test_effective_role_is_the_cap_and_never_team_agency_billing_org(
     patch = client.patch(s.url(""), json={"name": "Hijack"}, headers=csrf_headers(client))
     assert patch.status_code == 403 and FORBIDDEN in patch.text
     for permission in agency_permissions("admin"):
-        assert not permission.startswith(("team.", "agency.", "billing.", "org."))
+        assert permission == "org.summary" or not permission.startswith(
+            ("team.", "agency.", "billing.", "org.")
+        )
 
 
 def test_cap_viewer_cannot_reply_and_owner_cap_is_rejected(v2_app: FastAPI, db: Session) -> None:

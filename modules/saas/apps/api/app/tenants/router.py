@@ -11,6 +11,7 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, Request, Response
 from sqlalchemy import select
 from sqlalchemy.orm import Session as OrmSession
+from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from app.auth import cookies
 from app.auth.schemas import MembershipOut, MeResponse
@@ -29,6 +30,7 @@ from app.tenants.schemas import (
     MemberRoleUpdateRequest,
     TenantCreateRequest,
     TenantOut,
+    TenantSummaryOut,
     TenantUpdateRequest,
 )
 from app.tenants.service import TenantService
@@ -75,6 +77,31 @@ def create_tenant(
     service = TenantService(db)
     tenant = service.create_tenant(user, body.name, body.slug)
     return TenantOut.model_validate(tenant)
+
+
+def _identity_v2_only(settings: CurrentSettingsDep) -> None:
+    """Flag off: answer exactly like an unknown route (404 {"detail":"Not Found"})."""
+    if not settings.identity_v2_enabled:
+        raise StarletteHTTPException(status_code=404, detail="Not Found")
+
+
+@router.get("/api/v1/tenants/{tenant_id}/summary", response_model=TenantSummaryOut)
+def tenant_summary(
+    _: Annotated[None, Depends(_identity_v2_only)], context: TenantContextDep
+) -> TenantSummaryOut:
+    """Who am I here: organization name, effective role and cap, and whether via an agency.
+
+    Read-only and held by every role including agency access (permission org.summary).
+    It exposes no other organization data.
+    """
+    via_agency = context.via_agency is not None
+    return TenantSummaryOut(
+        organization_id=context.tenant.id,
+        organization_name=context.tenant.name,
+        role=context.effective_org_role or "platform_staff",
+        role_cap=context.org_role if via_agency else None,
+        via_agency=via_agency,
+    )
 
 
 @router.get("/api/v1/tenants/{tenant_id}", response_model=TenantOut)
