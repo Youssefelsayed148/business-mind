@@ -125,22 +125,6 @@ def test_resolve_access_reports_the_members_scope(db: Session, app: FastAPI) -> 
         assert access is not None and access.location_ids == expected
 
 
-def test_limited_members_are_refused_everywhere_until_filters_are_wired(
-    v2_app: FastAPI, db: Session
-) -> None:
-    """Fail closed: with the flag on a location-limited caller gets no tenant route yet."""
-    tenant_id = make_tenant(db)
-    limited = make_person(v2_app, "limited", db=db)
-    join(db, tenant_id, limited.user_id, "agent", location_scope="limited")
-    full = make_person(v2_app, "full", db=db)
-    join(db, tenant_id, full.user_id, "agent")
-    for path in ("/inbox", "/contacts", "/analytics"):
-        refused = limited.client.get(f"/api/v1/tenants/{tenant_id}{path}")
-        assert refused.status_code == 403, path
-        assert "LOCATION_SCOPE_UNSUPPORTED" in refused.text
-        assert full.client.get(f"/api/v1/tenants/{tenant_id}{path}").status_code == 200, path
-
-
 def test_flag_off_ignores_location_scope_entirely(app: FastAPI, db: Session) -> None:
     tenant_id = make_tenant(db)
     limited = make_person(app, "limited", db=db)

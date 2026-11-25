@@ -33,6 +33,7 @@ from app.db.models import (
 )
 from app.embeddings.backfill import queue_backfill, sync_bot_readiness
 from app.embeddings.providers import EmbeddingError, configured_identity
+from app.identity.locations import location_filter
 from app.jobs.queue import enqueue_job, request_cancel, requeue_for_retry
 from app.knowledge.csv_qa import CsvStructureError, parse_qa_csv, qa_template_csv
 from app.knowledge.ingest import get_or_create_draft_revision
@@ -335,7 +336,14 @@ def start_ingestion(
     return job
 
 
+def _require_unrestricted(context: TenantContext) -> None:
+    """Jobs and revisions describe the bot's whole knowledge, not one location (design 4.2)."""
+    if context.location_ids is not None:
+        raise ApiError(403, "FORBIDDEN", "This needs access to every location.")
+
+
 def list_jobs(context: TenantContext, bot_id: UUID) -> Sequence[Job]:
+    _require_unrestricted(context)
     get_bot(context, bot_id)  # tenant scope before scanning jobs
     return list(
         context.db.execute(
@@ -348,6 +356,7 @@ def list_jobs(context: TenantContext, bot_id: UUID) -> Sequence[Job]:
 
 
 def get_job_or_404(context: TenantContext, bot_id: UUID, job_id: UUID) -> Job:
+    _require_unrestricted(context)
     job = context.db.execute(
         select(Job).where(
             Job.id == job_id,
@@ -425,6 +434,7 @@ def list_sources(context: TenantContext, bot_id: UUID) -> Sequence[Source]:
                 Source.tenant_id == context.tenant_id,
                 Source.bot_id == bot_id,
                 Source.status != "removed",
+                location_filter(Source.location_id, context.location_ids),
             )
             .order_by(Source.created_at.desc(), Source.id)
             .limit(500)
@@ -439,6 +449,7 @@ def get_source(context: TenantContext, bot_id: UUID, source_id: UUID) -> Source:
             Source.tenant_id == context.tenant_id,
             Source.bot_id == bot_id,
             Source.status != "removed",
+            location_filter(Source.location_id, context.location_ids),
         )
     ).scalar_one_or_none()
     if source is None:
@@ -745,6 +756,12 @@ def list_documents(
             Document.tenant_id == context.tenant_id,
             Document.bot_id == bot_id,
             Document.revision_id == revision.id,
+            Document.source_id.in_(
+                select(Source.id).where(
+                    Source.tenant_id == context.tenant_id,
+                    location_filter(Source.location_id, context.location_ids),
+                )
+            ),
         )
         .group_by(Document.id)
         .order_by(Document.created_at, Document.id)
@@ -764,6 +781,12 @@ def list_document_chunks(
             Document.id == document_id,
             Document.tenant_id == context.tenant_id,
             Document.bot_id == bot_id,
+            Document.source_id.in_(
+                select(Source.id).where(
+                    Source.tenant_id == context.tenant_id,
+                    location_filter(Source.location_id, context.location_ids),
+                )
+            ),
         )
     ).scalar_one_or_none()
     if document is None:
@@ -801,6 +824,7 @@ def _lookup_revision(
 def list_revisions(
     context: TenantContext, bot_id: UUID, settings: Settings | None = None
 ) -> list[dict[str, object]]:
+    _require_unrestricted(context)
     bot = get_bot(context, bot_id)
     revisions = (
         context.db.execute(

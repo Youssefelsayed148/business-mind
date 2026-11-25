@@ -163,12 +163,6 @@ def _identity_v2_context(
     )
     if permission == "inbox.reply" and membership is None and inbox_action:
         raise ApiError(403, "FORBIDDEN", "Inbox actions require an active tenant membership.")
-    if access.location_ids is not None:
-        # Fail closed: location-limited callers get no tenant routes until the
-        # query sites apply identity.locations.location_filter (a later change).
-        raise ApiError(
-            403, "LOCATION_SCOPE_UNSUPPORTED", "Location-limited access is not available yet."
-        )
     return context
 
 

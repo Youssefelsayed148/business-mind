@@ -14,6 +14,8 @@ class ContactCreate(BaseModel):
     custom_fields: dict[str, Any] = Field(default_factory=dict, max_length=20)
     consent: dict[str, Any] = Field(default_factory=dict)
     source_channel: str | None = Field(default=None, max_length=32)
+    # Honored only with identity v2 on (design 4.2); ignored otherwise.
+    location_id: UUID | None = None
 
     @model_validator(mode="after")
     def reachable_and_valid(self) -> "ContactCreate":

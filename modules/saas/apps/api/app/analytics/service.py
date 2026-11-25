@@ -13,6 +13,11 @@ from uuid import UUID
 from sqlalchemy import text
 from sqlalchemy.orm import Session as OrmSession
 
+from app.identity.locations import (
+    conversation_location_sql,
+    conversation_ref_location_sql,
+)
+
 
 def _range_window(from_iso: str | None, to_iso: str | None) -> tuple[datetime, datetime]:
     """Inclusive date window (UTC); defaults to the last 30 days."""
@@ -36,9 +41,18 @@ def _range_window(from_iso: str | None, to_iso: str | None) -> tuple[datetime, d
 
 
 def summary(
-    db: OrmSession, *, tenant_id: UUID, bot_id: UUID, start: datetime, end: datetime
+    db: OrmSession,
+    *,
+    tenant_id: UUID,
+    bot_id: UUID,
+    start: datetime,
+    end: datetime,
+    location_ids: frozenset[UUID] | None = None,
 ) -> dict[str, Any]:
     """Summary metrics per docs/14 §9 (all measured)."""
+    conv_c, params = conversation_location_sql("conversations", location_ids)
+    conv_cc, _ = conversation_location_sql("c", location_ids)
+    ev_c, _ = conversation_ref_location_sql("usage_events", "conversation_id", location_ids)
     row = (
         db.execute(
             text(
@@ -47,7 +61,7 @@ def summary(
             SELECT kind, count(*) AS n FROM usage_events
             WHERE tenant_id = CAST(:t AS uuid) AND bot_id = CAST(:b AS uuid)
               AND COALESCE(payload->>'source', '') <> 'playground'
-              AND created_at >= :start AND created_at <= :end
+              AND created_at >= :start AND created_at <= :end<<EV>>
             GROUP BY kind
         ),
         convs AS (
@@ -56,7 +70,7 @@ def summary(
             FROM conversations
             WHERE tenant_id = CAST(:t AS uuid) AND bot_id = CAST(:b AS uuid)
               AND source <> 'playground'
-              AND created_at >= :start AND created_at <= :end
+              AND created_at >= :start AND created_at <= :end<<CONV>>
         ),
         msgs AS (
             SELECT
@@ -70,7 +84,7 @@ def summary(
               AND conversation_id IN (
                   SELECT id FROM conversations
                   WHERE tenant_id = CAST(:t AS uuid) AND bot_id = CAST(:b AS uuid)
-                    AND source <> 'playground')
+                    AND source <> 'playground'<<CONV>>)
               AND created_at >= :start AND created_at <= :end
         )
         SELECT
@@ -87,9 +101,9 @@ def summary(
             convs.handoffs,
             msgs.avg_response_ms
         FROM msgs CROSS JOIN convs
-        """
+        """.replace("<<EV>>", ev_c).replace("<<CONV>>", conv_c)
             ),
-            {"t": str(tenant_id), "b": str(bot_id), "start": start, "end": end},
+            {"t": str(tenant_id), "b": str(bot_id), "start": start, "end": end, **params},
         )
         .mappings()
         .one()
@@ -117,12 +131,12 @@ def summary(
                 LEFT JOIN messages m ON m.conversation_id = c.id
                 WHERE c.tenant_id = CAST(:t AS uuid) AND c.bot_id = CAST(:b AS uuid)
                   AND c.source <> 'playground'
-                  AND c.created_at >= :start AND c.created_at <= :end
+                  AND c.created_at >= :start AND c.created_at <= :end<<CC>>
                 GROUP BY c.id
             ) buckets GROUP BY visitor_count ORDER BY visitor_count
-        """
+        """.replace("<<CC>>", conv_cc)
         ),
-        {"t": str(tenant_id), "b": str(bot_id), "start": start, "end": end},
+        {"t": str(tenant_id), "b": str(bot_id), "start": start, "end": end, **params},
     ).fetchall()
     for visitor_count, count in bucket_rows:
         visitor_count = int(visitor_count or 0)
@@ -157,8 +171,15 @@ def summary(
 
 
 def volume_per_day(
-    db: OrmSession, *, tenant_id: UUID, bot_id: UUID, start: datetime, end: datetime
+    db: OrmSession,
+    *,
+    tenant_id: UUID,
+    bot_id: UUID,
+    start: datetime,
+    end: datetime,
+    location_ids: frozenset[UUID] | None = None,
 ) -> list[dict[str, Any]]:
+    conv_c, params = conversation_location_sql("conversations", location_ids)
     rows = db.execute(
         text(
             """
@@ -171,11 +192,11 @@ def volume_per_day(
           AND m.conversation_id IN (
               SELECT id FROM conversations
               WHERE tenant_id = CAST(:t AS uuid) AND bot_id = CAST(:b AS uuid)
-                AND source <> 'playground')
+                AND source <> 'playground'<<CONV>>)
         GROUP BY 1 ORDER BY 1
-        """
+        """.replace("<<CONV>>", conv_c)
         ),
-        {"t": str(tenant_id), "b": str(bot_id), "start": start, "end": end},
+        {"t": str(tenant_id), "b": str(bot_id), "start": start, "end": end, **params},
     ).fetchall()
     return [
         {
@@ -224,7 +245,9 @@ def top_questions(
     start: datetime,
     end: datetime,
     limit: int = 10,
+    location_ids: frozenset[UUID] | None = None,
 ) -> list[dict[str, Any]]:
+    conv_c, params = conversation_location_sql("conversations", location_ids)
     rows = db.execute(
         text(
             """
@@ -236,9 +259,9 @@ def top_questions(
           AND m.conversation_id IN (
               SELECT id FROM conversations
               WHERE tenant_id = CAST(:t AS uuid) AND bot_id = CAST(:b AS uuid)
-                AND source <> 'playground')
+                AND source <> 'playground'<<CONV>>)
         GROUP BY 1 ORDER BY asked DESC, 1 LIMIT :fetch
-        """
+        """.replace("<<CONV>>", conv_c)
         ),
         {
             "t": str(tenant_id),
@@ -246,6 +269,7 @@ def top_questions(
             "start": start,
             "end": end,
             "fetch": GROUPING_FETCH_LIMIT,
+            **params,
         },
     ).fetchall()
     merged = _grouped([(str(question), int(asked), last) for question, asked, last in rows])
@@ -261,8 +285,10 @@ def unanswered_questions(
     start: datetime,
     end: datetime,
     limit: int = 50,
+    location_ids: frozenset[UUID] | None = None,
 ) -> list[dict[str, Any]]:
     """Visitor questions the bot could not confirm (can_answer=false AI replies)."""
+    ref_c, params = conversation_ref_location_sql("q", "conversation_id", location_ids)
     rows = db.execute(
         text(
             """
@@ -280,9 +306,9 @@ def unanswered_questions(
           AND q.sender_type = 'visitor'
           AND c.text IS NULL
           AND a.can_answer IS FALSE
-          AND q.created_at >= :start AND q.created_at <= :end
+          AND q.created_at >= :start AND q.created_at <= :end<<REF>>
         GROUP BY 1 ORDER BY last DESC LIMIT :fetch
-        """
+        """.replace("<<REF>>", ref_c)
         ),
         {
             "t": str(tenant_id),
@@ -290,6 +316,7 @@ def unanswered_questions(
             "start": start,
             "end": end,
             "fetch": GROUPING_FETCH_LIMIT,
+            **params,
         },
     ).fetchall()
     merged = _grouped([(str(question), int(asked), last) for question, asked, last in rows])
@@ -301,8 +328,15 @@ def unanswered_questions(
 
 
 def leads_trend(
-    db: OrmSession, *, tenant_id: UUID, bot_id: UUID, start: datetime, end: datetime
+    db: OrmSession,
+    *,
+    tenant_id: UUID,
+    bot_id: UUID,
+    start: datetime,
+    end: datetime,
+    location_ids: frozenset[UUID] | None = None,
 ) -> list[dict[str, Any]]:
+    ref_c, params = conversation_ref_location_sql("u", "conversation_id", location_ids)
     rows = db.execute(
         text(
             """
@@ -310,19 +344,29 @@ def leads_trend(
         FROM usage_events u
         WHERE u.tenant_id = CAST(:t AS uuid) AND u.bot_id = CAST(:b AS uuid)
           AND u.kind = 'lead'
-          AND u.created_at >= :start AND u.created_at <= :end
+          AND u.created_at >= :start AND u.created_at <= :end<<REF>>
         GROUP BY 1 ORDER BY 1
-        """
+        """.replace("<<REF>>", ref_c)
         ),
-        {"t": str(tenant_id), "b": str(bot_id), "start": start, "end": end},
+        {"t": str(tenant_id), "b": str(bot_id), "start": start, "end": end, **params},
     ).fetchall()
     return [{"day": day.isoformat(), "leads": int(leads)} for day, leads in rows]
 
 
 def lead_contacts(
-    db: OrmSession, *, tenant_id: UUID, bot_id: UUID, start: datetime, end: datetime
+    db: OrmSession,
+    *,
+    tenant_id: UUID,
+    bot_id: UUID,
+    start: datetime,
+    end: datetime,
+    location_ids: frozenset[UUID] | None = None,
 ) -> list[dict[str, Any]]:
     """Contacts captured as leads inside the window (for the leads tab/CSV)."""
+    ref_c, params = conversation_ref_location_sql("u", "conversation_id", location_ids)
+    contact_c = "" if location_ids is None else " AND c.location_id = ANY(CAST(:loc_ids AS uuid[]))"
+    if location_ids is not None and not location_ids:
+        contact_c = " AND false"
     rows = db.execute(
         text(
             """
@@ -332,13 +376,20 @@ def lead_contacts(
         FROM contacts c
         JOIN usage_events u ON u.external_key LIKE 'lead:%'
             AND u.tenant_id = CAST(:t AS uuid) AND u.bot_id = CAST(:b AS uuid)
-            AND u.created_at >= :start AND u.created_at <= :end
-        WHERE c.tenant_id = CAST(:t AS uuid)
+            AND u.created_at >= :start AND u.created_at <= :end<<REF>>
+        WHERE c.tenant_id = CAST(:t AS uuid)<<CONTACT>>
         ORDER BY c.created_at DESC
         LIMIT 200
-        """
+        """.replace("<<REF>>", ref_c).replace("<<CONTACT>>", contact_c)
         ),
-        {"t": str(tenant_id), "b": str(bot_id), "start": start, "end": end},
+        {
+            "t": str(tenant_id),
+            "b": str(bot_id),
+            "start": start,
+            "end": end,
+            **params,
+            **({"loc_ids": sorted(str(i) for i in location_ids)} if location_ids else {}),
+        },
     ).fetchall()
     return [
         {
@@ -355,9 +406,16 @@ def lead_contacts(
 
 
 def conversations_csv(
-    db: OrmSession, *, tenant_id: UUID, bot_id: UUID, start: datetime, end: datetime
+    db: OrmSession,
+    *,
+    tenant_id: UUID,
+    bot_id: UUID,
+    start: datetime,
+    end: datetime,
+    location_ids: frozenset[UUID] | None = None,
 ) -> list[dict[str, Any]]:
     """Operator-facing conversation export (docs/14 §9 CSV)."""
+    conv_c, params = conversation_location_sql("cv", location_ids)
     rows = db.execute(
         text(
             """
@@ -369,11 +427,11 @@ def conversations_csv(
         LEFT JOIN contacts c ON c.id = cv.contact_id
         WHERE cv.tenant_id = CAST(:t AS uuid) AND cv.bot_id = CAST(:b AS uuid)
           AND cv.source <> 'playground'
-          AND cv.created_at >= :start AND cv.created_at <= :end
+          AND cv.created_at >= :start AND cv.created_at <= :end<<CONV>>
         ORDER BY cv.created_at DESC
-        """
+        """.replace("<<CONV>>", conv_c)
         ),
-        {"t": str(tenant_id), "b": str(bot_id), "start": start, "end": end},
+        {"t": str(tenant_id), "b": str(bot_id), "start": start, "end": end, **params},
     ).fetchall()
     return [
         {

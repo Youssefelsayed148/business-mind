@@ -28,6 +28,7 @@ from app.db.models import (
     Message,
 )
 from app.db.session import get_engine, session_factory
+from app.identity.locations import conversation_location_filter
 from app.inbox.events import add_inbox_event
 
 router = APIRouter(prefix="/api/v1/tenants/{tenant_id}/inbox", tags=["inbox"])
@@ -102,6 +103,7 @@ def _conversation_or_404(context: TenantContext, conversation_id: UUID) -> Conve
             Conversation.id == conversation_id,
             Conversation.tenant_id == context.tenant_id,
             Conversation.source.in_(("website", "channel")),
+            conversation_location_filter(context.location_ids),
         )
     ).scalar_one_or_none()
     if row is None:
@@ -128,6 +130,7 @@ def list_inbox(
     statement = select(Conversation).where(
         Conversation.tenant_id == context.tenant_id,
         Conversation.source.in_(("website", "channel")),
+        conversation_location_filter(context.location_ids),
     )
     if status is not None:
         statement = statement.where(Conversation.status == status)
@@ -285,6 +288,7 @@ def notification_counts(context: TenantContextDep) -> dict[str, int]:
     base = select(Conversation).where(
         Conversation.tenant_id == context.tenant_id,
         Conversation.source.in_(("website", "channel")),
+        conversation_location_filter(context.location_ids),
     )
     waiting = context.db.scalar(
         select(func.count()).select_from(
@@ -306,6 +310,7 @@ def notification_counts(context: TenantContextDep) -> dict[str, int]:
         ).where(
             Conversation.tenant_id == context.tenant_id,
             Conversation.source.in_(("website", "channel")),
+            conversation_location_filter(context.location_ids),
         )
     )
     unread_messages = 0
@@ -456,7 +461,7 @@ def stream_events(
 ) -> StreamingResponse:
     cursor = _cursor(last_event_id_header)
     return StreamingResponse(
-        event_stream(context.tenant_id, context.user.id, cursor),
+        event_stream(context.tenant_id, context.user.id, cursor, context.location_ids),
         media_type="text/event-stream",
         headers={
             "Cache-Control": "no-cache, no-transform",
@@ -465,7 +470,12 @@ def stream_events(
     )
 
 
-def event_stream(tenant_id: UUID, user_id: UUID, cursor: int | None) -> Any:
+def event_stream(
+    tenant_id: UUID,
+    user_id: UUID,
+    cursor: int | None,
+    location_ids: frozenset[UUID] | None = None,
+) -> Any:
     """Yield SSE events from the durable tenant cursor; shared by every process."""
     with session_factory(get_engine())() as db:
         cursor_query = select(func.max(InboxEvent.id)).where(InboxEvent.tenant_id == tenant_id)
@@ -483,7 +493,7 @@ def event_stream(tenant_id: UUID, user_id: UUID, cursor: int | None) -> Any:
                 )
                 or 0
             )
-        counts = _notification_counts_for(db, tenant_id, user_id)
+        counts = _notification_counts_for(db, tenant_id, user_id, location_ids)
         yield _sse("inbox.ready", {"counts": counts}, cursor)
         while True:
             active = db.scalar(
@@ -517,6 +527,7 @@ def event_stream(tenant_id: UUID, user_id: UUID, cursor: int | None) -> Any:
                     InboxEvent.tenant_id == tenant_id,
                     InboxEvent.id > cursor,
                     Conversation.source.in_(("website", "channel")),
+                    conversation_location_filter(location_ids),
                 )
                 .order_by(InboxEvent.id)
                 .limit(MAX_SSE_BATCH)
@@ -556,13 +567,20 @@ def event_stream(tenant_id: UUID, user_id: UUID, cursor: int | None) -> Any:
             time.sleep(INBOX_POLL_SECONDS)
 
 
-def _notification_counts_for(db: OrmSession, tenant_id: UUID, user_id: UUID) -> dict[str, int]:
+def _notification_counts_for(
+    db: OrmSession,
+    tenant_id: UUID,
+    user_id: UUID,
+    location_ids: frozenset[UUID] | None = None,
+) -> dict[str, int]:
+    scope = conversation_location_filter(location_ids)
     waiting = int(
         db.scalar(
             select(func.count(Conversation.id)).where(
                 Conversation.tenant_id == tenant_id,
                 Conversation.source.in_(("website", "channel")),
                 Conversation.status == "waiting_human",
+                scope,
             )
         )
         or 0
@@ -574,6 +592,7 @@ def _notification_counts_for(db: OrmSession, tenant_id: UUID, user_id: UUID) -> 
                 Conversation.source.in_(("website", "channel")),
                 Conversation.status != "resolved",
                 Conversation.assigned_user_id == user_id,
+                scope,
             )
         )
         or 0
@@ -585,6 +604,7 @@ def _notification_counts_for(db: OrmSession, tenant_id: UUID, user_id: UUID) -> 
         ).where(
             Conversation.tenant_id == tenant_id,
             Conversation.source.in_(("website", "channel")),
+            scope,
         )
     )
     unread_messages = 0
