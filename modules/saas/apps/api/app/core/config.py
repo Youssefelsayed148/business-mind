@@ -34,6 +34,20 @@ class Settings(BaseSettings):
     # checks are the only authorization. On: the role/permission table, location scope
     # and agency grants apply. Off is byte-for-byte the previous behavior.
     identity_v2_enabled: bool = False
+    # SSO issuing (design 2, 9). Off: /api/v1/sso/* answers 404 and nothing is minted.
+    # The private key and its id come from the environment only (never git); Many holds
+    # the public key. Return URLs are exact callback URLs (design 10, open redirect).
+    sso_issuer_enabled: bool = False
+    sso_issuer: str = "business-mind-saas"
+    sso_audience: str = "many-api"
+    sso_signing_kid: str = ""
+    sso_signing_key_pem: SecretStr | None = Field(default=None, repr=False)
+    sso_return_allowlist: list[str] = Field(default_factory=list)
+    sso_mint_rate_limit_attempts: int = Field(default=30, ge=1, le=1000)
+    sso_mint_rate_limit_window_seconds: int = Field(default=60, ge=1, le=3600)
+    # MFA enforcement (design 6.4, D9). Off: MFA stays optional everywhere.
+    mfa_enforce_staff: bool = False
+    mfa_enforce_admins: bool = False
 
     # Sessions (ADR-004): opaque server-side tokens; only a SHA-256 hash is stored.
     session_cookie_name: str = "chatbot_session"
@@ -210,6 +224,15 @@ def validate_startup_settings(settings: Settings) -> None:
             "EMBEDDING_PROVIDER must be set explicitly when environment=production "
             "(openai is the default model family; ollama is optional)."
         )
+    if settings.sso_issuer_enabled:
+        from app.identity.sso import load_signing_key
+
+        try:
+            load_signing_key(settings)
+        except ValueError as exc:
+            raise RuntimeError(
+                f"SSO issuing is enabled but the signing key is unusable: {exc}"
+            ) from exc
     if settings.environment == "production":
         from app.channels.secrets import encryption_keys
 

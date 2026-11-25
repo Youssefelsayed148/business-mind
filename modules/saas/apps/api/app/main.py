@@ -17,6 +17,7 @@ from app.core.errors import REQUEST_ID_HEADER, RequestIdMiddleware, install_erro
 from app.core.permissions import TENANT_ROUTE_ROLES
 from app.embeddings.router import router as rag_router
 from app.followups.router import router as followups_router
+from app.identity.router import router as sso_router
 from app.inbox.listing import router as inbox_listing_router
 from app.inbox.router import router as inbox_router
 from app.knowledge.router import router as knowledge_router
@@ -94,6 +95,7 @@ def create_app() -> FastAPI:
     application.include_router(changes_router)
     application.include_router(health_router)
     application.include_router(auth_router)
+    application.include_router(sso_router)
     application.include_router(tenants_router)
     application.include_router(tenant_data_router)
     application.include_router(bots_router)
