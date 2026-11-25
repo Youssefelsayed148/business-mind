@@ -51,6 +51,13 @@ def _require_team_actor(ctx: TenantContext) -> None:
         raise ApiError(403, "FORBIDDEN", "Team changes need access to every location.")
 
 
+def _scope_metadata(scope: str, locations: frozenset[UUID]) -> dict[str, object]:
+    """Audit detail only for limited scope, so unrestricted records keep their old shape."""
+    if scope != "limited":
+        return {}
+    return {"location_scope": scope, "locations": sorted(str(i) for i in locations)}
+
+
 def resolve_scope(
     ctx: TenantContext, role: str, location_scope: str, location_ids: list[UUID]
 ) -> frozenset[UUID]:
@@ -228,8 +235,7 @@ def invite(
         metadata={
             "role": role,
             "new_account": user is None,
-            "location_scope": location_scope,
-            "locations": sorted(str(i) for i in locations),
+            **_scope_metadata(location_scope, locations),
         },
     )
     db.commit()
@@ -297,12 +303,7 @@ def change_role(
         actor_user_id=ctx.user.id,
         target_type="membership",
         target_id=str(user_id),
-        metadata={
-            "from": current,
-            "to": new_role,
-            "location_scope": scope,
-            "locations": sorted(str(i) for i in locations),
-        },
+        metadata={"from": current, "to": new_role, **_scope_metadata(scope, locations)},
     )
     revoke_user_sessions(ctx.db, user_id)
     ctx.db.commit()

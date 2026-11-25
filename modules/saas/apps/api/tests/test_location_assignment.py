@@ -214,7 +214,7 @@ def test_role_change_can_set_keep_and_clear_the_scope(v2_app: FastAPI, db: Sessi
     ):
         assert admin.client.patch(path, json=body, headers=headers).status_code == status, body
     audit = db.scalars(select(AuditEvent).where(AuditEvent.action == "team.role_changed")).all()
-    assert audit and all("location_scope" in event.metadata_json for event in audit)
+    assert audit and any(event.metadata_json.get("location_scope") == "limited" for event in audit)
 
 
 def test_a_limited_admin_does_not_count_as_the_last_admin(v2_app: FastAPI, db: Session) -> None:

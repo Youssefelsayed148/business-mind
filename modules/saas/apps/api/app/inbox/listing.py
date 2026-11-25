@@ -461,7 +461,11 @@ def stream_events(
 ) -> StreamingResponse:
     cursor = _cursor(last_event_id_header)
     return StreamingResponse(
-        event_stream(context.tenant_id, context.user.id, cursor, context.location_ids),
+        (
+            event_stream(context.tenant_id, context.user.id, cursor)
+            if context.location_ids is None
+            else event_stream(context.tenant_id, context.user.id, cursor, context.location_ids)
+        ),
         media_type="text/event-stream",
         headers={
             "Cache-Control": "no-cache, no-transform",
