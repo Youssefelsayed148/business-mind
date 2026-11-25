@@ -173,7 +173,9 @@ def mint_assertion(
         if access.location_ids is not None:
             # Location-limited people get no Many access in this phase (design 4.2).
             raise ApiError(
-                403, "LOCATION_SCOPE_UNSUPPORTED", "Location-limited access is not available yet."
+                403,
+                "LOCATION_SCOPE_UNSUPPORTED",
+                "Location-limited access does not include the Many workspace.",
             )
         if (
             mfa_required(settings, user, role=access.org_role, membership=membership)
