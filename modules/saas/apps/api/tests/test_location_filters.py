@@ -636,3 +636,32 @@ def test_flag_off_ignores_scope_and_location_fields(app: FastAPI, db: Session) -
         db.scalar(select(Contact.location_id).where(Contact.id == UUID(created.json()["id"])))
         is None
     )
+
+
+def test_a_contact_created_from_a_channel_event_takes_the_connections_location(
+    v2_app: FastAPI, db: Session
+) -> None:
+    from app.channels.inbound import _identity
+
+    w = build_world(v2_app, db)
+    for connection_id, expected in ((w.conn_north, w.north), (w.conn_org, None)):
+        connection = db.get(ChannelConnection, connection_id)
+        assert connection is not None
+        identity = _identity(
+            db,
+            connection=connection,
+            payload={
+                "external_contact_id": f"ext-{uuid4().hex[:8]}",
+                "channel": "whatsapp",
+                "contact": {"name": "Visitor"},
+            },
+        )
+        db.commit()
+        assert (
+            db.scalar(select(Contact.location_id).where(Contact.id == identity.contact_id))
+            == expected
+        )
+    # Northern contact is visible to the northern member; the organization-wide one is not.
+    seen = w.lim_agent.client.get(w.url("/contacts")).json()["contacts"]
+    assert {row["display_name"] for row in seen} >= {"Visitor"}
+    assert len([row for row in seen if row["display_name"] == "Visitor"]) == 1

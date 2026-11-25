@@ -112,6 +112,8 @@ def _identity(
         display_name=name or handle or phone or "Channel visitor",
         phone=phone,
         source_channel=payload["channel"],
+        # A contact takes the location of the connection it first spoke on (design 4.2).
+        location_id=connection.location_id,
         custom_fields={
             key: value
             for key, value in (
