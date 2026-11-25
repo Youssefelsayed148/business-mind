@@ -13,6 +13,14 @@ LEGACY_TO_ORG_ROLE: Final[dict[str, str]] = {
     "editor": "agent",
     "admin": "admin",
 }
+# Stored legacy role written next to a new org_role (dual-write while the flag exists).
+ORG_TO_LEGACY_ROLE: Final[dict[str, str]] = {
+    "owner": "admin",
+    "admin": "admin",
+    "manager": "editor",
+    "agent": "editor",
+    "viewer": "viewer",
+}
 # Roles an agency grant may cap at; never Owner (design 4.3).
 GRANT_ROLE_CAPS: Final[tuple[str, ...]] = ("admin", "manager", "agent", "viewer")
 # Permission families an agency person never holds, whatever the cap is.

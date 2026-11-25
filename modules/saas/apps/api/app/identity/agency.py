@@ -29,6 +29,7 @@ from app.db.models import (
 )
 from app.identity.locations import validate_locations_in_tenant
 from app.identity.roles import GRANT_ROLE_CAPS
+from app.identity.sessions import revoke_user_sessions
 
 if TYPE_CHECKING:
     from app.core.tenancy import TenantContext
@@ -250,6 +251,15 @@ def revoke_grant(ctx: "TenantContext", *, grant_id: UUID) -> None:
     grant.status = "revoked"
     grant.revoked_at = utcnow()
     grant.revoked_by_user_id = ctx.user.id
+    # Assignees lose their sessions with the grant (design 6.5); no new assertion can be minted.
+    revoke_user_sessions(
+        ctx.db,
+        list(
+            ctx.db.execute(
+                select(AgencyGrantAssignee.user_id).where(AgencyGrantAssignee.grant_id == grant_id)
+            ).scalars()
+        ),
+    )
     record_audit(
         ctx.db,
         action="agency.grant_revoked",

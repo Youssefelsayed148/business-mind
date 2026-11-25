@@ -26,6 +26,7 @@ from tests.identity_helpers import (
     make_person,
     make_tenant,
 )
+from tests.test_tenant_route_matrix import FLAG_ON_ONLY_ROUTES
 
 FORBIDDEN_MESSAGE = "You do not have permission for this action."
 OWN, A, M, G, V = "owner", "admin", "manager", "agent", "viewer"
@@ -248,6 +249,8 @@ def test_flag_off_legacy_responses_for_every_route_and_legacy_role(
         people[legacy] = person
     mismatches: list[str] = []
     for (method, path), minimum in sorted(TENANT_ROUTE_ROLES.items()):
+        if (method, path) in FLAG_ON_ONLY_ROUTES:
+            continue  # identity routes do not exist flag off; their 404s are asserted elsewhere
         if minimum == "authenticated" or ((method, path) in STREAMING):
             continue  # streams never finish for an allowed caller
         url = _url(path, tenant_id)

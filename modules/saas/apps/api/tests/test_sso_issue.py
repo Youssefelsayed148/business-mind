@@ -29,7 +29,7 @@ from app.db.base import utcnow
 from app.db.models import AgencyGrant, AuditEvent, Membership, Tenant, User
 from app.identity import agency as svc
 from tests.conftest import build_test_settings
-from tests.helpers import csrf_headers
+from tests.helpers import PASSWORD, csrf_headers
 from tests.identity_helpers import ROLES, Person, build_org, join, make_person, make_tenant
 from tests.test_agency_grants import _ctx, _setup, _user
 
@@ -217,7 +217,12 @@ def test_agency_assertion_carries_cap_and_agency_and_dies_with_the_grant(
     assert _mint(s.agent, s.tenant_id).status_code == 200
     svc.revoke_grant(_ctx(db, s.tenant_id, s.owner), grant_id=grant.id)
     db.commit()
-    assert _mint(s.agent, s.tenant_id).status_code == 404
+    assert _mint(s.agent, s.tenant_id).status_code == 401  # their sessions ended with the grant
+    relogin = s.agent.client.post(
+        "/api/v1/auth/login", json={"email": s.agent.email, "password": PASSWORD}
+    )
+    assert relogin.status_code == 200
+    assert _mint(s.agent, s.tenant_id).status_code == 404  # and no new assertion can be minted
     assert _user(db, s.agent) is not None
 
 

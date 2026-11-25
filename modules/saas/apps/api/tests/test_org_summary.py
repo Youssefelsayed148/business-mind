@@ -8,7 +8,7 @@ from app.core.config import get_settings
 from app.identity import agency as svc
 from app.identity.roles import ROLE_PERMISSIONS, agency_permissions
 from tests.conftest import build_test_settings
-from tests.helpers import csrf_headers
+from tests.helpers import PASSWORD, csrf_headers
 from tests.identity_helpers import ROLES, build_org
 from tests.test_agency_grants import FORBIDDEN, _ctx, _setup
 
@@ -75,6 +75,11 @@ def test_revoked_grant_loses_the_summary(v2_app: FastAPI, db: Session) -> None:
     assert s.agent.client.get(s.url("/summary")).status_code == 200
     svc.revoke_grant(_ctx(db, s.tenant_id, s.owner), grant_id=grant.id)
     db.commit()
+    assert s.agent.client.get(s.url("/summary")).status_code == 401  # sessions ended
+    relogin = s.agent.client.post(
+        "/api/v1/auth/login", json={"email": s.agent.email, "password": PASSWORD}
+    )
+    assert relogin.status_code == 200
     assert s.agent.client.get(s.url("/summary")).status_code == 404
 
 

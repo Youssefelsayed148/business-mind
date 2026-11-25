@@ -92,6 +92,10 @@ class AuthService:
         self.db.commit()
         return user, token
 
+    def start_session(self, user: User) -> tuple[Session, str]:
+        """Issue a session for a user who just authenticated by another proven path."""
+        return self._create_session(user)
+
     def login(self, email: str, password: str, *, rotate_token: str | None) -> tuple[User, str]:
         """Verify credentials, issue a fresh session and rotate the presented one."""
         user = self.db.scalar(select(User).where(User.email == email.strip()).with_for_update())

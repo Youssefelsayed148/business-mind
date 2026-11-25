@@ -11,7 +11,6 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, Request, Response
 from sqlalchemy import select
 from sqlalchemy.orm import Session as OrmSession
-from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from app.auth import cookies
 from app.auth.schemas import MembershipOut, MeResponse
@@ -20,6 +19,7 @@ from app.core.errors import ApiError
 from app.core.tenancy import CurrentUserDep, TenantContextDep
 from app.db.models import User
 from app.db.session import get_session
+from app.identity.gate import identity_v2_only
 from app.tenants.payloads import invitation_payload
 from app.tenants.schemas import (
     AcceptInvitationRequest,
@@ -79,15 +79,9 @@ def create_tenant(
     return TenantOut.model_validate(tenant)
 
 
-def _identity_v2_only(settings: CurrentSettingsDep) -> None:
-    """Flag off: answer exactly like an unknown route (404 {"detail":"Not Found"})."""
-    if not settings.identity_v2_enabled:
-        raise StarletteHTTPException(status_code=404, detail="Not Found")
-
-
 @router.get("/api/v1/tenants/{tenant_id}/summary", response_model=TenantSummaryOut)
 def tenant_summary(
-    _: Annotated[None, Depends(_identity_v2_only)], context: TenantContextDep
+    _: Annotated[None, Depends(identity_v2_only)], context: TenantContextDep
 ) -> TenantSummaryOut:
     """Who am I here: organization name, effective role and cap, and whether via an agency.
 
