@@ -45,6 +45,10 @@ class Settings(BaseSettings):
     sso_return_allowlist: list[str] = Field(default_factory=list)
     sso_mint_rate_limit_attempts: int = Field(default=30, ge=1, le=1000)
     sso_mint_rate_limit_window_seconds: int = Field(default=60, ge=1, le=3600)
+    # Outgoing identity email (design 6.1, 6.3). D4 (provider) is open: console only, which
+    # sends nothing. Links are built from this base URL, never from a request Host header.
+    mailer_backend: Literal["console"] = "console"
+    public_base_url: str = "http://localhost:3000"
     # MFA enforcement (design 6.4, D9). Off: MFA stays optional everywhere.
     mfa_enforce_staff: bool = False
     mfa_enforce_admins: bool = False
