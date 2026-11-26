@@ -16,8 +16,8 @@ Status values: not started / in progress / in review / done / blocked.
 | 1. Inventory and design | `claude/blissful-allen-b63jty` (stacked on `docs/phase-4-plan`) | [#12](https://github.com/Youssefelsayed148/business-mind/pull/12) | done (owner accepted P1 to P8, 2026-11-26; PR still open) | Owner approves the docs and P1 to P8 |
 | 4A. Connection | `claude/blissful-allen-b63jty` (the session's assigned branch; no separate `phase-4/connection`) | [#12](https://github.com/Youssefelsayed148/business-mind/pull/12) | in review | Role and tenant isolation tests pass |
 | 4B. Shell | `claude/blissful-allen-b63jty` (same session branch) | [#12](https://github.com/Youssefelsayed148/business-mind/pull/12) | in review | One Many page works end to end |
-| 4C. Client pages | `phase-4/client-pages` | - | not started | Client and staff browser tests pass |
-| 4D. Staff pages | `phase-4/staff-pages` | - | not started | Every old tab has a place |
+| 4C. Client pages | `claude/blissful-allen-b63jty` (same session branch) | [#12](https://github.com/Youssefelsayed148/business-mind/pull/12) | in review | Client and staff browser tests pass |
+| 4D. Staff pages | `claude/blissful-allen-b63jty` (same session branch) | [#12](https://github.com/Youssefelsayed148/business-mind/pull/12) | in review | Every old tab has a place |
 | 4E. Identity screens | `phase-4/identity-screens` | - | not started | One login reaches every page the role allows |
 | 4F. Close | `phase-4/close` | - | not started | All exit criteria pass |
 
@@ -96,13 +96,13 @@ fixing it.
 | 3 one membership at a time | fixed (design change, see 13) | SSO memberships now live 15 minutes after their last exchange; `test_a_recent_membership_survives_a_move_and_an_aged_one_is_removed` |
 | 4 Manager lacks Many permissions | confirmed, handled in the proxy | the allowlist permission for every route equals Many's own guard per role (`scripts/test_many_proxy_allowlist.py`); pages in 4C must still hide actions |
 | 5 Messages tab | decided (P5) | kept, staff only: `GET /messages*` in the staff allowlist |
-| 6 Instagram OAuth return address | open | 4C and 4D |
+| 6 Instagram OAuth return address | fixed in 4C (browser-tested with mocks) | `/accounts` keeps its query and routes by session: staff to `/platform/instagram/accounts`, one organization to its channels page, several to `/app`; `phase4c-channels.spec.ts` |
 | 7 identity screens | open | 4E |
 | 8 web test baseline | partly done in 4B (Node 22, not 24) | lint, typecheck, build and the full Playwright suite ran green on Node 22 (14); the Node 24 run is still owed |
 | 9 role visibility in the web app | fixed in 4B (display only) | `useOrgRole` reads `GET /tenants/{id}/summary` and falls back to the stored role when identity v2 is off; unit tests `phase4b.unit.mjs`; the badge now shows Owner, Admin, Manager, Agent or Viewer |
 | 10 nginx paths | open, not testable here | no Docker daemon in the cloud session; with the proxy the new shell does not depend on it; recheck when the old dashboard is run in the unified compose |
 | 11 WhatsApp reads need Owner or Admin | confirmed | allowlist cross-check: Manager, Agent and Viewer are refused on every WhatsApp read, in the SaaS proxy and in Many |
-| 12 global vs workspace role in ported pages | open | 4C |
+| 12 global vs workspace role in ported pages | fixed in 4C | pages read the organization role (`useOrgRole`), never `/auth/me`; viewer, agent and manager tests in `phase4c-channels.spec.ts` and `phase4c-whatsapp.spec.ts` |
 | 13 missing Next 16 docs | closed in 4B | docs are in `modules/saas/node_modules/next/dist/docs` once `npm ci` has run in `modules/saas`; notes in 14.3 |
 
 Phase 3 review items (P7): 1 fixed (`test_a_recovery_code_cannot_be_spent_twice_at_once`,
@@ -404,6 +404,7 @@ rollback is the previous `unified.conf`.
 - Step order stays 4A to 4F. Nothing else changes.
 - 2026-11-26, Claude Code (4A): owner accepted P1 to P8; implemented 4A on the session branch; section 13 is the record. Gates in section 13.
 - 2026-11-26, Claude Code (4B): owner accepted the 4B plan and its four answers; implemented 4B on the session branch; section 14 is the record.
+- 2026-11-26, Claude Code (4C and 4D): owner said to continue with both; built together on the session branch with four parallel page-porting agents on separate files and one integration pass; section 15 is the record.
 
 ## 13. Step 4A record (2026-11-26)
 
@@ -534,3 +535,84 @@ after its review.
 - The menu shows only the Many overview; every other entry in `lib/menu.ts` has `shipped: false`.
 - The proxy has no rate limit of its own (decided: not now; revisit in 4F with load numbers).
 - Next 16.4.3 security notice: the owner decides whether and when to upgrade.
+
+## 15. Steps 4C and 4D record (2026-11-26)
+
+The owner asked for 4C and 4D together and to use subagents if useful. How it was done: the lead
+built the shared parts first (`lib/many.ts` calls with plain errors, `lib/use-many.ts`,
+`lib/role-gate.tsx`, the public opt-in call and page); four agents then ported pages on separate
+new files (WhatsApp; channels, Facebook and `/accounts`; Instagram; leads, messages, logs and
+conversations) from a written guide; the lead merged the menu, redirects and titles, ran every
+browser spec and fixed what broke. Agents wrote their specs without running them; the lead ran them.
+No backend, Many or Instagram file changed except the public opt-in route in the SaaS API.
+
+### 15.1 What was built
+
+| Area | Pages (new routes) | Role |
+|---|---|---|
+| Client | `/app/[tenant]/channels` (Facebook and WhatsApp accounts: list, connect, disconnect, hard delete, AI settings, SaaS delegation) | read all; connect and disconnect Admin; hard delete Owner |
+| Client | `/app/[tenant]/facebook/campaigns` (list, create, edit, keywords, delete) | read all; write Manager; delete Admin |
+| Client | `/app/[tenant]/whatsapp/{contacts,templates,campaigns,campaigns/new,campaigns/[id],health}` | Admin and Owner for every call |
+| Public | `/opt-in/[token]` (same address as before) through `POST /api/v1/many/public/whatsapp/opt-in/{token}` | none; limited 10 per address and 100 per link per hour; only `{"phone": "+digits"}` |
+| Return | `/accounts` (OAuth return, query kept, routes by session) | any |
+| Staff | `/platform/instagram/{accounts,campaigns,campaigns/new,campaigns/[id],campaigns/[id]/stats,conversations}`, `/platform/{leads,messages,logs}` | platform staff |
+| Shell | menu entries by role, page titles, old URLs redirected to the new pages, sidebar list scrolls on short windows | |
+
+### 15.2 Old tabs (exit criterion of 4D: every old tab has a place)
+
+| Old tab | New place |
+|---|---|
+| Overview | `/platform/many` (4B) |
+| Accounts | Facebook and WhatsApp: `/app/[tenant]/channels`; Instagram: `/platform/instagram/accounts` |
+| Campaigns (Instagram) | `/platform/instagram/campaigns` (new, edit, stats) |
+| Facebook campaigns | `/app/[tenant]/facebook/campaigns` |
+| WhatsApp contacts, templates, campaigns, health | `/app/[tenant]/whatsapp/...` (four sections; "new campaign" is a button on the campaigns page) |
+| Conversations | `/platform/instagram/conversations` (delegated rows show no take-over or resume) |
+| Messages, Leads, Logs | `/platform/messages`, `/platform/leads`, `/platform/logs` |
+| Opt-in, Privacy, Terms, Login | `/opt-in/[token]` (new), `/privacy`, `/terms`, `/login` (existing, same addresses) |
+
+### 15.3 Not ported, and differences the owner should know
+
+- **Leads CSV export** is not ported: `/leads/export.csv` is a file download that is not in the proxy allowlist.
+- Instagram **MockConnect** (development only, `POST /meta/connect/mock`, not allowlisted) is not ported.
+- **Instagram connect, reconnect and hard delete** need an organization (Many's routes are workspace-scoped): the staff page has an organization picker and keeps those actions disabled until one is chosen.
+- **Old Facebook and WhatsApp addresses** (`/facebook-campaigns`, `/whatsapp/...`) cannot name an organization, so they lead to `/app` (the workspace list). `/campaigns`, `/leads`, `/logs`, `/messages`, `/conversations`, `/overview` go to their staff pages.
+- **Conversations list**: Many's rows carry no organization id, so a delegated row shows "Handled in the shared inbox" and no link. Many would need to return a tenant id for the link.
+- **Paging** is done in the browser (50 rows) for leads, messages and conversations, because Many returns every row; logs keep the old `limit`.
+- Additions beyond the old pages: Facebook and WhatsApp hard delete, Facebook keyword add and remove after creation, WhatsApp template delete, confirmations before revoke, cancel and link rotation, Instagram health and media on the accounts page.
+- **Public opt-in prerequisite (not done, not testable here):** Many sees this API's address for every customer unless it is started with `--proxy-headers --forwarded-allow-ips=<SaaS API address>`. Without that, Many's own limit (10 per hour) is shared by everyone and the consent evidence records the proxy's address. See `docs/RUNBOOK-DEV.md`. Until the owner decides, the opt-in link base can stay on the old dashboard.
+
+### 15.4 Existing tests changed
+
+- `group-b-client-visibility.spec.ts` and `b5-conversations.spec.ts`: the sidebar list now contains the new items (Channels, four WhatsApp items for Admin, Facebook campaigns).
+- `account.spec.ts`: the Account link is matched by its exact name (the platform sidebar now also has "Instagram accounts").
+- `phase4b-shell.spec.ts` and `phase4b.unit.mjs`: redirect expectations follow the new destinations.
+
+### 15.5 Gates (cloud container, Node 22, Postgres 16, no Docker; observed)
+
+| Gate | Result |
+|---|---|
+| Web `npm run lint`, `npm run typecheck`, logical-CSS check | clean |
+| Web unit tests (`npm run test:unit`) | 87 passed |
+| Full web Playwright suite | 278 passed, 0 failed, 5.8 min (the run before the last two fixes had 10 failures from the new sidebar items and the cramped sidebar; all fixed) |
+| New specs | opt-in 6, channels and Facebook 24, WhatsApp 23 (69 of 69 over three repeats), Instagram 20, staff pages 18 |
+| SaaS API: public opt-in route | 17 tests; with the proxy tests 65 passed; ruff, format, strict mypy clean (337 files) |
+| `check_instagram_frozen.py` | OK |
+
+Real findings while integrating: eight spec races (an assertion read before the call happened) were
+fixed with polling; the sidebar had no scroll and the list now overflowed short windows (a real
+fault in the UI, fixed in `globals.css`); stale test data from other specs polluted a text
+assertion; links that come from Many or from campaign settings are now opened only if http or https
+(`lib/safe-url.ts`).
+
+Not run or not verified: the real Meta connect flows (the SDK is stubbed in the specs; the
+WhatsApp embedded-signup happy path is untested), a real Many process behind any page, Node 24,
+`dev-up.sh test`, the nginx checks, mobile layout, Arabic or right-to-left rendering, screenshots,
+a load test, and a manual look at any page in a browser. The agents' code was not line-reviewed
+beyond the spec runs and a scan for unsafe patterns.
+
+### 15.6 Left for 4E and 4F
+
+- 4E: team, invitations, password reset, MFA, sessions screens (gap 7).
+- 4F: deny the public SSO exchange at the edge, nginx paths for the old dashboard (gap 10), screenshots including an Arabic fixture, the full old-tab walk in a browser, Node 24 run, full backend gates on the WSL stack.
+- Phase 3 review items 2, 4, 5, 6 open; items 8 to 10 still block enabling any flag.
