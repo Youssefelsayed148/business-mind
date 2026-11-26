@@ -15,7 +15,7 @@ Status values: not started / in progress / in review / done / blocked.
 |---|---|---|---|---|
 | 1. Inventory and design | `claude/blissful-allen-b63jty` (stacked on `docs/phase-4-plan`) | [#12](https://github.com/Youssefelsayed148/business-mind/pull/12) | done (owner accepted P1 to P8, 2026-11-26; PR still open) | Owner approves the docs and P1 to P8 |
 | 4A. Connection | `claude/blissful-allen-b63jty` (the session's assigned branch; no separate `phase-4/connection`) | [#12](https://github.com/Youssefelsayed148/business-mind/pull/12) | in review | Role and tenant isolation tests pass |
-| 4B. Shell | `phase-4/shell` | - | not started | One Many page works end to end |
+| 4B. Shell | `claude/blissful-allen-b63jty` (same session branch) | [#12](https://github.com/Youssefelsayed148/business-mind/pull/12) | in review | One Many page works end to end |
 | 4C. Client pages | `phase-4/client-pages` | - | not started | Client and staff browser tests pass |
 | 4D. Staff pages | `phase-4/staff-pages` | - | not started | Every old tab has a place |
 | 4E. Identity screens | `phase-4/identity-screens` | - | not started | One login reaches every page the role allows |
@@ -98,12 +98,12 @@ fixing it.
 | 5 Messages tab | decided (P5) | kept, staff only: `GET /messages*` in the staff allowlist |
 | 6 Instagram OAuth return address | open | 4C and 4D |
 | 7 identity screens | open | 4E |
-| 8 web test baseline | open | 4B; needs Node 24 |
-| 9 role visibility in the web app | open, no code yet | plan: the shell reads `GET /tenants/{id}/summary` (flag on); decide in 4B |
+| 8 web test baseline | partly done in 4B (Node 22, not 24) | lint, typecheck, build and the full Playwright suite ran green on Node 22 (14); the Node 24 run is still owed |
+| 9 role visibility in the web app | fixed in 4B (display only) | `useOrgRole` reads `GET /tenants/{id}/summary` and falls back to the stored role when identity v2 is off; unit tests `phase4b.unit.mjs`; the badge now shows Owner, Admin, Manager, Agent or Viewer |
 | 10 nginx paths | open, not testable here | no Docker daemon in the cloud session; with the proxy the new shell does not depend on it; recheck when the old dashboard is run in the unified compose |
 | 11 WhatsApp reads need Owner or Admin | confirmed | allowlist cross-check: Manager, Agent and Viewer are refused on every WhatsApp read, in the SaaS proxy and in Many |
 | 12 global vs workspace role in ported pages | open | 4C |
-| 13 missing Next 16 docs | open | 4B |
+| 13 missing Next 16 docs | closed in 4B | docs are in `modules/saas/node_modules/next/dist/docs` once `npm ci` has run in `modules/saas`; notes in 14.3 |
 
 Phase 3 review items (P7): 1 fixed (`test_a_recovery_code_cannot_be_spent_twice_at_once`,
 `test_a_totp_code_cannot_be_used_twice_at_once`), 3 fixed (`test_a_location_limited_admin_cannot_use_organization_wide_settings`),
@@ -403,6 +403,7 @@ rollback is the previous `unified.conf`.
   role) rule for ported actions (gap 12).
 - Step order stays 4A to 4F. Nothing else changes.
 - 2026-11-26, Claude Code (4A): owner accepted P1 to P8; implemented 4A on the session branch; section 13 is the record. Gates in section 13.
+- 2026-11-26, Claude Code (4B): owner accepted the 4B plan and its four answers; implemented 4B on the session branch; section 14 is the record.
 
 ## 13. Step 4A record (2026-11-26)
 
@@ -464,3 +465,72 @@ checked against Many's real route table instead).
 - No per-request rate limit on the proxy itself (the exchange is limited at the issuer; Many has
   its own limits). Decide in 4B or 4F.
 - Closing the public exchange at the edge is 4F.
+
+## 14. Step 4B record (2026-11-26)
+
+Owner decisions on the 4B plan (2026-11-26): go ahead as proposed; the one page is `/platform/many`
+(Many overview, staff only); no separate proxy rate limit; stacked on 4A (same branch). For 4C
+and 4D the owner said to use subagents if useful: see 14.5.
+
+### 14.1 What was built (all in `modules/saas/apps/web` unless noted)
+
+| # | Change | Where |
+|---|---|---|
+| 1 | Real organization role for the shell: `orgRoleFromSummary`, `orgRoleFromStored` (same mapping as the API, never escalates), `orgRoleSatisfies`; `useOrgRole` asks `GET /tenants/{id}/summary` and falls back to the stored role on any failure (identity v2 off answers 404). Display only; the API stays the gate | `lib/org-role.ts`, `lib/use-org-role.ts`, `lib/api.ts` (`tenantSummary`) |
+| 2 | Menu tree 12.2 as data with `shipped` flags (an unbuilt page is never linked) and `visibleMenu`; the platform sidebar shows the "Many overview" entry | `lib/menu.ts`, `lib/app-header.tsx` |
+| 3 | Organization switcher keeps the current page (cut before the first id); a person with one organization and no staff flag sees no switcher | `lib/org-switch.ts`, `lib/app-header.tsx` |
+| 4 | Shared page states: loading, empty (role-aware), failed with retry, forbidden, not available, signed out; plain words, never a raw status code | `lib/page-state.tsx` |
+| 5 | Many client through the proxy (`manyStaff`, `manyOrg`) and `manyFailureKind` (401 session, 403 forbidden, 404 not available, 502 or 503 or 504 unavailable, else error) | `lib/many.ts` |
+| 6 | The one Many page: `/platform/many` reads `GET /api/v1/many/staff/stats/overview`; the existing server-side staff guard of `/platform` refuses non-staff before the page renders | `app/platform/many/page.tsx` |
+| 7 | Old Many dashboard URLs (P6): `/overview` goes to `/platform/many`; the other old pages go to `/moved` (query kept, address shown as text, never markup) until 4C and 4D ship them; temporary 307 | `lib/old-urls.ts`, `next.config.ts`, `app/moved/page.tsx` |
+| 8 | Logical-CSS check (12.5): fails on physical left/right properties unless the line carries a `physical-ok:` comment; `npm run check:logical-css`, `npm run test:unit` | `scripts/check-logical-css.mjs`, `package.json` |
+
+No API, Many or Instagram file changed; no migration; no flag turned on.
+
+### 14.2 Changes to existing tests (the owner should know)
+
+- `ui-redesign.spec.ts`: the context badge now reads "Admin" (was "admin"), because it shows the real role label.
+- `group-a-operator.spec.ts`: "membership switcher" now expects NO switcher for one organization (12.3, accepted) and a switcher with three options for two organizations.
+- `group-c-fixtures.ts`: the fake API answers `GET /tenants/{id}/summary` with 404 (identity v2 off). Without it, eight tests that fail on any unmocked call broke, because the shell now makes that one extra call per organization page.
+
+### 14.3 Next 16 notes (gap 13)
+
+Read in `node_modules/next/dist/docs`: `redirects` in `next.config` run before the filesystem and
+pass the query string through; `permanent: false` gives 307. `proxy.ts` replaces `middleware.ts`;
+this app's proxy matches only `/api/*` and `/widget/frame`, so old URLs are handled in
+`next.config.ts`, not in the proxy. Observed: the first `next build` of a session stops with a
+notice that Next 16.4.3 is affected by a known security vulnerability and asks for an upgrade; a
+second run of the same command builds. The upgrade was not run (see 14.4).
+
+### 14.4 Gates (cloud container, Node 22.23.5, Postgres 16, no Docker daemon; observed)
+
+| Gate | Result |
+|---|---|
+| `npm run lint` (`--max-warnings 0`), `npm run typecheck`, `npx next build` | clean, clean, built (the build needed a second run, see 14.3) |
+| `npm run test:unit` (all `tests/*.unit.mjs`) | 33 passed (9 new). One new test failed first and found a real bug: `orgRoleFromSummary("toString")` returned a value (prototype lookup); fixed with `Object.hasOwn` |
+| `npm run check:logical-css` | OK (0 physical rules in `app/**/*.css`) |
+| New Playwright spec `phase4b-shell.spec.ts` | 9 passed: staff sees the page; 403, 404 and 502 states; retry recovers; a client cannot open `/platform/many` and no Many call is made; no switcher for one organization; old URLs keep their query; the moved page does not render markup |
+| Full web Playwright suite (185 tests) | first run on a wrong database URL: the DB worker refused to start and 14 tests failed by timeout (environment). Second run: 177 passed, 8 failed (the unmocked `/summary` call, fixed in `group-c-fixtures.ts`). Third run: 184 passed, 1 failed (`ui-characterization` "platform operations", a 30 s click timeout, not touched by this step); that spec passed twice on re-run (12 of 12). Not proven to be flaky on a clean base |
+| `check_instagram_frozen.py` | OK |
+
+The browser is the container's Chromium 1243 launched through a temporary config (Playwright
+1.64 expects 1248, and the repo config rebuilds the app on every run). The temporary file was
+deleted. Not run: Node 24, `scripts/dev-up.sh test`, nginx checks, a real Many process behind
+`/platform/many` (the browser calls were answered by Playwright), mobile layout of the new page
+(no screenshot), Arabic or RTL checks (planned for 4F).
+
+### 14.5 Subagents for 4C and 4D (owner's question)
+
+Recommendation: do not run 4C and 4D in parallel subagents. Both edit the same shared files
+(`lib/menu.ts`, `lib/old-urls.ts`, `lib/many.ts`, the proxy allowlist tests); the test harness
+(one database, fixed ports) runs one Playwright suite at a time; and each step stops for the
+owner's review. Where subagents do help: an independent security and role review of each step's
+diff after it is built, and reading one old page while another is ported. 4C comes first, 4D
+after its review.
+
+### 14.6 Left for later steps
+
+- Gap 8 on Node 24; gaps 6, 7, 10, 12 (see 5.1); Phase 3 review items 2, 4, 5, 6; items 8 to 10 still block enabling a flag.
+- The menu shows only the Many overview; every other entry in `lib/menu.ts` has `shipped: false`.
+- The proxy has no rate limit of its own (decided: not now; revisit in 4F with load numbers).
+- Next 16.4.3 security notice: the owner decides whether and when to upgrade.
