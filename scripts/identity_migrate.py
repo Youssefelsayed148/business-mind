@@ -7,6 +7,12 @@ Subcommands (dry-run is the default and never writes):
   apply    write the links. Needs the hash of a report the owner reviewed
            (--report-hash), the typed database names (--confirm-databases) and --yes.
   verify   read-only post-checks.
+  map-report / map-apply / verify-mapping
+           organization to workspace mapping (Phase 4A, design 4.1). The owner supplies a JSON
+           file of {"tenant_id": ..., "workspace_id": ...} pairs. map-report is read-only and
+           classifies every pair; map-apply needs its report hash, the typed database names and
+           --yes, refuses on any conflict, and sets both sides (tenants.many_workspace_id and
+           workspaces.saas_tenant_id). verify-mapping checks that both sides agree.
 
 Connections come from the environment only and are never printed (only host and
 database name are):
@@ -26,9 +32,8 @@ Rules that hold on every run:
   running apps never link by email.
 - Both databases are locked with a Postgres advisory lock for the whole run, and apply
   is idempotent (a re-run changes nothing; a half-finished run completes).
-- Not applied by this tool: organization memberships and the organization to workspace
-  mapping. They need the owner's mapping decisions (design D10) and are listed in the
-  report notes.
+- Not applied by `apply`: organization memberships. The organization to workspace mapping is
+  a separate subcommand (map-apply) that only writes what the owner's mapping file lists.
 
 Take a backup before apply. Never run this against production in Phase 3.
 """
@@ -57,7 +62,7 @@ PHC_ARGON2 = re.compile(
     r"^\$(argon2id|argon2i|argon2d)\$v=(\d+)\$m=(\d+),t=(\d+),p=(\d+)\$([A-Za-z0-9+/]+)\$([A-Za-z0-9+/]+)$"
 )
 NOTES = [
-    "Organization memberships and the organization to workspace mapping are NOT applied by this tool.",
+    "Organization memberships are NOT applied by this tool; the organization to workspace mapping is a separate subcommand (map-apply).",
     "No account is made platform staff here; a Many global admin is flagged for an owner decision.",
     "Case-variant duplicates and role conflicts are skipped until the owner decides.",
 ]
@@ -436,6 +441,159 @@ def verify(many_conn: Any, saas_conn: Any) -> dict[str, Any]:
     }
 
 
+# --- organization to workspace mapping (Phase 4A, design 4.1) -----------------------------------
+
+
+def _uuid_text(value: Any) -> str | None:
+    return None if value is None else str(value)
+
+
+def load_mapping(path: Path) -> list[tuple[str, str]]:
+    """Read the owner's mapping file. Refuses anything that is not a clean 1:1 list of pairs."""
+    try:
+        data = json.loads(Path(path).read_text(encoding="utf-8"))
+    except (OSError, ValueError) as exc:
+        raise Refused(f"cannot read the mapping file: {exc}") from exc
+    if not isinstance(data, list) or not data:
+        raise Refused("the mapping file must be a non-empty JSON list")
+    pairs: list[tuple[str, str]] = []
+    for item in data:
+        if not isinstance(item, dict) or set(item) != {"tenant_id", "workspace_id"}:
+            raise Refused('every entry must be exactly {"tenant_id": ..., "workspace_id": ...}')
+        try:
+            pairs.append((str(uuid.UUID(str(item["tenant_id"]))), str(uuid.UUID(str(item["workspace_id"])))))
+        except ValueError as exc:
+            raise Refused("tenant_id and workspace_id must be UUIDs") from exc
+    if len({t for t, _ in pairs}) != len(pairs) or len({w for _, w in pairs}) != len(pairs):
+        raise Refused("each organization and each workspace may appear only once (1:1 mapping)")
+    return pairs
+
+
+def _classify_pair(tenant: tuple[Any, ...] | None, workspace: tuple[Any, ...] | None,
+                   tenant_id: str, workspace_id: str) -> str:
+    if tenant is None:
+        return "conflict_tenant_missing"
+    if workspace is None:
+        return "conflict_workspace_missing"
+    t_status, t_ws = tenant[0], _uuid_text(tenant[1])
+    w_tenant = _uuid_text(workspace[0])
+    if t_ws == workspace_id and w_tenant == tenant_id:
+        return "unchanged"  # an already mapped pair stays valid even if the organization is paused later
+    if t_status != "active":
+        return "conflict_tenant_not_active"
+    if t_ws not in (None, workspace_id):
+        return "conflict_tenant_mapped_elsewhere"
+    if w_tenant not in (None, tenant_id):
+        return "conflict_workspace_taken"
+    return "map" if t_ws is None and w_tenant is None else "complete"
+
+
+def build_mapping_report(many_conn: Any, saas_conn: Any, pairs: list[tuple[str, str]]) -> dict[str, Any]:
+    rows: list[dict[str, Any]] = []
+    for tenant_id, workspace_id in pairs:
+        with saas_conn.cursor() as cur:
+            cur.execute("SELECT status, many_workspace_id FROM tenants WHERE id = %s", (tenant_id,))
+            tenant = cur.fetchone()
+        with many_conn.cursor() as cur:
+            cur.execute("SELECT saas_tenant_id FROM workspaces WHERE id = %s", (workspace_id,))
+            workspace = cur.fetchone()
+        rows.append({
+            "tenant_id": tenant_id,
+            "workspace_id": workspace_id,
+            "action": _classify_pair(tenant, workspace, tenant_id, workspace_id),
+            "tenant_status": None if tenant is None else tenant[0],
+            "tenant_points_at": None if tenant is None else _uuid_text(tenant[1]),
+            "workspace_points_at": None if workspace is None else _uuid_text(workspace[0]),
+        })
+    conflicts = sum(1 for r in rows if r["action"].startswith("conflict_"))
+    summary = {
+        "pairs": len(rows),
+        "to_map": sum(1 for r in rows if r["action"] == "map"),
+        "to_complete": sum(1 for r in rows if r["action"] == "complete"),
+        "unchanged": sum(1 for r in rows if r["action"] == "unchanged"),
+        "conflicts": conflicts,
+        "ok_to_apply": conflicts == 0,
+    }
+    body = {"pairs": rows, "summary": summary}
+    return {**body, "report_hash": report_hash(body)}
+
+
+def apply_mapping(
+    many_conn: Any,
+    saas_conn: Any,
+    pairs: list[tuple[str, str]],
+    *,
+    expected_hash: str,
+    confirm_databases: str,
+) -> dict[str, int]:
+    """Refuse unless the databases still match the reviewed report and it has no conflict, then map.
+
+    The two databases cannot share a transaction, so the Many side is written first and the SaaS
+    side second, each only where it is still empty. A run that stops in between leaves a "complete"
+    pair that the next run finishes; nothing is ever overwritten.
+    """
+    names = f"{db_name(many_conn)},{db_name(saas_conn)}"
+    if confirm_databases != names:
+        raise Refused(f"--confirm-databases must be exactly {names!r}")
+    for label, conn in (("Many", many_conn), ("SaaS", saas_conn)):
+        if not try_lock(conn):
+            raise Refused(f"another migration holds the {label} advisory lock")
+    try:
+        report = build_mapping_report(many_conn, saas_conn, pairs)
+        if report["report_hash"] != expected_hash:
+            raise Refused("the databases no longer match the reviewed report (hash differs)")
+        if not report["summary"]["ok_to_apply"]:
+            raise Refused("the report has conflicts; nothing was written")
+        counts: Counter[str] = Counter()
+        for row in report["pairs"]:
+            action, tenant_id, workspace_id = row["action"], row["tenant_id"], row["workspace_id"]
+            if action == "unchanged":
+                counts["unchanged"] += 1
+                continue
+            with many_conn.cursor() as cur:
+                cur.execute(
+                    "UPDATE workspaces SET saas_tenant_id = %s WHERE id = %s AND saas_tenant_id IS NULL",
+                    (tenant_id, workspace_id),
+                )
+            many_conn.commit()
+            with saas_conn.cursor() as cur:
+                cur.execute(
+                    "UPDATE tenants SET many_workspace_id = %s WHERE id = %s AND many_workspace_id IS NULL",
+                    (workspace_id, tenant_id),
+                )
+            saas_conn.commit()
+            counts["mapped" if action == "map" else "completed"] += 1
+        return {"mapped": counts["mapped"], "completed": counts["completed"], "unchanged": counts["unchanged"]}
+    finally:
+        unlock(many_conn)
+        unlock(saas_conn)
+
+
+def verify_mapping(many_conn: Any, saas_conn: Any) -> dict[str, Any]:
+    """Read-only: every mapped organization and workspace must point at each other."""
+    with saas_conn.cursor() as cur:
+        cur.execute("SELECT id, many_workspace_id FROM tenants")
+        tenants = {str(i): _uuid_text(w) for i, w in cur.fetchall()}
+    with many_conn.cursor() as cur:
+        cur.execute("SELECT id, saas_tenant_id FROM workspaces")
+        workspaces = {str(i): _uuid_text(t) for i, t in cur.fetchall()}
+    problems: list[str] = []
+    mapped = 0
+    for tenant_id, workspace_id in tenants.items():
+        if workspace_id is None:
+            continue
+        if workspace_id not in workspaces:
+            problems.append(f"organization {tenant_id} points at a missing workspace {workspace_id}")
+        elif workspaces[workspace_id] != tenant_id:
+            problems.append(f"organization {tenant_id} and workspace {workspace_id} do not point at each other")
+        else:
+            mapped += 1
+    for workspace_id, tenant_id in workspaces.items():
+        if tenant_id is not None and tenant_id not in tenants:
+            problems.append(f"workspace {workspace_id} points at a missing organization {tenant_id}")
+    return {"ok": not problems, "mapped": mapped, "problems": problems}
+
+
 # --- command line -------------------------------------------------------------------------------
 
 
@@ -469,6 +627,14 @@ def main(argv: list[str] | None = None) -> int:
     app.add_argument("--confirm-databases", required=True, help="'<many_db>,<saas_db>' typed out")
     app.add_argument("--yes", action="store_true", help="I took a backup and reviewed the report")
     sub.add_parser("verify", help="read-only post-checks")
+    mrep = sub.add_parser("map-report", help="read-only: classify the owner's organization to workspace pairs")
+    mrep.add_argument("--mapping", required=True, help="JSON file of {tenant_id, workspace_id} pairs")
+    mapp = sub.add_parser("map-apply", help="write the reviewed mapping to both databases")
+    mapp.add_argument("--mapping", required=True)
+    mapp.add_argument("--report-hash", required=True)
+    mapp.add_argument("--confirm-databases", required=True, help="'<many_db>,<saas_db>' typed out")
+    mapp.add_argument("--yes", action="store_true", help="I took a backup and reviewed the report")
+    sub.add_parser("verify-mapping", help="read-only: both sides of every mapping agree")
     args = parser.parse_args(argv)
 
     many_conn, saas_conn = _connect("MANY_DATABASE_URL"), _connect("SAAS_DATABASE_URL")
@@ -488,6 +654,22 @@ def main(argv: list[str] | None = None) -> int:
                 raise SystemExit("apply needs --yes (backup taken, report reviewed)")
             print(json.dumps(apply_report(many_conn, saas_conn, expected_hash=args.report_hash, confirm_databases=args.confirm_databases), indent=2))
             return 0
+        if args.command == "map-report":
+            report = build_mapping_report(many_conn, saas_conn, load_mapping(Path(args.mapping)))
+            print(json.dumps(report, indent=2))
+            print("Dry run: nothing was written to either database.")
+            return 0 if report["summary"]["ok_to_apply"] else 1
+        if args.command == "map-apply":
+            if not args.yes:
+                raise SystemExit("map-apply needs --yes (backup taken, report reviewed)")
+            print(json.dumps(apply_mapping(many_conn, saas_conn, load_mapping(Path(args.mapping)),
+                                           expected_hash=args.report_hash,
+                                           confirm_databases=args.confirm_databases), indent=2))
+            return 0
+        if args.command == "verify-mapping":
+            result = verify_mapping(many_conn, saas_conn)
+            print(json.dumps(result, indent=2))
+            return 0 if result["ok"] else 1
         result = verify(many_conn, saas_conn)
         print(json.dumps(result, indent=2))
         return 0 if result["ok"] else 1
