@@ -53,12 +53,14 @@ Exit criteria: all tests pass; flag off = identical behavior (proven by tests); 
 ## PHASE 4: One dashboard
 
 Goal: one app with one menu containing every tab of both apps, Instagram included as a channel.
+The plan lives in docs/PHASE-4-PLAN.md (updated 2026-11-26). Use this prompt for every Phase 4 session, after the common preamble.
 Tasks:
-1. Inventory every page of Many's dashboard and the SaaS web app into docs/UI-INVENTORY.md (route, purpose, API used, role). Propose the new information architecture (menu tree, naming, RTL/language handling, theme) and a mockup description. Wait for my OK.
-2. SaaS Next 16 app is the shell. Port Many's pages as modules (Overview, Accounts, Campaigns, Facebook campaigns, Leads, Logs, WhatsApp pages, Instagram accounts). Keep the old API calls; do not change Instagram backend code. For delegated channels hide Many's Conversations/Take Over and use the SaaS inbox.
-3. Shared layout, auth guard (from phase 3), channel switcher, consistent empty/error/loading states.
-4. Tests: Playwright smoke test per page, typecheck, lint, build. Screenshots of every page in desktop and mobile width (saved under docs/ui-screenshots/, tell me the path).
-Exit criteria: checklist showing every old tab has a place; smoke tests pass; build passes.
+1. Read docs/PHASE-4-PLAN.md, docs/PHASE-3-REVIEW.md, docs/IDENTITY-DESIGN.md (sections 2 and 4, decisions D1-D10) and modules/saas/apps/web/AGENTS.md (this Next version differs from what you know: read its bundled docs).
+2. Verify the plan's base commit and status against git; the repo wins over the document. All identity flags default OFF.
+3. Take the first step in the status table that is not done. Tell me its plan and wait for my OK. If it is step 1, it is docs only: write docs/UI-INVENTORY.md, add the design to docs/PHASE-4-PLAN.md, ask me decisions P1-P8 with your recommendations, then STOP.
+4. For later steps: one branch and draft PR per step, confirm each known gap with a failing test before fixing it, run scripts/check_instagram_frozen.py in every gate, and prove flags off behaves as today.
+5. At the end update docs/PHASE-4-PLAN.md as its section 10 says.
+Exit criteria: section 8 of docs/PHASE-4-PLAN.md.
 
 ## PHASE 5: Unified data and behaviour
 
