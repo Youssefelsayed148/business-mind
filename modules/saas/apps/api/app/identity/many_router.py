@@ -90,7 +90,14 @@ def _session_hash(request: Request, settings: Settings) -> str | None:
 
 
 def _respond(result: many_proxy.ManyResponse) -> Response:
-    headers = {**result.headers, "Cache-Control": "no-store", "Referrer-Policy": "no-referrer"}
+    # Many's body is served from the SaaS origin: never let a browser sniff or run it.
+    headers = {
+        **result.headers,
+        "Cache-Control": "no-store",
+        "Referrer-Policy": "no-referrer",
+        "X-Content-Type-Options": "nosniff",
+        "Content-Security-Policy": "default-src 'none'; frame-ancestors 'none'; sandbox",
+    }
     return Response(content=result.body, status_code=result.status, headers=headers)
 
 

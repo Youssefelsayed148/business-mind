@@ -381,6 +381,8 @@ def test_only_the_server_minted_credentials_are_forwarded(
     )
     assert response.status_code == 200 and response.json() == {"ok": True}
     assert response.headers["cache-control"] == "no-store"
+    assert response.headers["x-content-type-options"] == "nosniff"
+    assert "sandbox" in response.headers["content-security-policy"]
     sent = many.forwarded[0]
     assert sent["path"] == "/whatsapp/accounts?limit=5" and sent["method"] == "GET"
     assert sent["headers"]["authorization"] == "Bearer many-token-1"

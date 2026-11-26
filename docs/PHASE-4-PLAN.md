@@ -3,7 +3,7 @@
 Living plan. Last updated: 2026-11-26 (Claude Code, step 1). Base: `main` at `32d32e9`.
 Parent: `docs/MERGE-PLAN.md` (Phase 4). Progress record: `docs/MERGE-PROGRESS.md`.
 
-**Status: step 1 approved with P1 to P8 as recommended (2026-11-26); 4A in progress. No Phase 4 code
+**Status: step 1 approved with P1 to P8 as recommended (2026-11-26); 4A implemented and waiting for the owner's review (same branch and draft PR #12; see section 13). 4B is not started. No Phase 4 code
 exists.** `docs/UI-INVENTORY.md` is the inventory; section 12 below is the design. Everything
 after step 1 is a proposal until the owner approves P1 to P8.
 
@@ -14,7 +14,7 @@ Status values: not started / in progress / in review / done / blocked.
 | Step | Branch (suggested) | PR | Status | Done when |
 |---|---|---|---|---|
 | 1. Inventory and design | `claude/blissful-allen-b63jty` (stacked on `docs/phase-4-plan`) | [#12](https://github.com/Youssefelsayed148/business-mind/pull/12) | done (owner accepted P1 to P8, 2026-11-26; PR still open) | Owner approves the docs and P1 to P8 |
-| 4A. Connection | `phase-4/connection` | - | in progress | Role and tenant isolation tests pass |
+| 4A. Connection | `claude/blissful-allen-b63jty` (the session's assigned branch; no separate `phase-4/connection`) | [#12](https://github.com/Youssefelsayed148/business-mind/pull/12) | in review | Role and tenant isolation tests pass |
 | 4B. Shell | `phase-4/shell` | - | not started | One Many page works end to end |
 | 4C. Client pages | `phase-4/client-pages` | - | not started | Client and staff browser tests pass |
 | 4D. Staff pages | `phase-4/staff-pages` | - | not started | Every old tab has a place |
@@ -85,6 +85,30 @@ fixing it.
 | 11 | WhatsApp read pages need workspace Owner or Admin; Manager, Agent and Viewer get 403 on contacts, templates, campaigns and health. The menu must hide them | `routes_whatsapp_outreach.py` | 4C |
 | 12 | Old Facebook pages check the global role for actions while the backend checks the workspace role; copied as is, they would hide actions from a client Owner (their global role is `viewer`) | `dashboard/app/(dashboard)/facebook-campaigns/page.tsx`, design 5.4 | 4C |
 | 13 | The Next 16 docs named in `modules/saas/apps/web/AGENTS.md` are not in `node_modules/next/dist/docs/` after `npm ci` (Next 16.4.3). They must be found before 4B | `modules/saas/apps/web/AGENTS.md` | 4B |
+
+
+### 5.1 Gap status after 4A (2026-11-26)
+
+| # | Status | Evidence |
+|---|---|---|
+| 1 staff membership | fixed | A staff assertion may name an organization and workspace; Many gives an admin SSO membership. Tests `test_staff_for_a_workspace_*` (Many), `test_staff_scope_*` (SaaS); they failed to import before the change |
+| 2 mapping writer | fixed | `identity_migrate.py map-report`, `map-apply`, `verify-mapping`; 7 tests that failed first |
+| 3 one membership at a time | fixed (design change, see 13) | SSO memberships now live 15 minutes after their last exchange; `test_a_recent_membership_survives_a_move_and_an_aged_one_is_removed` |
+| 4 Manager lacks Many permissions | confirmed, handled in the proxy | the allowlist permission for every route equals Many's own guard per role (`scripts/test_many_proxy_allowlist.py`); pages in 4C must still hide actions |
+| 5 Messages tab | decided (P5) | kept, staff only: `GET /messages*` in the staff allowlist |
+| 6 Instagram OAuth return address | open | 4C and 4D |
+| 7 identity screens | open | 4E |
+| 8 web test baseline | open | 4B; needs Node 24 |
+| 9 role visibility in the web app | open, no code yet | plan: the shell reads `GET /tenants/{id}/summary` (flag on); decide in 4B |
+| 10 nginx paths | open, not testable here | no Docker daemon in the cloud session; with the proxy the new shell does not depend on it; recheck when the old dashboard is run in the unified compose |
+| 11 WhatsApp reads need Owner or Admin | confirmed | allowlist cross-check: Manager, Agent and Viewer are refused on every WhatsApp read, in the SaaS proxy and in Many |
+| 12 global vs workspace role in ported pages | open | 4C |
+| 13 missing Next 16 docs | open | 4B |
+
+Phase 3 review items (P7): 1 fixed (`test_a_recovery_code_cannot_be_spent_twice_at_once`,
+`test_a_totp_code_cannot_be_used_twice_at_once`), 3 fixed (`test_a_location_limited_admin_cannot_use_organization_wide_settings`),
+7 fixed (`test_an_admin_cannot_replace_a_pending_privileged_invitation`). Each failed before its fix.
+Items 2, 4, 5, 6 stay open; items 8, 9, 10 are operational and still block enabling a flag; item 11 is a deployment note.
 
 Size: the Many dashboard is about 8,900 lines. It uses Tailwind and a token in `localStorage`;
 the SaaS web app uses its own CSS tokens (light and dark) and a session cookie. Neither app has a
@@ -378,3 +402,65 @@ rollback is the previous `unified.conf`.
 - 4C and 4D get a direct-URL forbidden test per hidden page, and the workspace-role (not global
   role) rule for ported actions (gap 12).
 - Step order stays 4A to 4F. Nothing else changes.
+- 2026-11-26, Claude Code (4A): owner accepted P1 to P8; implemented 4A on the session branch; section 13 is the record. Gates in section 13.
+
+## 13. Step 4A record (2026-11-26)
+
+Branch: `claude/blissful-allen-b63jty` (the session's assigned branch, so there is no separate
+`phase-4/connection`; PR #12 now holds step 1 and 4A and targets `docs/phase-4-plan`). Base:
+`main` at `32d32e9` plus PR #11. No migration was added (heads stay Many `0031_sso_link`, SaaS
+`0035_invitation_locations`). No Instagram file changed (`scripts/check_instagram_frozen.py` OK).
+Every new behaviour is behind a flag that defaults off.
+
+### 13.1 What was built
+
+| # | Change | Where | Tests |
+|---|---|---|---|
+| 1 | Organization to workspace mapping: `map-report`, `map-apply`, `verify-mapping` (dry run first, reviewed hash, typed database names, refuses on conflict, fills only empty pointers) | `scripts/identity_migrate.py` | 7 new in `scripts/test_identity_migrate.py` |
+| 2 | Review item 1: MFA code verification takes a row lock, so one TOTP or recovery code cannot be spent twice | `modules/saas/apps/api/app/identity/mfa.py` | 2 race tests (failed first: 2 successes instead of 1) |
+| 3 | Review items 3 and 7: retention and change requests need access to every location; an Admin cannot replace a pending Owner or Admin invitation | `app/tenants/router.py`, `app/tenants/changes.py`, `app/identity/team.py` | 5 failing-first tests, 2 control tests |
+| 4 | P2 and gap 3 (Many side): a staff assertion may name an organization and workspace; staff get an admin SSO membership there; SSO memberships live 15 minutes after their last exchange | `backend/app/services/sso_assertion.py`, `sso_session.py` | 7 new Many tests; 2 old tests rewritten |
+| 5 | P2 (SaaS side): staff assertions carry `org` and `workspace` when the staff user names an active, mapped organization | `app/identity/sso.py` | 2 new tests |
+| 6 | P1: the server-side proxy `/api/v1/many/orgs/{tenant}/...` and `/api/v1/many/staff/...`, a 91-entry deny-by-default allowlist, token reuse, failure mapping, audit of writes, hardened response headers | `app/identity/many_proxy.py`, `many_router.py`, `many_routes.py`, `app/core/config.py` | 47 SaaS tests; 4 cross-check tests against Many's real routes (`scripts/test_many_proxy_allowlist.py`) |
+| 7 | Compose and example env pass the two new settings (off by default); RUNBOOK-DEV documents the mapping command and the proxy | `docker-compose.unified.yml`, `.env.unified.example`, `docs/RUNBOOK-DEV.md` | `docker compose config` renders; never started |
+
+### 13.2 Deviations from the step 1 design (the owner should know)
+
+- **SSO memberships are no longer replaced at once** (design 5.4 said a later exchange for another
+  organization removes the first). They now stay 15 minutes after their last exchange, then the
+  next exchange removes them. Reason: with the proxy minting a token per organization, one person
+  in two organizations would otherwise lose one when opening the other. The window is longer than
+  Many's token (10 minutes) plus skew, so access to a lost organization still ends within about
+  the same time as before. Applies to both scopes.
+- **The token cache is per user, organization, scope and role, not per session** (12.7 said per
+  session). Every request still checks the session, the role and the grant in the SaaS database
+  before a cached token is used, so a revoked session or changed role stops access at once.
+- **The proxy needs a few settings** (`MANY_PROXY_ENABLED`, `MANY_API_BASE_URL`, three limits) and
+  refuses to start without identity v2 and SSO issuing.
+- The staff membership role in Many is `admin` for every staff assertion that names a workspace.
+
+### 13.3 Gates (cloud container, Postgres 16, no Docker daemon; observed values)
+
+| Gate | Result |
+|---|---|
+| Environment | throwaway Postgres 16.15 clusters on unix sockets (`/var/tmp`), Redis on loopback, pgvector 0.6.0 from apt. The real stack is Postgres 15 (Many) and 17 (SaaS); results are not a substitute for the WSL gates |
+| Many full suite (`many_test_r1`, socket path `/var/tmp/many-r1-pg`) | 1292 passed, 0 failed, 3 min 8 s (baseline 1286, plus 6 new). A first run with a different socket path failed 2 migration tests that require the `/var/tmp/many-r1-` prefix; with the prefix they pass |
+| SaaS full suite | 1539 passed, 10 failed, 37 min. **The same 10 fail on a clean `origin/main` worktree** (embedding readiness 3, hybrid retrieval 4, r19 index 1, RAG evaluation 2): this container's pgvector 0.6.0 has no `hnsw.iterative_scan`. They are not caused by 4A. The proxy response headers were added after this run; the proxy, MFA and review-fix files were re-run: 73 passed |
+| Repo script tests | 61 passed, 25 subtests (50 baseline plus 11 new) |
+| ruff check, ruff format --check, strict mypy over `app tests alembic` (SaaS) | clean, 343 files formatted, 336 source files |
+| `check_instagram_frozen.py`, `check_policy_copies.py`, both contract-copy checks | OK, OK, OK, OK |
+| Allowlist cross-check mutation | changing one permission made `scripts/test_many_proxy_allowlist.py` fail for Manager, Agent and Viewer as intended, and it passed again after restoring |
+
+Not run: `scripts/dev-up.sh test` and the nginx edge checks (no Docker daemon), web or dashboard
+lint, typecheck, build and Playwright (no frontend file changed and Node 22 is below the
+declared Node 24), a load test, a secret scanner (only a manual check of added lines), the proxy
+against a real Many process (the tests use a fake Many; the allowlist and permissions were
+checked against Many's real route table instead).
+
+### 13.4 Left for later steps
+
+- Gap 9 (role visibility), gap 10 (nginx paths, needs Docker), gaps 6, 7, 8, 12, 13 (see 5.1).
+- Review items 2, 4, 5, 6 of the Phase 3 review; items 8, 9, 10 still block enabling any flag.
+- No per-request rate limit on the proxy itself (the exchange is limited at the issuer; Many has
+  its own limits). Decide in 4B or 4F.
+- Closing the public exchange at the edge is 4F.

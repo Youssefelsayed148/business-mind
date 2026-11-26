@@ -97,7 +97,23 @@ python scripts/identity_migrate.py apply --report-hash <hash from the report> --
 python scripts/identity_migrate.py verify
 ```
 
-Only argon2id hashes are carried; any other algorithm is reported as "needs set-password link" and gets an unusable password until a link is used. Memberships and the organization to workspace mapping are not applied by the tool. Its tests need a disposable Postgres (`APP_ENV=test`, `TEST_DATABASE_URL`).
+Only argon2id hashes are carried; any other algorithm is reported as "needs set-password link" and gets an unusable password until a link is used. Memberships are not applied by this tool. The organization to workspace mapping is a separate step (next section). Its tests need a disposable Postgres (`APP_ENV=test`, `TEST_DATABASE_URL`).
+
+### Organization to workspace mapping and the Many proxy (Phase 4A)
+
+The owner decides which SaaS organization belongs to which Many workspace and writes a JSON file of
+`{"tenant_id": "...", "workspace_id": "..."}` pairs (one organization to one workspace, both ids as UUIDs).
+Same environment and safety rules as above (`MANY_DATABASE_URL`, `SAAS_DATABASE_URL`, throwaway databases for tests, a backup before any apply):
+
+```bash
+python scripts/identity_migrate.py map-report --mapping pairs.json     # read-only; prints the hash and any conflict
+python scripts/identity_migrate.py map-apply --mapping pairs.json --report-hash <hash> --confirm-databases <many_db>,<saas_db> --yes
+python scripts/identity_migrate.py verify-mapping                       # both sides point at each other
+```
+
+`map-apply` refuses on any conflict (unknown or archived organization, unknown workspace, either side already mapped elsewhere), writes only empty pointers, and a stopped run is finished by running it again.
+
+The proxy (`MANY_PROXY_ENABLED`, off by default) also needs `IDENTITY_V2_ENABLED`, `SSO_ISSUER_ENABLED` and a Many with `SSO_ASSERTION_ENABLED` and the matching `SSO_PUBLIC_KEYS`. `MANY_API_BASE_URL` defaults to `http://many-api:8000`, the one host `CHANNEL_INTERNAL_ALLOWED_HOSTS` allows. With it off, every `/api/v1/many/*` path answers 404 like an unknown route. The browser never receives a Many token or a workspace id; only the paths listed in `modules/saas/apps/api/app/identity/many_routes.py` are forwarded. Turning the flag off is the rollback.
 
 ### Rollback ladder
 
