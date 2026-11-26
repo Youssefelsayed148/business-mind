@@ -164,6 +164,13 @@ def app(engine: Engine) -> Iterator[FastAPI]:
 
 
 @pytest.fixture
+def v2_app(app: FastAPI) -> Iterator[FastAPI]:
+    """The application with the identity flag ON (the default `app` has it off)."""
+    app.dependency_overrides[get_settings] = lambda: build_test_settings(identity_v2_enabled=True)
+    yield app
+
+
+@pytest.fixture
 def client(app: FastAPI) -> Iterator[TestClient]:
     with TestClient(app) as test_client:
         yield test_client

@@ -158,6 +158,8 @@ class Source(Base):
     row_errors: Mapped[list[dict[str, int | str]] | None] = mapped_column(JSONB)
     valid_rows: Mapped[int | None] = mapped_column()
     total_rows: Mapped[int | None] = mapped_column()
+    # Optional location/brand (0032); NULL = organization-wide.
+    location_id: Mapped[UUID | None] = mapped_column()
     created_by: Mapped[UUID] = mapped_column(
         ForeignKey("users.id", ondelete="RESTRICT"), nullable=False
     )
@@ -166,6 +168,12 @@ class Source(Base):
     )
 
     __table_args__ = (
+        ForeignKeyConstraint(
+            ["tenant_id", "location_id"],
+            ["locations.tenant_id", "locations.id"],
+            name="fk_sources_location",
+        ),
+        Index("ix_sources_location", "tenant_id", "location_id"),
         CheckConstraint("kind IN ('pdf', 'docx', 'txt', 'md', 'qa_csv')", name="ck_sources_kind"),
         CheckConstraint(
             "status IN ('stored', 'queued', 'ingested', 'failed', 'removed')",

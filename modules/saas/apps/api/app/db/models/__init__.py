@@ -25,6 +25,18 @@ from .core import (
     Tenant,
     User,
 )
+from .identity import (
+    Agency,
+    AgencyGrant,
+    AgencyGrantAssignee,
+    AgencyGrantLocation,
+    AgencyMembership,
+    Location,
+    MembershipLocation,
+    PasswordResetToken,
+    UserMfa,
+    UserRecoveryCode,
+)
 from .knowledge import (
     Chunk,
     Document,
@@ -37,6 +49,16 @@ from .operations import ChangeRequest, OrganizationDeletion
 from .widget import RateLimitCounter, VisitorSession
 
 __all__ = [
+    "Agency",
+    "AgencyGrant",
+    "AgencyGrantAssignee",
+    "AgencyGrantLocation",
+    "AgencyMembership",
+    "Location",
+    "MembershipLocation",
+    "PasswordResetToken",
+    "UserMfa",
+    "UserRecoveryCode",
     "AuditEvent",
     "ChannelConnection",
     "ChannelEvent",

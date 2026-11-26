@@ -44,6 +44,8 @@ class ChannelConnection(Base):
     health_detail: Mapped[str | None] = mapped_column(Text)
     health_updated_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     last_event_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    # Optional location/brand (0032); NULL = organization-wide.
+    location_id: Mapped[UUID | None] = mapped_column()
     created_by: Mapped[UUID | None] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"))
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, default=utcnow
@@ -53,6 +55,12 @@ class ChannelConnection(Base):
     )
 
     __table_args__ = (
+        ForeignKeyConstraint(
+            ["tenant_id", "location_id"],
+            ["locations.tenant_id", "locations.id"],
+            name="fk_channel_connections_location",
+        ),
+        Index("ix_channel_connections_location", "tenant_id", "location_id"),
         CheckConstraint(
             "channel IN ('whatsapp', 'messenger', 'instagram')",
             name="ck_channel_connections_channel",

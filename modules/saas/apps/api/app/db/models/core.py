@@ -16,6 +16,7 @@ from sqlalchemy import (
     DateTime,
     ForeignKey,
     Index,
+    Integer,
     Text,
     UniqueConstraint,
     text,
@@ -48,6 +49,21 @@ class User(Base):
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, default=utcnow
     )
+    # Identity storage (0033). Behavior arrives with the identity flag.
+    display_name: Mapped[str | None] = mapped_column(Text)
+    locale: Mapped[str | None] = mapped_column(Text)
+    mfa_enrolled_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    failed_login_count: Mapped[int] = mapped_column(
+        Integer, nullable=False, server_default=text("0")
+    )
+    locked_until: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    legacy_many_user_id: Mapped[UUID | None] = mapped_column()
+    last_login_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+    __table_args__ = (
+        UniqueConstraint("legacy_many_user_id", name="uq_users_legacy_many_user_id"),
+        CheckConstraint("failed_login_count >= 0", name="ck_users_failed_login_count"),
+    )
 
     memberships: Mapped[list["Membership"]] = relationship(back_populates="user")
 
@@ -67,6 +83,9 @@ class Session(Base):
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, default=utcnow
     )
+    last_seen_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    ip_hash: Mapped[str | None] = mapped_column(Text)
+    user_agent: Mapped[str | None] = mapped_column(Text)
 
     user: Mapped[User] = relationship()
 
@@ -96,9 +115,12 @@ class Tenant(Base):
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, default=utcnow
     )
+    # Authoritative link to the Many workspace (design 4.1); NULL until mapped.
+    many_workspace_id: Mapped[UUID | None] = mapped_column()
 
     __table_args__ = (
         CheckConstraint("status IN ('active', 'archived')", name="ck_tenants_status"),
+        UniqueConstraint("many_workspace_id", name="uq_tenants_many_workspace_id"),
     )
 
     memberships: Mapped[list["Membership"]] = relationship(back_populates="tenant")
@@ -121,9 +143,19 @@ class Membership(Base):
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, default=utcnow
     )
+    # New role vocabulary (0032/0034). NULL = derive from the legacy role.
+    org_role: Mapped[str | None] = mapped_column(Text)
+    location_scope: Mapped[str] = mapped_column(Text, nullable=False, server_default=text("'all'"))
 
     __table_args__ = (
         CheckConstraint("role IN ('admin', 'editor', 'viewer')", name="ck_memberships_role"),
+        CheckConstraint(
+            "org_role IS NULL OR org_role IN ('owner','admin','manager','agent','viewer')",
+            name="ck_memberships_org_role",
+        ),
+        CheckConstraint(
+            "location_scope IN ('all','limited')", name="ck_memberships_location_scope"
+        ),
         CheckConstraint("status IN ('active', 'revoked')", name="ck_memberships_status"),
         Index("ix_memberships_tenant_id", "tenant_id"),
         Index("ix_memberships_user_id", "user_id"),
@@ -217,9 +249,19 @@ class Invitation(Base):
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, default=utcnow
     )
+    org_role: Mapped[str | None] = mapped_column(Text)
+    location_scope: Mapped[str] = mapped_column(Text, nullable=False, server_default=text("'all'"))
+    new_account: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default=text("false"))
 
     __table_args__ = (
         CheckConstraint("role IN ('admin', 'editor', 'viewer')", name="ck_invitations_role"),
+        CheckConstraint(
+            "org_role IS NULL OR org_role IN ('owner','admin','manager','agent','viewer')",
+            name="ck_invitations_org_role",
+        ),
+        CheckConstraint(
+            "location_scope IN ('all','limited')", name="ck_invitations_location_scope"
+        ),
         Index("ix_invitations_tenant_id", "tenant_id"),
         Index("ix_invitations_email", "email"),
     )
