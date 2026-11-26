@@ -24,11 +24,23 @@ from app.core.config import Settings
 from app.core.errors import ApiError
 from app.core.ratelimit import enforce_or_429
 from app.core.tenancy import TenantContext
-from app.db.models import Invitation, InvitationLocation, Membership, MembershipLocation, User
+from app.db.models import (
+    AgencyMembership,
+    Invitation,
+    InvitationLocation,
+    Membership,
+    MembershipLocation,
+    User,
+)
 from app.identity import mfa as mfa_service
 from app.identity.locations import copy_invitation_scope, validate_locations_in_tenant
 from app.identity.mailer import MailMessage, get_mailer, link
-from app.identity.roles import ORG_ROLES, ORG_TO_LEGACY_ROLE, org_role_of
+from app.identity.roles import (
+    LEGACY_TO_ORG_ROLE,
+    ORG_ROLES,
+    ORG_TO_LEGACY_ROLE,
+    org_role_of,
+)
 from app.identity.sessions import revoke_user_sessions
 from app.quotas.service import lock_tenant, require_capacity
 
@@ -348,6 +360,39 @@ def deactivate(ctx: TenantContext, user_id: UUID) -> None:
     ctx.db.commit()
 
 
+# --- the older /members and /invitations routes, while identity v2 is on ------------------
+
+
+def change_legacy_role(ctx: TenantContext, user_id: UUID, legacy_role: str) -> Membership:
+    """A role change asked in the legacy vocabulary, under the same rules as ``change_role``."""
+    _require_team_actor(ctx)
+    target = _target(ctx, user_id)
+    if ORG_TO_LEGACY_ROLE[org_role_of(target.role, target.org_role)] == legacy_role:
+        return target  # already that role in legacy terms (a Manager stays a Manager)
+    return change_role(ctx, user_id, LEGACY_TO_ORG_ROLE[legacy_role])
+
+
+def authorize_new_invitation(ctx: TenantContext, legacy_role: str) -> str:
+    """Check the actor may invite with this role; returns the organization role to store."""
+    _require_team_actor(ctx)
+    role = LEGACY_TO_ORG_ROLE[legacy_role]
+    _require_assignable(ctx, role)
+    return role
+
+
+def authorize_invitation_change(ctx: TenantContext, invitation_id: UUID) -> None:
+    """Resending or revoking needs authority over the invited role."""
+    _require_team_actor(ctx)
+    invitation = ctx.db.scalar(
+        select(Invitation).where(
+            Invitation.id == invitation_id, Invitation.tenant_id == ctx.tenant_id
+        )
+    )
+    if invitation is None:
+        raise ApiError(404, "NOT_FOUND", "Invitation not found.")
+    _require_may_edit(ctx, org_role_of(invitation.role, invitation.org_role))
+
+
 def accept_into_new_account(
     db: OrmSession, settings: Settings, *, token: str, password: str, client_ip: str
 ) -> tuple[User, str]:
@@ -419,8 +464,34 @@ def accept_into_new_account(
     return user, cookie_token
 
 
+def _reaches_beyond(ctx: TenantContext, member: User) -> bool:
+    """Platform staff, agency people and members of other organizations."""
+    if member.is_platform_staff:
+        return True
+    elsewhere = ctx.db.scalar(
+        select(Membership.tenant_id)
+        .where(
+            Membership.user_id == member.id,
+            Membership.tenant_id != ctx.tenant_id,
+            Membership.status == "active",
+        )
+        .limit(1)
+    )
+    if elsewhere is not None:
+        return True
+    return (
+        ctx.db.scalar(
+            select(AgencyMembership.agency_id).where(AgencyMembership.user_id == member.id).limit(1)
+        )
+        is not None
+    )
+
+
 def reset_member_mfa(ctx: TenantContext, user_id: UUID) -> None:
-    """Remove a member's MFA: an Owner for anyone but an Owner, staff for anyone (design 6.4)."""
+    """Remove a member's MFA (design 6.4). Staff may reset anyone. An Owner may reset a
+    non-Owner whose account reaches nothing outside this organization, because MFA belongs
+    to the account, not to the membership.
+    """
     _require_team_actor(ctx)
     ctx.require_permission("team.manage_admins")
     if user_id == ctx.user.id:
@@ -431,6 +502,8 @@ def reset_member_mfa(ctx: TenantContext, user_id: UUID) -> None:
         raise ApiError(403, "STAFF_REQUIRED", "Only platform staff can reset an Owner's MFA.")
     member = ctx.db.get(User, user_id)
     assert member is not None  # the membership foreign key guarantees it
+    if not ctx.user.is_platform_staff and _reaches_beyond(ctx, member):
+        raise ApiError(403, "STAFF_REQUIRED", "Only platform staff can reset this person's MFA.")
     mfa_service.reset(
         ctx.db, actor=ctx.user, tenant_id=ctx.tenant_id, target=member, was_role=current
     )

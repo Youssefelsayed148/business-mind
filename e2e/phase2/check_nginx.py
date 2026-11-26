@@ -8,6 +8,7 @@ import http.client
 import json
 import os
 import sys
+import time
 import uuid
 
 EDGE = (os.environ.get("EDGE_HOST", "nginx"), int(os.environ.get("EDGE_PORT", "80")))
@@ -16,12 +17,16 @@ UID = str(uuid.uuid4())
 results: list[dict] = []
 
 
-def call(method: str, host: str, path: str, body: bytes | None = None) -> dict:
+def call(
+    method: str, host: str, path: str, body: bytes | None = None, headers: dict | None = None
+) -> dict:
     conn = http.client.HTTPConnection(*EDGE, timeout=15)
     conn.putrequest(method, path, skip_host=True, skip_accept_encoding=True)
     conn.putheader("Host", host)
     conn.putheader("Content-Length", str(len(body or b"")))
     conn.putheader("Content-Type", "application/json")
+    for name, value in (headers or {}).items():
+        conn.putheader(name, value)
     conn.endheaders(body or b"")
     response = conn.getresponse()
     text = response.read().decode("utf-8", "replace")
@@ -133,6 +138,16 @@ for path in (
 for path in ("/AUTH/sso/exchange", "/Auth/SSO/Exchange", "/auth/SSO/exchange", "/auth/sso/EXCHANGE"):
     check("sso-exchange-mixedcase", "POST", MANY, path, "app_4xx_json")
 check("sso-exchange-trailing-slash", "POST", MANY, "/auth/sso/exchange/", "redirect_or_4xx")
+# The /api/ prefix is stripped before Many sees it, so it reaches the same handler. These share
+# the limit zone with the checks above, so wait for the allowance to refill (30 a minute) first.
+for path, expect in (
+    ("/api/auth/sso/exchange", "app_4xx_json"),  # exact location
+    ("//api/auth/%73so/exchange", "app_4xx_json"),
+    ("/API/auth/sso/exchange", "app_4xx_json"),  # regex location, forwarded without the prefix
+    ("/api/auth/sso/exchange/", "redirect_or_4xx"),
+):
+    time.sleep(2.5)
+    check("sso-exchange-api-prefix-reaches-the-app", "POST", MANY, path, expect)
 # Not routed to Many on the SaaS hosts (404 from the SaaS API or from Next, never 2xx).
 for host in (SAAS_API, SAAS_WEB):
     for path in ("/auth/sso/exchange", "/AUTH/sso/exchange"):
@@ -161,8 +176,30 @@ def burst(name: str, host: str, path: str, total: int = 30) -> None:
     print(json.dumps(results[-1]), flush=True)
 
 
+def spoofed_login(host: str, attempt: int) -> dict:
+    body = json.dumps({"email": "nobody@example.com", "password": "not-a-real-password"}).encode()
+    forged = {"X-Forwarded-For": f"198.51.100.{attempt}"}
+    return call("POST", host, "/api/v1/auth/login", body, forged)
+
+
+def forwarded_for_cannot_be_forged() -> None:
+    """The SaaS login limit is per client address; a forged header must not reset it."""
+    api = [spoofed_login(SAAS_API, n) for n in range(1, 31)]
+    via_web = spoofed_login(SAAS_WEB, 200)  # same real address, so the same full bucket
+    limited = sum(1 for a in api if a["status"] == 429)
+    ok = limited >= 1 and via_web["status"] == 429
+    results.append({"check": "saas-login-limit-ignores-forged-forwarded-for", "method": "POST",
+                    "host": SAAS_API, "path": "/api/v1/auth/login", "expect": "rate_limited",
+                    "status": api[-1]["status"], "edge_deny": False,
+                    "body": f"{limited} of {len(api)} API logins limited; web host answered {via_web['status']}",
+                    "ok": ok})
+    print(json.dumps(results[-1]), flush=True)
+
+
+forwarded_for_cannot_be_forged()
 # Last on purpose: it trips the limiter for this client address on the exchange path only.
 burst("sso-exchange-rate-limited-at-the-edge", MANY, "/auth/sso/exchange")
+burst("sso-exchange-api-prefix-rate-limited-at-the-edge", MANY, "/api/auth/sso/exchange")
 
 failed = [r for r in results if not r["ok"]]
 print(f"SUMMARY nginx_checks total={len(results)} passed={len(results) - len(failed)} failed={len(failed)}")

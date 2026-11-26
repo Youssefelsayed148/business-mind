@@ -276,23 +276,17 @@ def rename_stage(body: StageRename, context: TenantContextDep, _: CsrfOk) -> dic
 @router.get("/export.csv")
 def export_contacts(context: TenantContextDep) -> Response:
     context.require_role("admin")
-    rows = (
-        context.db.execute(
-            select(Contact)
-            .where(
-                Contact.tenant_id == context.tenant_id,
-                location_filter(Contact.location_id, context.location_ids),
-            )
-            .order_by(Contact.id)
-        )
-        .scalars()
-        .all()
+    scope = (
+        Contact.tenant_id == context.tenant_id,
+        location_filter(Contact.location_id, context.location_ids),
     )
+    rows = context.db.execute(select(Contact).where(*scope).order_by(Contact.id)).scalars().all()
     identity_rows = context.db.execute(
         select(ContactIdentity.contact_id, ContactIdentity.channel)
         .where(
             ContactIdentity.tenant_id == context.tenant_id,
-            ContactIdentity.contact_id.in_([row.id for row in rows]),
+            # A subquery, not a list of ids: PostgreSQL caps bind parameters at 65,535.
+            ContactIdentity.contact_id.in_(select(Contact.id).where(*scope)),
         )
         .distinct()
         .order_by(ContactIdentity.channel)

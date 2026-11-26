@@ -71,6 +71,7 @@ def export_tenant_data(
     settings: Annotated[Settings, Depends(get_settings)],
 ) -> Response:
     context.require_role("admin")
+    context.require_every_location()
     tenant_id = context.tenant_id
     tenant = context.tenant
     db = context.db
@@ -355,6 +356,10 @@ def export_tenant_data(
             ),
         ),
     }
+    if context.via_agency is not None:
+        # Agency access never includes the client's team (design 5.5).
+        export_data.pop("members", None)
+        export_data.pop("invitations", None)
     if not context.user.is_platform_staff:
         for key in (
             "sources",
@@ -427,6 +432,7 @@ def tenant_audit_review(
     limit: int = Query(default=100, ge=1, le=200),
 ) -> dict[str, Any]:
     context.require_role("admin")
+    context.require_every_location()
     statement = select(AuditEvent).where(AuditEvent.tenant_id == context.tenant_id)
     if q and q.strip():
         statement = statement.where(audit_action_matches(q))
