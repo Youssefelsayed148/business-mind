@@ -482,7 +482,7 @@ def test_mapping_report_classifies_every_case_and_writes_nothing(dbs: tuple[Any,
     t_taken = add_tenant(saas, workspace=w_other)
     many.execute("UPDATE workspaces SET saas_tenant_id = %s WHERE id = %s", (t_taken, w_other))
     many.commit()
-    t_paused = add_tenant(saas, status="suspended")
+    t_paused = add_tenant(saas, status="archived")
     w_for_paused = add_workspace(many)
     pairs = [
         (t_new, w_new),
@@ -511,7 +511,7 @@ def test_mapping_report_hash_tracks_the_data(dbs: tuple[Any, Any, str, str]) -> 
     assert first == map_report(dbs, pairs)["report_hash"]
     add_tenant(saas)  # unrelated rows do not change this report
     assert first == map_report(dbs, pairs)["report_hash"]
-    saas.execute("UPDATE tenants SET status = 'suspended' WHERE id = %s", (pairs[0][0],))
+    saas.execute("UPDATE tenants SET status = 'archived' WHERE id = %s", (pairs[0][0],))
     saas.commit()
     assert first != map_report(dbs, pairs)["report_hash"]
 

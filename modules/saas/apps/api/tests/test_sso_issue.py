@@ -195,6 +195,45 @@ def test_staff_scope_needs_a_staff_user_and_staff_do_not_enter_client_scope(
     assert _mint(staff, org.tenant_id).status_code == 404
 
 
+def test_staff_scope_may_name_one_mapped_organization(sso_app: FastAPI, db: Session) -> None:
+    """Phase 4A, P2: staff pick an organization and get its workspace in the staff assertion."""
+    org = build_org(sso_app, db, "Alpha")
+    workspace = _map_workspace(db, org.tenant_id)
+    staff = make_person(sso_app, "staff", staff=True, db=db)
+    ok = _mint(staff, org.tenant_id, scope="staff")
+    assert ok.status_code == 200, ok.text
+    assert ok.json()["workspace_id"] == str(workspace)
+    _, claims = decode(ok.json()["assertion"])
+    assert claims["scope"] == "staff"
+    assert claims["org"] == str(org.tenant_id) and claims["workspace"] == str(workspace)
+    assert "role" not in claims and "locations" not in claims
+    audited = db.scalar(
+        select(AuditEvent).where(
+            AuditEvent.action == "sso.assertion_minted", AuditEvent.tenant_id == org.tenant_id
+        )
+    )
+    assert audited is not None and audited.actor_user_id == staff.user_id
+
+
+def test_staff_scope_naming_an_organization_is_refused_when_unusable(
+    sso_app: FastAPI, db: Session
+) -> None:
+    unmapped = build_org(sso_app, db, "Unmapped")
+    paused = build_org(sso_app, db, "Paused")
+    _map_workspace(db, paused.tenant_id)
+    db.execute(update(Tenant).where(Tenant.id == paused.tenant_id).values(status="archived"))
+    db.commit()
+    staff = make_person(sso_app, "staff", staff=True, db=db)
+    assert _mint(staff, unmapped.tenant_id, scope="staff").status_code == 404
+    assert _mint(staff, paused.tenant_id, scope="staff").status_code == 404
+    assert _mint(staff, uuid4(), scope="staff").status_code == 404
+    mapped = build_org(sso_app, db, "Mapped")
+    _map_workspace(db, mapped.tenant_id)
+    assert (
+        _mint(mapped.people["owner"], mapped.tenant_id, scope="staff").status_code == 403
+    )  # still staff only
+
+
 def test_agency_assertion_carries_cap_and_agency_and_dies_with_the_grant(
     sso_app: FastAPI, db: Session
 ) -> None:
