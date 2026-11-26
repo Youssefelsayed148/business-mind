@@ -18,7 +18,7 @@ Status values: not started / in progress / in review / done / blocked.
 | 4B. Shell | `claude/blissful-allen-b63jty` (same session branch) | [#12](https://github.com/Youssefelsayed148/business-mind/pull/12) | in review | One Many page works end to end |
 | 4C. Client pages | `claude/blissful-allen-b63jty` (same session branch) | [#12](https://github.com/Youssefelsayed148/business-mind/pull/12) | in review | Client and staff browser tests pass |
 | 4D. Staff pages | `claude/blissful-allen-b63jty` (same session branch) | [#12](https://github.com/Youssefelsayed148/business-mind/pull/12) | in review | Every old tab has a place |
-| 4E. Identity screens | `phase-4/identity-screens` | - | not started | One login reaches every page the role allows |
+| 4E. Identity screens | `claude/blissful-allen-b63jty` (same session branch) | [#12](https://github.com/Youssefelsayed148/business-mind/pull/12) | in review | One login reaches every page the role allows |
 | 4F. Close | `phase-4/close` | - | not started | All exit criteria pass |
 
 Each step is one branch and one draft PR, and stops for the owner's review.
@@ -97,7 +97,7 @@ fixing it.
 | 4 Manager lacks Many permissions | confirmed, handled in the proxy | the allowlist permission for every route equals Many's own guard per role (`scripts/test_many_proxy_allowlist.py`); pages in 4C must still hide actions |
 | 5 Messages tab | decided (P5) | kept, staff only: `GET /messages*` in the staff allowlist |
 | 6 Instagram OAuth return address | fixed in 4C (browser-tested with mocks) | `/accounts` keeps its query and routes by session: staff to `/platform/instagram/accounts`, one organization to its channels page, several to `/app`; `phase4c-channels.spec.ts` |
-| 7 identity screens | open | 4E |
+| 7 identity screens | fixed in 4E (screens built; real-API check with the flag on) | sign-in second step, password reset, invitation without an account, two-step verification and devices on Account, team screen v2; `phase4e-identity.spec.ts` (mocks) and `phase4e-real-v2.spec.ts` (real API) |
 | 8 web test baseline | partly done in 4B (Node 22, not 24) | lint, typecheck, build and the full Playwright suite ran green on Node 22 (14); the Node 24 run is still owed |
 | 9 role visibility in the web app | fixed in 4B (display only) | `useOrgRole` reads `GET /tenants/{id}/summary` and falls back to the stored role when identity v2 is off; unit tests `phase4b.unit.mjs`; the badge now shows Owner, Admin, Manager, Agent or Viewer |
 | 10 nginx paths | open, not testable here | no Docker daemon in the cloud session; with the proxy the new shell does not depend on it; recheck when the old dashboard is run in the unified compose |
@@ -405,6 +405,7 @@ rollback is the previous `unified.conf`.
 - 2026-11-26, Claude Code (4A): owner accepted P1 to P8; implemented 4A on the session branch; section 13 is the record. Gates in section 13.
 - 2026-11-26, Claude Code (4B): owner accepted the 4B plan and its four answers; implemented 4B on the session branch; section 14 is the record.
 - 2026-11-26, Claude Code (4C and 4D): owner said to continue with both; built together on the session branch with four parallel page-porting agents on separate files and one integration pass; section 15 is the record.
+- 2026-11-26, Claude Code (4E): owner said to continue; built the identity screens; section 16 is the record.
 
 ## 13. Step 4A record (2026-11-26)
 
@@ -616,3 +617,52 @@ beyond the spec runs and a scan for unsafe patterns.
 - 4E: team, invitations, password reset, MFA, sessions screens (gap 7).
 - 4F: deny the public SSO exchange at the edge, nginx paths for the old dashboard (gap 10), screenshots including an Arabic fixture, the full old-tab walk in a browser, Node 24 run, full backend gates on the WSL stack.
 - Phase 3 review items 2, 4, 5, 6 open; items 8 to 10 still block enabling any flag.
+
+## 16. Step 4E record (2026-11-26)
+
+The owner said to continue with 4E. Built by the lead alone (no subagents: the screens share one
+API wrapper file and one login page). The identity API already existed (Phase 3); 4E adds screens
+and one tiny API change.
+
+### 16.1 What was built
+
+| # | Change | Where |
+|---|---|---|
+| 1 | `GET /api/v1/auth/config` adds `identity_v2: true` **only while the flag is on**, so the answer is unchanged with the flag off | `app/auth/router.py`; test in `tests/test_self_service_signup.py` |
+| 2 | Sign-in asks for a verification code only after the API answers `MFA_REQUIRED`; a wrong code is explained; "Forgot your password?" links to reset only while identity v2 is on (otherwise the old text) | `app/login/page.tsx` |
+| 3 | Password reset: `/forgot-password` (same answer for any address) and `/reset-password?token=` (checks length and match, sends token and new password, plain message for an expired link) | `app/forgot-password`, `app/reset-password` |
+| 4 | Invitation for a person without an account: password form on `/accept-invite` (identity v2 only) calling `POST /invitations/accept-new` | `app/accept-invite/page.tsx` |
+| 5 | Account page: two-step verification (set up key and authenticator link, confirm code, recovery codes shown once, status) and signed-in devices (this device marked, sign out other devices after a confirmation) | `lib/security-panels.tsx`, `app/account/page.tsx` |
+| 6 | Team screen v2: five roles, invite (roles offered by the signed-in role; invitation link shown for the inviter to hand over), role change, remove, reset two-step verification, plain refusal messages; falls back to the earlier screen when the team routes answer 404 | `lib/team-v2.tsx`, `app/app/[tenant]/settings/members/page.tsx` |
+| 7 | API wrappers and pure helpers | `lib/api.ts`, `lib/identity.ts` |
+
+With the flag off nothing visible changes: the new panels, links and forms render nothing, and the
+team screen is the earlier one.
+
+### 16.2 Gates (cloud container, Node 22, Postgres 16, no Docker; observed)
+
+| Gate | Result |
+|---|---|
+| Web lint, typecheck | clean |
+| Web unit tests | 93 passed (6 new for the identity helpers) |
+| `phase4e-identity.spec.ts` (identity answers faked in the browser) | 15 passed |
+| `phase4e-real-v2.spec.ts`: the real API started with `IDENTITY_V2_ENABLED=true` (`E2E_IDENTITY_V2=1`), no mocks | 3 passed: reset request, sign-in link, Account lists this device, team screen lists the owner and accepts an invitation. Skipped unless that flag is set |
+| SaaS API: config test | `tests/test_self_service_signup.py` 7 passed; ruff, format, strict mypy clean |
+| Full web Playwright suite | 293 passed, 0 failed, 3 skipped (the real-API spec, which needs the flag), 6.3 min |
+
+Real finding: the team screen was missing the `<main>` wrapper the earlier screen has, which a role
+visibility test caught; fixed.
+
+### 16.3 Not built, not verified
+
+- **Locations and agencies:** no screen for location scopes (no API creates locations) or agency grants. The team table shows scope read-only.
+- **No QR code** for the authenticator (no new dependency): the setup key and an `otpauth://` link are shown.
+- **Not tested end to end:** a real TOTP sign-in with a code from an authenticator, a real email (the mailer is the console backend, D4: the inviter hands over the link), recovery-code sign-in, and the platform staff view of these screens.
+- Not run: Node 24, `dev-up.sh test`, nginx, mobile or right-to-left, screenshots.
+- Flags stay off by default. Phase 3 review items 2, 4, 5, 6 are open; items 8 to 10 still block enabling any flag.
+
+### 16.4 Exit criterion "one login reaches every page the role allows"
+
+Partly shown: with the screens in place, a signed-in person reaches the pages their role allows
+through the menu, and the API refuses the rest (specs from 4C and 4D). Not yet proven end to end on
+the real stack with SSO and Many on (that needs the WSL stack and the flags, 4F).

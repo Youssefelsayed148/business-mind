@@ -25,6 +25,8 @@ import {
   StatusBadge,
 } from "./ui";
 
+import "@/app/team-screen.css";
+
 const PURPOSE = "Invite teammates and manage their access to this workspace.";
 
 export function TeamV2({
@@ -96,7 +98,7 @@ export function TeamV2({
 
   const canManage = orgRoleSatisfies(actor, "admin");
   return (
-    <>
+    <main className="team-page">
       <PageHeader title="Team" purpose={PURPOSE} />
       {notice && <Notice message={notice} scope="item" />}
       {error && <Notice message={error} tone="error" scope="item" />}
@@ -281,6 +283,6 @@ export function TeamV2({
           ]}
         />
       )}
-    </>
+    </main>
   );
 }
