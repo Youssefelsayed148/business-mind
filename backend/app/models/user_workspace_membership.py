@@ -32,6 +32,9 @@ class UserWorkspaceMembership(Base):
         PGUUID(as_uuid=True), ForeignKey("workspaces.id"), nullable=False
     )
     role: Mapped[str] = mapped_column(String(50), default="operator", server_default="operator")
+    # "local" for rows created inside Many; "sso" for rows owned by the
+    # assertion exchange (the only rows it may create, change or delete).
+    source: Mapped[str] = mapped_column(String(20), default="local", server_default="local")
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
     )

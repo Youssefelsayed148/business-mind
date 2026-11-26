@@ -110,6 +110,17 @@ class Settings(BaseSettings):
 
     TOKEN_ENCRYPTION_KEY: str = ""
 
+    # --- SSO (identity design, Phase 3). Everything here is off by default;
+    # with SSO_ASSERTION_ENABLED=false no new route answers and no SSO token
+    # is accepted. SSO_PUBLIC_KEYS is a JSON object {kid: PEM public key};
+    # Many holds public keys only and can never mint an assertion.
+    SSO_ASSERTION_ENABLED: bool = False
+    SSO_PUBLIC_KEYS: str = ""
+    SSO_ISSUER: str = "business-mind-saas"
+    SSO_AUDIENCE: str = "many-api"
+    SSO_REQUIRE_MFA_FOR_ADMIN: bool = False
+    SSO_TOKEN_MINUTES: int = 10
+
     # --- AI conversation-continuation layer ---
     AI_ENABLED_GLOBAL: bool = True  # kill switch, independent of per-account toggles
     OPENAI_API_KEY: str = ""
@@ -135,6 +146,31 @@ class Settings(BaseSettings):
 
 
 settings = Settings()
+
+
+def validate_sso_settings(cfg: "Settings") -> None:
+    """Fail startup on an unusable SSO configuration (only when enabled)."""
+    if not cfg.SSO_ASSERTION_ENABLED:
+        return
+    import json
+
+    try:
+        keys = json.loads(cfg.SSO_PUBLIC_KEYS or "{}")
+    except ValueError as exc:
+        raise RuntimeError("SSO_PUBLIC_KEYS must be a JSON object {kid: PEM}") from exc
+    if (
+        not isinstance(keys, dict)
+        or not keys
+        or not all(isinstance(k, str) and k and isinstance(v, str) and v for k, v in keys.items())
+    ):
+        raise RuntimeError("SSO_ASSERTION_ENABLED requires a non-empty SSO_PUBLIC_KEYS map")
+    if not 1 <= cfg.SSO_TOKEN_MINUTES <= 60:
+        raise RuntimeError("SSO_TOKEN_MINUTES must be between 1 and 60")
+    if not cfg.SSO_ISSUER or not cfg.SSO_AUDIENCE:
+        raise RuntimeError("SSO_ISSUER and SSO_AUDIENCE must be set")
+
+
+validate_sso_settings(settings)
 
 
 def get_allowed_origins() -> list[str]:

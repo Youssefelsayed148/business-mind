@@ -61,8 +61,27 @@ NOT RUN: SaaS Playwright e2e, npm audit, next build, full SaaS pytest re-run wit
 
 Local state kept for the owner (no cleanup until Phase 2b is done): `unified-e2e` stack (running), `p2e2e` stack, `merge-dev-*` DB containers, images `p2e2e-*` and `unified-*`, WSL `~/phase2/` scratch and socket bridges.
 
+## Phase 3 PR A: identity, Many side (branch `phase-3/identity-impl-a`, 2026-11-24, WSL + Docker, observed values only)
+
+| Check | Result |
+|---|---|
+| Baselines, flags off, throwaway DBs, no egress | Many 1084 passed; SaaS 1293 passed (1807 s) |
+| EdDSA in Many | `cryptography==50.0.2` and `pyjwt==2.15.1` pinned in `backend/constraints.txt`; sign/verify with `kid` worked inside the Many image |
+| Argon2 compatibility (synthetic hashes) | passlib 1.9.5 and argon2-cffi 25.1.0 verify each other's argon2id hashes (both m=65536,t=3,p=4); older parameters verify and are flagged for rehash; non-argon2 strings are rejected. Many hashes can be carried over |
+| Many full suite at commit 2 / commit 5 | 1096 passed / 1156 passed |
+| Many full suite at commit 7 | 1278 passed, 1 failed (`test_tampered_and_garbage_are_refused`: the test overwrote the signature's last two characters, a no-op about 1 time in 256). Fixed in a test-only commit; that file re-run alone: 18 passed. The full suite was not re-run after the fix |
+| Migration `0031_sso_link` | up, down, up on a private DB with legacy rows intact; `alembic check` shows no drift |
+| Flag-off identical | legacy credentials give the same status on every route (5 credential variants x all routes) with the flag off and on; login claims identical |
+| Client-scope guard | live request per route: every non-allowlisted route denies a client token (all Instagram routes included); allowlist holds only workspace-scoped routes; mutation check (adding `/instagram`) fails the tests as intended |
+| `check_instagram_frozen.py`, policy copies, both contract checks | OK, OK, OK, OK; 6 unit tests for the frozen check |
+| `scripts/dev-up.sh test` | six e2e cases PASS; 48/48 nginx checks PASS (a first attempt failed at image build on a pip network error, retried once). It tore down the old `unified-e2e` stack from Phase 2b |
+| Secret scan | regex scan of added lines and file names: clean (no scanner installed) |
+| SaaS | not changed by PR A; SaaS suite not re-run after the baseline |
+
+Deviations from the design: `channel_location_map` not created (nothing reads it yet); migration steps are guarded because `0001_initial` bootstraps from current models; a shadow user whose email collides with an existing Many user gets a placeholder email and is never linked. Known gaps: GET on `/auth/sso/exchange` answers 405 with the flag off (POST gives the unknown-route 404); no in-app rate limit on the exchange (edge zone is PR C); a user's SSO membership is exactly one workspace at a time, so two orgs in two tabs would flip it.
+
 ## Next
-- Phase 3 implementation (design approved): separate session on the owner's machine (Docker/WSL needed): re-verify baselines (Many 1084, SaaS 1293), run the Argon2 compatibility test, implement commits 1 to 16 of the plan with the flags off.
+- Phase 3: owner review of the PR A draft PR and an independent review; then PR B (SaaS migrations 0032 to 0034, roles, locations, agencies), then PR C (issuing, team, reset, MFA, mailer, `identity_migrate.py` with a per-row hash-algorithm report, nginx and `check_nginx.py`, docs).
 - Review/merge PR #1 and the Phase 1b PR (owner).
 - Phase 2: owner review of the draft PR and the CI workflow proposal; then the remaining One infrastructure work (also: re-home SaaS CI from `modules/saas/.github/`, which is inactive; the SaaS has no CI here until then).
 
@@ -87,6 +106,7 @@ Local state kept for the owner (no cleanup until Phase 2b is done): `unified-e2e
 - Root `.gitignore` does not ignore a root-level `.env.local` (only `dashboard/.env.local`).
 
 ## Last session
+- 2026-11-24 (Phase 3 PR A), Claude Code on WSL + Docker: PR #5 merged by the owner's approval; implemented commits 1 to 7 of the identity plan on `phase-3/identity-impl-a` (results table above). Stopped before PR B, awaiting owner review. Local leftovers: Docker containers `phase3-pg15` and `phase3-pg17` (ports 55415 and 55417), WSL `~/phase3/` (clone `repo`, snapshots, results logs, harness scripts), the rebuilt `unified-*` images.
 - 2026-11-24 (Phase 3 design), Claude Code, cloud container without Docker or installed Python dependencies: created branch `phase-3/identity-design` from `origin/main` (`cc3b9ab`); wrote `docs/IDENTITY-DISCOVERY.md` and `docs/IDENTITY-DESIGN.md`; updated this file. Observed: Alembic heads read from the files (Many `0030_meta_account_erasure`, SaaS `0031_contact_erasure`, one head each); `scripts/check_policy_copies.py` OK; `scripts/check_contract_copies.py` (Many root) OK; the SaaS-root contract check was not run (my `--root modules/saas` guess failed because the manifest is under the repo-root `docs/`). Test baselines NOT verified here (no dependencies); numbers above are from the Phase 2b gate. Only docs files changed. Nothing merged.
 - 2026-11-24 (PR #4 review follow-up), Claude Code: tested mixed-case paths through nginx: `/API/channels/...` and `/Api/channels/...` on the SaaS web host reached the signed events handler (401 from its signature check); the other hosts did not. Added case-insensitive `~*` deny locations (both SaaS hosts, Many `/api/saas`), 7 new edge checks (48 total, 48 pass), six e2e cases pass, `default.conf` untouched; Redis auth added to the DEPLOY-OUTLINE hardening list. Details in `docs/PHASE-2-RESULTS.md` 4.6. Local state: unified-e2e stack left running (KEEP=1); cleanup still on hold.
 - 2026-11-24 (Phase 2b), Claude Code: PR #3 merged; implemented Phase 2b locally (see In progress and the gate table). Network to GitHub was down for pushes; nothing pushed from the 2b branch. Old local commit `cad31e5` (progress wording for the PR #3 review) is superseded by this text and is not cherry-picked.
