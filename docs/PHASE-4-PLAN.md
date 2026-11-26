@@ -1,10 +1,11 @@
 # Phase 4 plan: one dashboard
 
-Living plan. Last updated: 2026-11-26 (Claude Code). Base: `main` at `32d32e9`.
+Living plan. Last updated: 2026-11-26 (Claude Code, step 1). Base: `main` at `32d32e9`.
 Parent: `docs/MERGE-PLAN.md` (Phase 4). Progress record: `docs/MERGE-PROGRESS.md`.
 
-**Status: greenlit for step 1 by the owner on 2026-11-26. Step 1 not started. No Phase 4 code
-exists.** Everything below step 1 is a proposal until the owner approves step 1.
+**Status: step 1 (inventory and design) written and waiting for the owner's review. No Phase 4 code
+exists.** `docs/UI-INVENTORY.md` is the inventory; section 12 below is the design. Everything
+after step 1 is a proposal until the owner approves P1 to P8.
 
 ## 1. Status
 
@@ -12,7 +13,7 @@ Status values: not started / in progress / in review / done / blocked.
 
 | Step | Branch (suggested) | PR | Status | Done when |
 |---|---|---|---|---|
-| 1. Inventory and design | `phase-4/inventory` | - | not started | Owner approves the docs and P1 to P8 |
+| 1. Inventory and design | `claude/blissful-allen-b63jty` (stacked on `docs/phase-4-plan`) | draft PR to `docs/phase-4-plan` | in review | Owner approves the docs and P1 to P8 |
 | 4A. Connection | `phase-4/connection` | - | not started | Role and tenant isolation tests pass |
 | 4B. Shell | `phase-4/shell` | - | not started | One Many page works end to end |
 | 4C. Client pages | `phase-4/client-pages` | - | not started | Client and staff browser tests pass |
@@ -79,6 +80,11 @@ fixing it.
 | 6 | Instagram connect redirects to `FRONTEND_URL/accounts`; the shell must handle that address without backend changes. The WhatsApp opt-in link uses `DASHBOARD_BASE_URL` (or `APP_BASE_URL`). Check `/privacy`, `/terms` and the Meta SDK connect flows on the new host (Meta app domain settings are an owner action) | `routes_meta.py`, `routes_whatsapp_outreach.py` | 4C, 4D |
 | 7 | No web screens for team, invitation acceptance, password reset, MFA or sessions (the APIs exist) | `modules/saas/apps/api/app/identity/` | 4E |
 | 8 | No recorded run of the SaaS web Playwright suite in this repo; `format:check` already fails on 4 files | `docs/PHASE-1B-RESULTS.md` | 4B (baseline) |
+| 9 | The SaaS web app only knows `admin`, `editor` and `viewer`: `/auth/me` memberships are typed to those three (`modules/saas/apps/api/app/auth/schemas.py`, `lib/api.ts`). Owner and Manager (stored `org_role`) are not visible to the browser, but the WhatsApp pages depend on them. `GET /tenants/{id}/summary` (flag on) returns the caller's effective role | `auth/schemas.py`, `tenants/router.py` | 4A |
+| 10 | The unified nginx config has no location for `/whatsapp/`, `/facebook/`, `/conversations`, `/workspaces/` or `/privacy/` on the Many host, so the old dashboard built for the unified compose may not reach those API paths (read only, not tested). See `UI-INVENTORY.md` fact 5 | `nginx/unified.conf` | confirm in 4A; supports P1 |
+| 11 | WhatsApp read pages need workspace Owner or Admin; Manager, Agent and Viewer get 403 on contacts, templates, campaigns and health. The menu must hide them | `routes_whatsapp_outreach.py` | 4C |
+| 12 | Old Facebook pages check the global role for actions while the backend checks the workspace role; copied as is, they would hide actions from a client Owner (their global role is `viewer`) | `dashboard/app/(dashboard)/facebook-campaigns/page.tsx`, design 5.4 | 4C |
+| 13 | The Next 16 docs named in `modules/saas/apps/web/AGENTS.md` are not in `node_modules/next/dist/docs/` after `npm ci` (Next 16.4.3). They must be found before 4B | `modules/saas/apps/web/AGENTS.md` | 4B |
 
 Size: the Many dashboard is about 8,900 lines. It uses Tailwind and a token in `localStorage`;
 the SaaS web app uses its own CSS tokens (light and dark) and a session cookie. Neither app has a
@@ -181,3 +187,194 @@ At the end of every Phase 4 session, in the same branch as the work:
 
 - 2026-11-26, Claude Code: plan written after the Phase 3 merge, from the merge plan, the
   identity design, the Phase 3 review and a read of both frontends. No tests run, no code changed.
+- 2026-11-26, Claude Code (step 1): read both frontends, the Many route guards, the SaaS shell
+  and the identity docs; wrote `docs/UI-INVENTORY.md`; added gaps 9 to 13 and section 12 (design).
+  Docs only. `npm ci` was run in `modules/saas` (ignored files only) to look for the Next 16 docs;
+  nothing else was installed or run, no test, build, lint or container.
+
+## 12. Design (step 1 proposal, for the owner's review)
+
+Everything here is a proposal. It follows my recommendations for P1 to P8 (section 4) and does
+not become a decision until the owner answers. Facts behind it are in `docs/UI-INVENTORY.md`.
+
+### 12.1 Where the plan and the repo differed
+
+The repo wins. Everything else in the plan matched (base commit, both Alembic heads, page
+counts, the old tab list, gaps 1, 2 and 6, the `next.config.ts` rewrite).
+
+| Plan said | Repo shows | Effect |
+|---|---|---|
+| The old page list (section 7) | The 23 Many pages include `/` (redirect), `/whatsapp` (redirect to contacts) and the legal pages in an auth route group; section 7 does not list `/`, the redirect, or that Facebook has no page of its own | Inventory is complete; no new work |
+| Gap 8: `format:check` is a SaaS web check | The script lives at the SaaS root (`modules/saas/package.json`), not in `apps/web` | Wording only |
+| Not in the plan | Gaps 9 to 13 (role visibility, nginx paths, WhatsApp reads, global vs workspace role, missing Next docs) | New gaps, section 5 |
+| P1 note about `next.config.ts` | There is also `proxy.ts`, which guards upload size and the widget CSP on `/api/*` | A new proxy path must keep it working |
+
+### 12.2 Menu tree and naming
+
+One shell, one sidebar, grouped by what the person manages. Labels are short English nouns.
+The organization is the top-level context; staff-only groups appear only for platform staff.
+
+Client menu (inside one organization, `/app/[tenant]/...`):
+
+| Group | Items | Visible to | Source |
+|---|---|---|---|
+| (top) | Overview | all | S8 |
+| Conversations | Inbox; History | all | S17, S18 (the one inbox, also for delegated channels) |
+| Contacts | Contacts | all | S19 |
+| Insights | Insights | all | S9 |
+| Channels | Accounts (Facebook and WhatsApp sections) | all read; Owner and Admin change | M4 |
+| WhatsApp | Contacts; Templates; Campaigns; Health | Owner, Admin only | M15 to M20 |
+| Facebook | Campaigns | all read; Owner, Admin, Manager change | M9 |
+| Settings | Team; Request a change; Data and audit; My account and security | Admin and above; account for all | S20 to S22, S5 |
+
+Staff menu (adds, under `/platform/...`, guarded by the existing server-side check):
+
+| Group | Items | Source |
+|---|---|---|
+| Platform | Organizations; Members; Bots; Change requests; Channels; Operations | S23 to S29 (today's menu) |
+| Many (staff) | Overview; Leads; Messages; Logs | M3, M10, M12, M13 |
+| Instagram (staff) | Accounts; Campaigns; Conversations | M4 (Instagram part), M5 to M8, M11 |
+
+Rules:
+- Instagram is "a channel", as the merge plan says, but its pages are not organization pages:
+  Many's Instagram routes do not filter by workspace (design D1/D2), so they live under
+  `/platform/instagram/...`, not under an organization. The client Accounts page shows only
+  Facebook and WhatsApp; this removes the "hide the Instagram section" trap.
+- Conversations: the shell never shows Many's Take Over and Resume bot for a delegated account;
+  the SaaS inbox is the place. The staff Instagram Conversations page lists only rows with
+  `managed_by_saas = false` and links delegated ones to the inbox.
+- A menu item is hidden when the role cannot open it, but the API check is the real gate. Every
+  hidden page also has a direct-URL test (4C and 4D).
+- Old URLs keep working: `/accounts` (the Instagram OAuth return address), `/opt-in/[token]`,
+  `/privacy` and `/terms` stay; the first redirects by session (query kept) to the right new
+  place. Other old paths redirect to their new homes, so bookmarks do not break.
+
+Route map (new):
+
+| New route | Old | Notes |
+|---|---|---|
+| `/app/[tenant]/channels` | `/accounts` | Facebook and WhatsApp |
+| `/app/[tenant]/whatsapp/contacts`, `/templates`, `/health`, `/campaigns`, `/campaigns/new`, `/campaigns/[id]` | `/whatsapp/*` | Owner, Admin |
+| `/app/[tenant]/facebook/campaigns` | `/facebook-campaigns` | |
+| `/platform/many` | `/overview` | staff |
+| `/platform/leads`, `/platform/messages`, `/platform/logs` | same names | staff |
+| `/platform/instagram/accounts`, `/campaigns`, `/campaigns/new`, `/campaigns/[id]`, `/campaigns/[id]/stats`, `/conversations` | `/accounts` (Instagram), `/campaigns*`, `/conversations` | staff |
+| `/opt-in/[token]`, `/privacy`, `/terms` | same | public |
+
+### 12.3 Organization and channel switchers
+
+- **Organization switcher** (header, left): the shell already builds the list from `me.memberships`
+  or, for staff, from all organizations (`AppShell`). It stays. Choosing an organization changes
+  the `[tenant]` segment and keeps the page when it exists there. Staff land on `/app` to pick.
+  Each tab carries its own organization in the URL, so two tabs do not interfere on the browser
+  side (the Many-side flip is gap 3; section 12.7 removes it).
+- **Channel switcher**: not a global mode. A channel is a menu group (Facebook, WhatsApp,
+  Instagram for staff) and a filter chip row on the pages that span channels: Accounts, Inbox,
+  Contacts, Insights. The inbox already lists the channel per thread. No page changes its data
+  source because a switcher changed; this avoids hidden state.
+- A person with one organization and no staff flag never sees a switcher.
+
+### 12.4 Theme
+
+SaaS tokens (`app/tokens.css`, light and dark, per-user saved choice, follows the system by
+default) are the only theme. Many's Tailwind palette and dark sidebar are dropped; no Tailwind
+is added (P3). Channel names always carry an icon and a text label, never colour alone. Charts
+use the existing chart tokens. New CSS lives in screen files like the existing ones and uses
+tokens only. Many's `components/ui/*` are rebuilt on SaaS `lib/ui.tsx` (Loading, Notice, Empty,
+DataTable, StatusBadge, Dialog, Toast, Tabs, ConfirmAction exist there).
+
+### 12.5 Language and RTL
+
+P4 recommendation: English interface, correct handling of Arabic and mixed content, Arabic
+interface later (needs message catalogs, not in this phase).
+- `<html lang="en" dir="ltr">` stays. The Cairo font is already Arabic-capable and self-hosted.
+- Content from people (contact names, message text, comments, template bodies, campaign names)
+  is rendered with `dir="auto"` and `unicode-bidi: isolate`; phone numbers, IDs, URLs and
+  numbers are rendered `dir="ltr"` inside such text.
+- New and ported CSS uses logical properties only (`margin-inline`, `padding-inline`,
+  `inset-inline`, `text-align: start`). 4B adds a small repo check that fails on physical
+  left/right properties in new CSS; the existing SaaS screens already show 0 physical and 67
+  logical rules in `app/*.css`.
+- Tables keep readable column order in both directions; icons that point (arrows, chevrons) flip
+  with direction.
+- RTL is verified in 4F with an Arabic-content fixture in the screenshots. Not tested now.
+
+### 12.6 Mockup description
+
+Desktop (width at least 1100px): a left sidebar of about 15rem with the product name, grouped
+items (section 12.2) and a collapse button; a top bar with the organization switcher, the
+command palette (Ctrl K, already there), a theme toggle and a user menu (account, sign out,
+sign out everywhere in 4E). The page body is a header (title, one-line purpose, primary action
+on the end side) over cards and tables in a container of at most 80rem. Tables show 20 rows with
+paging and a filter bar above; a row opens a detail page or a dialog.
+
+Mobile (below 760px): the sidebar becomes the existing drawer, opened from a menu button; the
+switcher moves into the drawer's first row; tables become stacked cards showing the first two
+columns with a "details" expander (or scroll horizontally with a fixed first column where cards
+do not fit, for example campaign stats); action bars stick to the bottom; touch targets are at
+least 2.75rem (the existing control height).
+
+Shared states on every ported page: loading (skeleton or `Loading`), empty (one sentence, one
+action, role-aware: a Viewer sees no create button), error (plain message, retry, no raw
+status codes), forbidden (explains that the role cannot open the page, links home). A 403 from
+the API shows the forbidden state, not a toast. A session expiry sends the person to login and
+back (the SaaS `session-expired` event already does this).
+
+### 12.7 How the shell reaches Many (P1, P2)
+
+Recommended: **the SaaS API proxies to Many; the browser never calls Many.**
+
+1. The browser calls the SaaS API at `/api/v1/many/...` (the existing same-origin rewrite), with
+   its session cookie and CSRF header, and the organization in the path or a header.
+2. The SaaS API checks, from its own database: session valid; MFA state; membership or agency
+   grant in that organization; the role's permission for this method and path template; for
+   staff pages, `is_platform_staff`. It reuses the existing decorators and tests.
+3. It mints the assertion server side (the issuing code exists, PR C) and exchanges it with Many
+   over the internal network, caches the resulting short Many token per session and
+   organization for less than its 10-minute life, and sends the call with `Authorization` and
+   `X-Workspace-Id` set by the server. The browser never sees either.
+4. The proxy is **deny by default**: an explicit allowlist of method plus path template,
+   built from `UI-INVENTORY.md`, and never `/api/saas`, `/saas`, `/webhooks`, `/auth/sso/*`,
+   `/meta/compliance/*`. Client sessions may only reach the paths in `client_scope.py`; staff
+   sessions the global paths. Every write is audited with user, organization, path.
+5. Multipart (CSV import for WhatsApp contacts) is streamed with a size limit; `proxy.ts` keeps
+   its 520 MB ceiling; whether Many's import route has its own size limit is not verified.
+6. The public opt-in call is the only unauthenticated path: one allowlisted route, rate limited,
+   with the old URL kept.
+7. Because the proxy sets the workspace per call, one user working in two organizations is
+   no longer limited by Many's single SSO membership (gap 3).
+8. Staff (P2): a staff assertion for an organization needs a Many membership for its mapped
+   workspace. The smallest change is in `backend/app/services/sso_session.py` (not Instagram,
+   not frozen): when a staff assertion names a workspace, create an `admin`-role SSO
+   membership for it and do not remove the user's other SSO memberships for staff. Tested in
+   4A with a failing test first. If the owner prefers not to touch Many, staff keep Many's own
+   login for WhatsApp and Facebook pages (not recommended).
+9. Open check for 4A: the SaaS API must be allowed to call the Many API host under the
+   Phase 2 internal-service policy (`CHANNEL_INTERNAL_ALLOWED_HOSTS`); I have not verified how
+   that policy applies to a new caller.
+
+Why not a Next route handler: it would need its own session check, CSRF, revocation and audit,
+all of which already exist in the SaaS API (P1). Why not the browser to Many: the token would
+live in the browser, and fact 5 of the inventory suggests the unified nginx paths do not match.
+
+Flags: every identity flag stays off by default; with `SSO_ASSERTION_ENABLED` off the proxy
+answers like an unknown route and the old Many dashboard and login keep working unchanged.
+
+### 12.8 Rollback
+
+Each step is its own branch and draft PR, and adds routes and screens only. Nothing is removed
+or moved: the old Many dashboard keeps running (P8). Rollback of a step is reverting its merge.
+The proxy and the staff membership change are behind flags that default off; turning the flag
+off restores today's behaviour. The nginx exchange deny (4F) is the one edge change; its
+rollback is the previous `unified.conf`.
+
+### 12.9 Changes to the steps
+
+- 4A also gets: a role field for the shell (Owner, Manager, Agent visible; gap 9), a decision
+  on the nginx paths (gap 10), and the staff membership change (12.7 item 8).
+- 4B gets: the Next 16 docs check (gap 13), the logical-CSS check (12.5), the redirects for old
+  URLs, and the baseline of the SaaS web gates on Node 24 (it declares `>=24 <25`; this
+  environment has Node 22, so those gates must run elsewhere).
+- 4C and 4D get a direct-URL forbidden test per hidden page, and the workspace-role (not global
+  role) rule for ported actions (gap 12).
+- Step order stays 4A to 4F. Nothing else changes.
