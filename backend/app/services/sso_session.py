@@ -7,6 +7,7 @@ created from a SaaS-authenticated `sub` only, never looked up or linked by email
 from __future__ import annotations
 
 import secrets
+from datetime import datetime, timedelta, timezone
 
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
@@ -27,6 +28,11 @@ ORG_TO_WORKSPACE_ROLE = {
     "viewer": "viewer",
 }
 SSO_SOURCE = "sso"
+# An SSO membership stays usable this long after its last exchange, then the next exchange for
+# the same user removes it. Longer than the Many token (10 minutes) plus clock skew, so a person
+# working in two organizations does not lose one when the other is opened (Phase 4A, gap 3),
+# and an organization they lost access to is gone from Many within the same window as before.
+MEMBERSHIP_GRACE = timedelta(minutes=15)
 
 
 def _shadow_email(db: Session, a: Assertion) -> str:
@@ -83,31 +89,36 @@ def sync_shadow_user(db: Session, a: Assertion) -> User:
 
 
 def sync_memberships(db: Session, user: User, a: Assertion) -> None:
-    """Make the user's SSO-owned memberships exactly the one this assertion names.
+    """Keep the user's SSO-owned memberships to the ones used recently, plus the one named now.
 
-    Client scope: one membership in the mapped workspace. Staff scope: none
-    (same as a global admin today). Rows with source != "sso" are never touched
-    except the one the assertion explicitly targets.
+    A client assertion names its workspace with the role mapped from the organization role; a
+    staff assertion may name one (Phase 4A) and gets the admin role there. A staff assertion with
+    no workspace names none (same as a global admin today). Memberships from earlier exchanges
+    stay for MEMBERSHIP_GRACE and are removed by the first exchange after that. Rows with
+    source != "sso" are never touched except the one the assertion explicitly targets.
     """
     target = None
-    if a.scope == "client":
+    role = None
+    if a.workspace is not None:
         workspace = db.query(Workspace).filter(Workspace.id == a.workspace).first()
         # Both sides must agree on the organization (confused-deputy guard, design 4.1).
         if workspace is None or workspace.saas_tenant_id is None or workspace.saas_tenant_id != a.org:
             raise SSOAssertionError("workspace_mapping_mismatch")
         target = workspace.id
+        role = ORG_TO_WORKSPACE_ROLE[a.role] if a.scope == "client" else ROLE_ADMIN
 
     existing = db.query(UserWorkspaceMembership).filter(UserWorkspaceMembership.user_id == user.id).all()
+    cutoff = datetime.now(timezone.utc) - MEMBERSHIP_GRACE
     for membership in existing:
-        if membership.source == SSO_SOURCE and membership.workspace_id != target:
+        if membership.source == SSO_SOURCE and membership.workspace_id != target and membership.updated_at < cutoff:
             db.delete(membership)
 
     if target is not None:
-        role = ORG_TO_WORKSPACE_ROLE[a.role]
         row = next((m for m in existing if m.workspace_id == target), None)
         if row is None:
             db.add(UserWorkspaceMembership(user_id=user.id, workspace_id=target, role=role, source=SSO_SOURCE))
         else:
             row.role = role
             row.source = SSO_SOURCE
+            row.updated_at = datetime.now(timezone.utc)
     db.flush()

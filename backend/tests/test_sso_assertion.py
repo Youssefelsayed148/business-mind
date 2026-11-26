@@ -86,6 +86,19 @@ def test_valid_staff_assertion_has_no_org():
     assert a.scope == "staff" and a.org is None and a.workspace is None
 
 
+def test_staff_assertion_may_name_one_organization_and_workspace():
+    org, ws = str(uuid.uuid4()), str(uuid.uuid4())
+    a = verify_assertion(mint({"scope": "staff", "org": org, "workspace": ws, "role": ...}), FakeRedis())
+    assert a.scope == "staff" and str(a.org) == org and str(a.workspace) == ws and a.role is None
+
+
+def test_staff_assertion_naming_only_half_a_pair_is_refused():
+    half = {"scope": "staff", "role": ...}
+    assert reason(mint({**half, "org": str(uuid.uuid4()), "workspace": ...})) == "bad_workspace"
+    assert reason(mint({**half, "org": ..., "workspace": str(uuid.uuid4())})) == "bad_org"
+    assert reason(mint({**half, "org": "not-a-uuid", "workspace": str(uuid.uuid4())})) == "bad_org"
+
+
 def test_expired():
     now = int(time.time())
     assert reason(mint({"iat": now - 200, "nbf": now - 200, "exp": now - 100})) == "expired"

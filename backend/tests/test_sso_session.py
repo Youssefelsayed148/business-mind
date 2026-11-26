@@ -1,5 +1,6 @@
 """Shadow user and membership sync. Synthetic data only."""
 import uuid
+from datetime import datetime, timedelta, timezone
 
 import pytest
 
@@ -8,7 +9,7 @@ from app.models.user import User
 from app.models.user_workspace_membership import UserWorkspaceMembership
 from app.models.workspace import Workspace
 from app.services.sso_assertion import Assertion, SSOAssertionError
-from app.services.sso_session import ORG_TO_WORKSPACE_ROLE, sync_shadow_user
+from app.services.sso_session import MEMBERSHIP_GRACE, ORG_TO_WORKSPACE_ROLE, sync_shadow_user
 
 
 def workspace(db, org=None):
@@ -25,8 +26,10 @@ def client_assertion(ws, role="admin", sub=None, email="Person@Example.test"):
     )
 
 
-def staff_assertion(sub=None):
-    return Assertion(sub=sub or uuid.uuid4(), jti=uuid.uuid4().hex, scope="staff", email="staff@example.test", mfa=True)
+def staff_assertion(sub=None, workspace_row=None):
+    extra = {"org": workspace_row.saas_tenant_id, "workspace": workspace_row.id} if workspace_row is not None else {}
+    return Assertion(sub=sub or uuid.uuid4(), jti=uuid.uuid4().hex, scope="staff", email="staff@example.test",
+                     mfa=True, **extra)
 
 
 def memberships(db, user):
@@ -67,24 +70,76 @@ def test_mapping_is_exactly_as_designed():
     }
 
 
-def test_membership_moves_to_the_new_workspace_and_local_rows_survive(db_session):
-    ws_a, ws_b, ws_local = workspace(db_session), workspace(db_session), workspace(db_session)
+def age(db, user, workspace_id, minutes):
+    """Pretend the membership was last used `minutes` ago."""
+    row = db.query(UserWorkspaceMembership).filter_by(user_id=user.id, workspace_id=workspace_id).one()
+    row.updated_at = datetime.now(timezone.utc) - timedelta(minutes=minutes)
+    db.flush()
+
+
+def test_grace_covers_the_token_life_plus_skew():
+    assert MEMBERSHIP_GRACE >= timedelta(minutes=10, seconds=30)
+
+
+def test_a_recent_membership_survives_a_move_and_an_aged_one_is_removed(db_session):
+    """Phase 4A: two organizations in two tabs must not flip each other's access (gap 3)."""
+    ws_a, ws_b, ws_c, ws_local = (workspace(db_session) for _ in range(4))
     sub = uuid.uuid4()
     user = sync_shadow_user(db_session, client_assertion(ws_a, sub=sub))
     db_session.add(UserWorkspaceMembership(user_id=user.id, workspace_id=ws_local.id, role="viewer", source="local"))
     db_session.flush()
     sync_shadow_user(db_session, client_assertion(ws_b, sub=sub))
     rows = {(m.workspace_id, m.source) for m in memberships(db_session, user)}
-    assert rows == {(ws_b.id, "sso"), (ws_local.id, "local")}
+    assert rows == {(ws_a.id, "sso"), (ws_b.id, "sso"), (ws_local.id, "local")}
+    age(db_session, user, ws_a.id, minutes=int(MEMBERSHIP_GRACE.total_seconds() // 60) + 5)
+    sync_shadow_user(db_session, client_assertion(ws_c, sub=sub))
+    rows = {(m.workspace_id, m.source) for m in memberships(db_session, user)}
+    assert rows == {(ws_b.id, "sso"), (ws_c.id, "sso"), (ws_local.id, "local")}
 
 
-def test_staff_gets_global_admin_and_no_sso_memberships(db_session):
+def test_an_exchange_refreshes_the_target_membership(db_session):
+    ws = workspace(db_session)
+    sub = uuid.uuid4()
+    user = sync_shadow_user(db_session, client_assertion(ws, sub=sub))
+    age(db_session, user, ws.id, minutes=60)
+    sync_shadow_user(db_session, client_assertion(ws, sub=sub, role="viewer"))
+    row = memberships(db_session, user)[0]
+    assert row.role == "viewer"
+    assert datetime.now(timezone.utc) - row.updated_at < timedelta(minutes=1)
+
+
+def test_staff_without_a_workspace_gets_global_admin_and_old_sso_memberships_age_out(db_session):
     ws = workspace(db_session)
     sub = uuid.uuid4()
     client = sync_shadow_user(db_session, client_assertion(ws, sub=sub))
     assert client.role == "viewer" and len(memberships(db_session, client)) == 1
+    age(db_session, client, ws.id, minutes=60)
     staff = sync_shadow_user(db_session, staff_assertion(sub))
     assert staff.id == client.id and staff.role == "admin" and memberships(db_session, staff) == []
+
+
+def test_staff_for_a_workspace_gets_an_admin_membership_and_keeps_the_others(db_session):
+    """Phase 4A, P2: staff open WhatsApp and Facebook pages of an organization they pick."""
+    ws_a, ws_b = workspace(db_session), workspace(db_session)
+    sub = uuid.uuid4()
+    user = sync_shadow_user(db_session, staff_assertion(sub, ws_a))
+    assert user.role == "admin"
+    sync_shadow_user(db_session, staff_assertion(sub, ws_b))
+    rows = {(m.workspace_id, m.role, m.source) for m in memberships(db_session, user)}
+    assert rows == {(ws_a.id, "admin", "sso"), (ws_b.id, "admin", "sso")}
+
+
+def test_staff_for_a_workspace_obeys_the_mapping_check(db_session):
+    ws = workspace(db_session)
+    wrong = Assertion(sub=uuid.uuid4(), jti=uuid.uuid4().hex, scope="staff", email=None, mfa=True,
+                      org=uuid.uuid4(), workspace=ws.id)
+    with pytest.raises(SSOAssertionError) as e:
+        sync_shadow_user(db_session, wrong)
+    assert e.value.reason == "workspace_mapping_mismatch"
+    ws.saas_tenant_id = None
+    db_session.flush()
+    with pytest.raises(SSOAssertionError):
+        sync_shadow_user(db_session, staff_assertion(workspace_row=ws))
 
 
 def test_workspace_mapping_mismatch_and_unmapped_are_refused(db_session):
