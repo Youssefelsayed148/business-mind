@@ -19,7 +19,12 @@ from app.core.permissions import TENANT_ROUTE_PERMISSIONS
 from app.db.models import Membership, Tenant, User
 from app.db.session import get_session
 from app.identity.access import resolve_access
-from app.identity.roles import ROLE_PERMISSIONS, STAFF_PERMISSIONS, org_role_of
+from app.identity.roles import (
+    ORG_TO_LEGACY_ROLE,
+    ROLE_PERMISSIONS,
+    STAFF_PERMISSIONS,
+    org_role_of,
+)
 
 ROLE_LEVELS: dict[str, int] = {"viewer": 1, "editor": 2, "admin": 3}
 ROLES = tuple(ROLE_LEVELS)
@@ -48,6 +53,13 @@ class TenantContext:
 
     @property
     def role(self) -> str:
+        """The legacy role name this caller counts as in ``require_role`` checks.
+
+        With identity v2 on it follows the effective organization role, which also covers
+        agency access (no membership row, capped by the grant).
+        """
+        if self.permissions is not None and self.org_role in ORG_TO_LEGACY_ROLE:
+            return ORG_TO_LEGACY_ROLE[self.org_role]
         return self.membership.role if self.membership else "platform_staff"
 
     @property
@@ -82,6 +94,20 @@ class TenantContext:
     def require_operator(self) -> None:
         if not self.user.is_platform_staff:
             raise ApiError(403, "FORBIDDEN", "Only platform staff can control the bot.")
+
+    def require_every_location(self) -> None:
+        """Organization-wide data and changes are closed to location-limited access."""
+        if self.location_ids is not None:
+            raise ApiError(403, "FORBIDDEN", "This needs access to every location.")
+
+    def require_knowledge_editor(self) -> None:
+        """Staff only while identity v2 is off; with it on, ``knowledge.write`` (D5)."""
+        if self.permissions is None:
+            self.require_operator()
+            return
+        self.require_permission("knowledge.write")
+        # Uploads, ingestion and publishing change the bot's knowledge for every location.
+        self.require_every_location()
 
     # Convenience for services that need ids as primitives.
     @property

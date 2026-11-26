@@ -1,7 +1,8 @@
 """Knowledge endpoints (P2-02/03): sources, uploads, ingestion, jobs,
 documents, revisions, publish/rollback.
 
-Roles (docs/06): all knowledge reads and writes require platform staff.
+Roles (docs/06): writes require platform staff. With identity v2 on, Owner, Admin and
+Manager may also write (D5), provided their access covers every location.
 Every write requires CSRF. Hidden resources are 404
 (unknown ids and other tenants' ids are indistinguishable by design).
 """
@@ -69,7 +70,8 @@ def list_sources(
 
 @router.get("/sources/qa-template")
 def download_qa_template(tenant_id: UUID, bot_id: UUID, context: TenantContextDep) -> Response:
-    context.require_operator()
+    if context.permissions is None:  # identity v2 off; with it on, knowledge.read applies
+        context.require_operator()
     return Response(
         content=service.qa_template(),
         media_type="text/csv; charset=utf-8",
@@ -87,8 +89,8 @@ def upload_sources(
     settings: Annotated[Settings, Depends(get_settings)],
     files: Annotated[list[UploadFile], File(description="PDF/DOCX/TXT/MD files, or one Q&A CSV")],
 ) -> list[schemas.SourceOut]:
-    """Store uploaded files as sources (platform staff). Parsing happens in a worker job."""
-    context.require_operator()
+    """Store uploaded files as sources. Parsing happens in a worker job."""
+    context.require_knowledge_editor()
     uploads: list[tuple[str | None, Any]] = [(file.filename, file.file) for file in files]
     outcomes = service.upload_files(
         context, bot_id, uploads, settings, storage=get_storage(settings)
@@ -109,8 +111,8 @@ def replace_source(
     settings: Annotated[Settings, Depends(get_settings)],
     file: Annotated[UploadFile, File(description="The new version of this file")],
 ) -> schemas.SourceOut:
-    """Upload a new version of a source (platform staff); ingest again to apply it."""
-    context.require_operator()
+    """Upload a new version of a source; ingest again to apply it."""
+    context.require_knowledge_editor()
     outcome = service.replace_source(
         context,
         bot_id,
@@ -134,8 +136,8 @@ def bulk_delete_sources(
     _: CsrfOk,
     settings: Annotated[Settings, Depends(get_settings)],
 ) -> schemas.BulkDeleteSourcesResponse:
-    """Remove several files from the draft at once (platform staff); all or nothing."""
-    context.require_operator()
+    """Remove several files from the draft at once; all or nothing."""
+    context.require_knowledge_editor()
     deleted = service.delete_sources(
         context, bot_id, body.source_ids, storage=get_storage(settings)
     )
@@ -151,8 +153,8 @@ def delete_source(
     _: CsrfOk,
     settings: Annotated[Settings, Depends(get_settings)],
 ) -> Response:
-    """Remove a file from the draft (platform staff); published knowledge is unchanged."""
-    context.require_operator()
+    """Remove a file from the draft; published knowledge is unchanged."""
+    context.require_knowledge_editor()
     service.delete_source(context, bot_id, source_id, storage=get_storage(settings))
     return Response(status_code=204)
 
@@ -166,7 +168,7 @@ def set_always_include(
     context: TenantContextDep,
     _: CsrfOk,
 ) -> schemas.SourceOut:
-    context.require_operator()
+    context.require_knowledge_editor()
     source = service.set_source_always_include(context, bot_id, source_id, body.enabled)
     return _source_out(source, service.get_bot(context, bot_id))
 
@@ -192,8 +194,8 @@ def start_ingestion(
     _: CsrfOk,
     settings: Annotated[Settings, Depends(get_settings)],
 ) -> schemas.JobOut:
-    """Start one ingest job for the bot's stored sources (platform staff)."""
-    context.require_operator()
+    """Start one ingest job for the bot's stored sources."""
+    context.require_knowledge_editor()
     return _job_out(service.start_ingestion(context, bot_id, body.source_ids, settings))
 
 
@@ -213,7 +215,7 @@ def get_job(
 def cancel_job(
     tenant_id: UUID, bot_id: UUID, job_id: UUID, context: TenantContextDep, _: CsrfOk
 ) -> schemas.JobOut:
-    context.require_operator()
+    context.require_knowledge_editor()
     return _job_out(service.cancel_job(context, bot_id, job_id))
 
 
@@ -226,7 +228,7 @@ def retry_job(
     _: CsrfOk,
     settings: Annotated[Settings, Depends(get_settings)],
 ) -> schemas.JobOut:
-    context.require_operator()
+    context.require_knowledge_editor()
     return _job_out(service.retry_job(context, bot_id, job_id, settings))
 
 
@@ -309,6 +311,6 @@ def publish_revision(
     _: CsrfOk,
     settings: Annotated[Settings, Depends(get_settings)],
 ) -> dict[str, object]:
-    """Publish the revision (platform staff); publishing an archived one rolls back."""
-    context.require_operator()
+    """Publish the revision; publishing an archived one rolls back."""
+    context.require_knowledge_editor()
     return service.publish_revision(context, bot_id, revision_id, settings)

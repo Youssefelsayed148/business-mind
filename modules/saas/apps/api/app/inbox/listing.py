@@ -28,6 +28,7 @@ from app.db.models import (
     Message,
 )
 from app.db.session import get_engine, session_factory
+from app.identity.agency import active_grant_for
 from app.identity.locations import conversation_location_filter
 from app.inbox.events import add_inbox_event
 
@@ -460,12 +461,16 @@ def stream_events(
     last_event_id_header: Annotated[str | None, Header(alias="Last-Event-ID")] = None,
 ) -> StreamingResponse:
     cursor = _cursor(last_event_id_header)
+    if context.via_agency is not None:
+        stream = event_stream(
+            context.tenant_id, context.user.id, cursor, context.location_ids, via_agency=True
+        )
+    elif context.location_ids is None:
+        stream = event_stream(context.tenant_id, context.user.id, cursor)
+    else:
+        stream = event_stream(context.tenant_id, context.user.id, cursor, context.location_ids)
     return StreamingResponse(
-        (
-            event_stream(context.tenant_id, context.user.id, cursor)
-            if context.location_ids is None
-            else event_stream(context.tenant_id, context.user.id, cursor, context.location_ids)
-        ),
+        stream,
         media_type="text/event-stream",
         headers={
             "Cache-Control": "no-cache, no-transform",
@@ -479,6 +484,7 @@ def event_stream(
     user_id: UUID,
     cursor: int | None,
     location_ids: frozenset[UUID] | None = None,
+    via_agency: bool = False,
 ) -> Any:
     """Yield SSE events from the durable tenant cursor; shared by every process."""
     with session_factory(get_engine())() as db:
@@ -500,14 +506,20 @@ def event_stream(
         counts = _notification_counts_for(db, tenant_id, user_id, location_ids)
         yield _sse("inbox.ready", {"counts": counts}, cursor)
         while True:
-            active = db.scalar(
-                select(Membership.user_id).where(
-                    Membership.tenant_id == tenant_id,
-                    Membership.user_id == user_id,
-                    Membership.status == "active",
+            if via_agency:
+                allowed = _agency_may_still_read(db, tenant_id, user_id, location_ids)
+            else:
+                allowed = (
+                    db.scalar(
+                        select(Membership.user_id).where(
+                            Membership.tenant_id == tenant_id,
+                            Membership.user_id == user_id,
+                            Membership.status == "active",
+                        )
+                    )
+                    is not None
                 )
-            )
-            if active is None:
+            if not allowed:
                 yield _sse("inbox.access_revoked", {})
                 return
             found = db.execute(
@@ -569,6 +581,15 @@ def event_stream(
             if len(found) == MAX_SSE_BATCH:
                 continue
             time.sleep(INBOX_POLL_SECONDS)
+
+
+def _agency_may_still_read(
+    db: OrmSession, tenant_id: UUID, user_id: UUID, location_ids: frozenset[UUID] | None
+) -> bool:
+    """Re-checked on every poll: the grant still stands and covers the same locations."""
+    db.expire_all()  # a revoked or expired grant must not be answered from the identity map
+    grant = active_grant_for(db, user_id=user_id, tenant_id=tenant_id)
+    return grant is not None and grant.location_ids == location_ids
 
 
 def _notification_counts_for(

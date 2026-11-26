@@ -13,9 +13,11 @@ from sqlalchemy.orm import Session
 from app.core.permissions import TENANT_ROUTE_PERMISSIONS, TENANT_ROUTE_ROLES
 from app.identity.roles import (
     ALL_PERMISSIONS,
+    GRANT_ROLE_CAPS,
     LEGACY_TO_ORG_ROLE,
     ROLE_PERMISSIONS,
     STAFF_ONLY_PERMISSIONS,
+    agency_permissions,
     org_role_of,
 )
 from tests.helpers import csrf_headers
@@ -26,9 +28,11 @@ from tests.identity_helpers import (
     make_person,
     make_tenant,
 )
+from tests.test_agency_grants import _setup
 from tests.test_tenant_route_matrix import FLAG_ON_ONLY_ROUTES
 
 FORBIDDEN_MESSAGE = "You do not have permission for this action."
+MEMBERSHIP_ONLY = "Inbox actions require an active tenant membership."
 OWN, A, M, G, V = "owner", "admin", "manager", "agent", "viewer"
 ALL5 = {OWN, A, M, G, V}
 
@@ -167,6 +171,14 @@ def _denied_by_permission(response: Any) -> bool:
     return response.status_code == 403 and FORBIDDEN_MESSAGE in response.text
 
 
+# A caller the table allows must not be turned away by an older handler check, nor crash it.
+LEGACY_REFUSALS = ("Only platform staff", "role or higher")
+
+
+def _broken_for_allowed_caller(response: Any) -> bool:
+    return response.status_code == 500 or any(text in response.text for text in LEGACY_REFUSALS)
+
+
 def test_http_role_matrix_every_route_every_role(v2_app: FastAPI, db: Session) -> None:
     org = build_org(v2_app, db, "Alpha")
     other = build_org(v2_app, db, "Beta")
@@ -185,6 +197,8 @@ def test_http_role_matrix_every_route_every_role(v2_app: FastAPI, db: Session) -
             denied = _denied_by_permission(response)
             if response.status_code == 401 or denied == expected_allow:
                 mismatches.append(f"{role} {method} {path}: {response.status_code}")
+            elif expected_allow and _broken_for_allowed_caller(response):
+                mismatches.append(f"broken {role} {method} {path}: {response.status_code}")
         if (method, path) not in STREAMING:
             staff_response = _call(staff, method, url)
             if _denied_by_permission(staff_response) or staff_response.status_code == 401:
@@ -193,6 +207,37 @@ def test_http_role_matrix_every_route_every_role(v2_app: FastAPI, db: Session) -
         if _call(outsider, method, url).status_code != 404:
             mismatches.append(f"outsider {method} {path}")
     assert not mismatches, "\n".join(mismatches[:40])
+
+
+def test_http_role_matrix_every_route_every_agency_cap(v2_app: FastAPI, db: Session) -> None:
+    mismatches: list[str] = []
+    for cap in GRANT_ROLE_CAPS:
+        scenario = _setup(v2_app, db)
+        scenario.grant(cap=cap)
+        allowed_permissions = agency_permissions(cap)
+        for (method, path), permission in sorted(TENANT_ROUTE_PERMISSIONS.items()):
+            if permission == "authenticated":
+                continue
+            allowed = permission in allowed_permissions
+            if (method, path) in STREAMING and allowed:
+                continue
+            response = _call(scenario.agent, method, _url(path, scenario.tenant_id))
+            if not allowed:
+                if not _denied_by_permission(response):
+                    mismatches.append(f"{cap} {method} {path}: {response.status_code}")
+                continue
+            # Taking over and replying need a membership row (database foreign keys).
+            if MEMBERSHIP_ONLY in response.text:
+                if permission != "inbox.reply":
+                    mismatches.append(f"membership {cap} {method} {path}")
+                continue
+            if (
+                response.status_code == 401
+                or _denied_by_permission(response)
+                or _broken_for_allowed_caller(response)
+            ):
+                mismatches.append(f"{cap} {method} {path}: {response.status_code}")
+    assert not mismatches, "\n".join(mismatches[:60])
 
 
 def test_anonymous_gets_401_on_every_tenant_route(v2_app: FastAPI, db: Session) -> None:

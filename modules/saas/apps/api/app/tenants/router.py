@@ -19,6 +19,7 @@ from app.core.errors import ApiError
 from app.core.tenancy import CurrentUserDep, TenantContextDep
 from app.db.models import User
 from app.db.session import get_session
+from app.identity import team as team_service
 from app.identity.gate import identity_v2_only
 from app.tenants.payloads import invitation_payload
 from app.tenants.schemas import (
@@ -140,8 +141,10 @@ def change_member_role(
     user_id: UUID, body: MemberRoleUpdateRequest, context: TenantContextDep, _: CsrfOk
 ) -> MemberOut:
     context.require_role("admin")
-    service = TenantService(context.db)
-    membership = service.change_role(context, user_id, body.role)
+    if context.permissions is None:
+        membership = TenantService(context.db).change_role(context, user_id, body.role)
+    else:  # identity v2: the team rules apply on this older route too
+        membership = team_service.change_legacy_role(context, user_id, body.role)
     member = context.db.get(User, membership.user_id)
     if member is None:  # pragma: no cover - FK guarantees presence
         raise ApiError(404, "NOT_FOUND", "Member not found.")
@@ -157,7 +160,10 @@ def change_member_role(
 @router.delete("/api/v1/tenants/{tenant_id}/members/{user_id}", status_code=204)
 def remove_member(user_id: UUID, context: TenantContextDep, _: CsrfOk) -> Response:
     context.require_role("admin")
-    TenantService(context.db).remove_member(context, user_id)
+    if context.permissions is None:
+        TenantService(context.db).remove_member(context, user_id)
+    else:
+        team_service.deactivate(context, user_id)
     return Response(status_code=204)
 
 
@@ -174,8 +180,13 @@ def create_invitation(
 ) -> InvitationOut:
     """Returns the one-time link once; only its SHA-256 hash is stored."""
     context.require_role("admin")
+    org_role = None
+    if context.permissions is not None:
+        org_role = team_service.authorize_new_invitation(context, body.role)
     service = TenantService(context.db)
-    invitation, token = service.create_invitation(context, body.email, body.role, body.expiry_days)
+    invitation, token = service.create_invitation(
+        context, body.email, body.role, body.expiry_days, org_role=org_role
+    )
     return invitation_payload(invitation, token)
 
 
@@ -203,6 +214,8 @@ def list_invitations(context: TenantContextDep) -> list[InvitationOut]:
 )
 def resend_invitation(invitation_id: UUID, context: TenantContextDep, _: CsrfOk) -> InvitationOut:
     context.require_role("admin")
+    if context.permissions is not None:
+        team_service.authorize_invitation_change(context, invitation_id)
     service = TenantService(context.db)
     invitation, token = service.resend_invitation(context, invitation_id, 7)
     return invitation_payload(invitation, token)
@@ -211,6 +224,8 @@ def resend_invitation(invitation_id: UUID, context: TenantContextDep, _: CsrfOk)
 @router.delete("/api/v1/tenants/{tenant_id}/invitations/{invitation_id}", status_code=204)
 def revoke_invitation(invitation_id: UUID, context: TenantContextDep, _: CsrfOk) -> Response:
     context.require_role("admin")
+    if context.permissions is not None:
+        team_service.authorize_invitation_change(context, invitation_id)
     TenantService(context.db).revoke_invitation(context, invitation_id)
     return Response(status_code=204)
 

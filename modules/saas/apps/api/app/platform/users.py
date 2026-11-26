@@ -184,7 +184,8 @@ def add_membership(db: Db, staff: User, user: User, body: AddMembership) -> None
     if member is None:
         member = Membership(tenant_id=tenant.id, user_id=user.id, role=body.role, status="active")
     else:
-        member.role, member.status = body.role, "active"
+        # A returning member gets exactly the role assigned now, not an earlier org_role.
+        member.role, member.status, member.org_role = body.role, "active", None
     db.add(member)
     audit(db, staff, user, "membership_added", tenant.id)
 

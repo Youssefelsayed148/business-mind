@@ -125,6 +125,8 @@ class TenantService:
         email: str,
         role: str,
         expiry_days: int,
+        *,
+        org_role: str | None = None,
     ) -> tuple[Invitation, str]:
         email = email.strip().lower()
         tenant = lock_tenant(self.db, context.tenant_id)
@@ -156,6 +158,7 @@ class TenantService:
             tenant_id=context.tenant_id,
             email=email.strip().lower(),
             role=role,
+            org_role=org_role,
             token_hash=hash_token(token),
             expires_at=datetime.now(UTC) + timedelta(days=expiry_days),
             created_by=context.user.id,
@@ -335,6 +338,7 @@ class TenantService:
         membership = self._get_membership(context.tenant_id, user_id)
         if membership.role == new_role:
             return membership
+        self._require_another_owner(membership)
         if membership.role == "admin" and new_role != "admin":
             # Downgrading an admin: check a second admin remains atomically.
             admins = self.db.execute(
@@ -359,6 +363,8 @@ class TenantService:
             metadata={"from": membership.role, "to": new_role},
         )
         membership.role = cast(ClientRole, new_role)
+        # org_role wins over role under identity v2; clear it so this change takes effect.
+        membership.org_role = None
         self.db.add(membership)
         self.db.commit()
         return membership
@@ -368,6 +374,7 @@ class TenantService:
     ) -> None:
         lock_tenant(self.db, context.tenant_id)
         membership = self._get_membership(context.tenant_id, user_id)
+        self._require_another_owner(membership)
         if membership.role == "admin" and self._admin_count(context.tenant_id) == 1:
             raise ApiError(403, "LAST_ADMIN", "The last admin cannot leave or be removed.")
         record_audit(
@@ -397,6 +404,24 @@ class TenantService:
             .values(revoked_at=datetime.now(UTC))
         )
         self.db.commit()
+
+    def _require_another_owner(self, membership: Membership) -> None:
+        """The last Owner cannot be demoted or removed (design 10). Callers hold the tenant lock."""
+        if membership.org_role != "owner":
+            return
+        other = self.db.scalar(
+            select(Membership.user_id)
+            .where(
+                Membership.tenant_id == membership.tenant_id,
+                Membership.user_id != membership.user_id,
+                Membership.status == "active",
+                Membership.org_role == "owner",
+                Membership.location_scope == "all",
+            )
+            .limit(1)
+        )
+        if other is None:
+            raise ApiError(403, "LAST_OWNER", "The last Owner cannot be demoted or removed.")
 
     def _get_membership(self, tenant_id: UUID, user_id: UUID) -> Membership:
         membership = self.db.execute(
