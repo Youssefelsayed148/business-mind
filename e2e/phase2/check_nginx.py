@@ -8,6 +8,7 @@ import http.client
 import json
 import os
 import sys
+import time
 import uuid
 
 EDGE = (os.environ.get("EDGE_HOST", "nginx"), int(os.environ.get("EDGE_PORT", "80")))
@@ -137,9 +138,16 @@ for path in (
 for path in ("/AUTH/sso/exchange", "/Auth/SSO/Exchange", "/auth/SSO/exchange", "/auth/sso/EXCHANGE"):
     check("sso-exchange-mixedcase", "POST", MANY, path, "app_4xx_json")
 check("sso-exchange-trailing-slash", "POST", MANY, "/auth/sso/exchange/", "redirect_or_4xx")
-# The /api/ prefix is stripped before Many sees it, so it reaches the same handler.
-for path in ("/api/auth/sso/exchange", "//api/auth/%73so/exchange"):
-    check("sso-exchange-api-prefix-reaches-the-app", "POST", MANY, path, "app_4xx_json")
+# The /api/ prefix is stripped before Many sees it, so it reaches the same handler. These share
+# the limit zone with the checks above, so wait for the allowance to refill (30 a minute) first.
+for path, expect in (
+    ("/api/auth/sso/exchange", "app_4xx_json"),  # exact location
+    ("//api/auth/%73so/exchange", "app_4xx_json"),
+    ("/API/auth/sso/exchange", "app_4xx_json"),  # regex location, forwarded without the prefix
+    ("/api/auth/sso/exchange/", "redirect_or_4xx"),
+):
+    time.sleep(2.5)
+    check("sso-exchange-api-prefix-reaches-the-app", "POST", MANY, path, expect)
 # Not routed to Many on the SaaS hosts (404 from the SaaS API or from Next, never 2xx).
 for host in (SAAS_API, SAAS_WEB):
     for path in ("/auth/sso/exchange", "/AUTH/sso/exchange"):
