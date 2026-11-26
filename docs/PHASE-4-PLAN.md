@@ -3,7 +3,7 @@
 Living plan. Last updated: 2026-11-26 (Claude Code, step 1). Base: `main` at `32d32e9`.
 Parent: `docs/MERGE-PLAN.md` (Phase 4). Progress record: `docs/MERGE-PROGRESS.md`.
 
-**Status: step 1 (inventory and design) written and waiting for the owner's review. No Phase 4 code
+**Status: step 1 approved with P1 to P8 as recommended (2026-11-26); 4A in progress. No Phase 4 code
 exists.** `docs/UI-INVENTORY.md` is the inventory; section 12 below is the design. Everything
 after step 1 is a proposal until the owner approves P1 to P8.
 
@@ -13,8 +13,8 @@ Status values: not started / in progress / in review / done / blocked.
 
 | Step | Branch (suggested) | PR | Status | Done when |
 |---|---|---|---|---|
-| 1. Inventory and design | `claude/blissful-allen-b63jty` (stacked on `docs/phase-4-plan`) | draft PR to `docs/phase-4-plan` | in review | Owner approves the docs and P1 to P8 |
-| 4A. Connection | `phase-4/connection` | - | not started | Role and tenant isolation tests pass |
+| 1. Inventory and design | `claude/blissful-allen-b63jty` (stacked on `docs/phase-4-plan`) | [#12](https://github.com/Youssefelsayed148/business-mind/pull/12) | done (owner accepted P1 to P8, 2026-11-26; PR still open) | Owner approves the docs and P1 to P8 |
+| 4A. Connection | `phase-4/connection` | - | in progress | Role and tenant isolation tests pass |
 | 4B. Shell | `phase-4/shell` | - | not started | One Many page works end to end |
 | 4C. Client pages | `phase-4/client-pages` | - | not started | Client and staff browser tests pass |
 | 4D. Staff pages | `phase-4/staff-pages` | - | not started | Every old tab has a place |
@@ -56,14 +56,14 @@ until the owner approves parity.
 
 | # | Question | Recommendation | Owner decision |
 |---|---|---|---|
-| P1 | Where does the server-side proxy to Many live: SaaS API or a Next route handler? | SaaS API: reuses session, CSRF, revocation and audit; strict path allowlist; the Many token never reaches the browser. Note that `next.config.ts` already rewrites `/api/*` to the SaaS API | open |
-| P2 | How do staff reach WhatsApp and Facebook? (gap 1) | Staff pick an organization and get an SSO membership for its mapped workspace | open |
-| P3 | Styling of ported pages | Rebuild with SaaS components and `tokens.css`; no Tailwind | open |
-| P4 | Language | English interface, correct RTL/bidi for content, logical CSS properties; Arabic interface later | open |
-| P5 | The Many Messages tab (gap 5) | Keep, staff-only | open |
-| P6 | Legal and opt-in pages | Keep every existing URL working; the owner chooses the legal text | open |
-| P7 | Which `PHASE-3-REVIEW.md` open items are fixed in 4A? | Items 1 (reused MFA code race), 3 (location-limited Admin changes retention and change requests), 7 (Admin replaces a pending Owner invitation); agency replies (item 4) later. Step 1 states which of the others block enabling a flag | open |
-| P8 | When is the old Many dashboard retired? | Keep it running until the owner approves parity; removal belongs to cutover | open |
+| P1 | Where does the server-side proxy to Many live: SaaS API or a Next route handler? | SaaS API: reuses session, CSRF, revocation and audit; strict path allowlist; the Many token never reaches the browser. Note that `next.config.ts` already rewrites `/api/*` to the SaaS API | accepted as recommended, 2026-11-26 |
+| P2 | How do staff reach WhatsApp and Facebook? (gap 1) | Staff pick an organization and get an SSO membership for its mapped workspace | accepted as recommended, 2026-11-26 |
+| P3 | Styling of ported pages | Rebuild with SaaS components and `tokens.css`; no Tailwind | accepted as recommended, 2026-11-26 |
+| P4 | Language | English interface, correct RTL/bidi for content, logical CSS properties; Arabic interface later | accepted as recommended, 2026-11-26 |
+| P5 | The Many Messages tab (gap 5) | Keep, staff-only | accepted as recommended, 2026-11-26 |
+| P6 | Legal and opt-in pages | Keep every existing URL working; the owner chooses the legal text | accepted as recommended, 2026-11-26 |
+| P7 | Which `PHASE-3-REVIEW.md` open items are fixed in 4A? | Items 1 (reused MFA code race), 3 (location-limited Admin changes retention and change requests), 7 (Admin replaces a pending Owner invitation); agency replies (item 4) later. Step 1 states which of the others block enabling a flag | accepted as recommended, 2026-11-26 |
+| P8 | When is the old Many dashboard retired? | Keep it running until the owner approves parity; removal belongs to cutover | accepted as recommended, 2026-11-26 |
 
 ## 5. Known gaps
 
