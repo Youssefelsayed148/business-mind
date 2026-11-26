@@ -252,40 +252,6 @@ def test_team_list_shows_the_new_role_vocabulary(v2_app: FastAPI, db: Session) -
     assert {r["location_scope"] for r in rows} == {"all"}
 
 
-def test_location_limited_assignment_is_not_possible_through_the_api(
-    v2_app: FastAPI, db: Session
-) -> None:
-    org = team_org(v2_app, db)
-    owner = org.people["owner"]
-    headers = csrf_headers(owner.client)
-    assert (
-        owner.client.post(
-            url(org, "/team/invitations"),
-            json={"email": "x@example.com", "role": "agent", "location_scope": "limited"},
-            headers=headers,
-        ).status_code
-        == 422
-    )
-    assert (
-        owner.client.patch(
-            url(org, f"/team/members/{org.people['agent'].user_id}"),
-            json={"role": "agent", "location_scope": "limited"},
-            headers=headers,
-        ).status_code
-        == 422
-    )
-    assert (
-        owner.client.post(
-            url(org, "/agency/grants"),
-            json={"agency_id": str(uuid4()), "role_cap": "viewer", "location_ids": [str(uuid4())]},
-            headers=headers,
-        ).status_code
-        == 422
-    )
-    scopes = db.scalars(select(Membership.location_scope)).all()
-    assert set(scopes) == {"all"}
-
-
 @pytest.mark.parametrize(
     ("method", "path", "body"),
     [

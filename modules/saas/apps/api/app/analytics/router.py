@@ -39,7 +39,12 @@ def analytics_summary(
     get_bot(context, bot_id)
     start, end = _window(from_date, to_date)
     return service.summary(
-        context.db, tenant_id=context.tenant_id, bot_id=bot_id, start=start, end=end
+        context.db,
+        tenant_id=context.tenant_id,
+        bot_id=bot_id,
+        start=start,
+        end=end,
+        location_ids=context.location_ids,
     )
 
 
@@ -53,7 +58,12 @@ def analytics_volume(
     get_bot(context, bot_id)
     start, end = _window(from_date, to_date)
     days = service.volume_per_day(
-        context.db, tenant_id=context.tenant_id, bot_id=bot_id, start=start, end=end
+        context.db,
+        tenant_id=context.tenant_id,
+        bot_id=bot_id,
+        start=start,
+        end=end,
+        location_ids=context.location_ids,
     )
     return {"days": days}
 
@@ -74,6 +84,7 @@ def analytics_top_questions(
         bot_id=bot_id,
         start=start,
         end=end,
+        location_ids=context.location_ids,
         limit=limit,
     )
     return {"questions": rows}
@@ -95,6 +106,7 @@ def analytics_unanswered(
         bot_id=bot_id,
         start=start,
         end=end,
+        location_ids=context.location_ids,
         limit=limit,
     )
     return {"questions": rows}
@@ -110,10 +122,20 @@ def analytics_leads(
     get_bot(context, bot_id)
     start, end = _window(from_date, to_date)
     trend = service.leads_trend(
-        context.db, tenant_id=context.tenant_id, bot_id=bot_id, start=start, end=end
+        context.db,
+        tenant_id=context.tenant_id,
+        bot_id=bot_id,
+        start=start,
+        end=end,
+        location_ids=context.location_ids,
     )
     contacts = service.lead_contacts(
-        context.db, tenant_id=context.tenant_id, bot_id=bot_id, start=start, end=end
+        context.db,
+        tenant_id=context.tenant_id,
+        bot_id=bot_id,
+        start=start,
+        end=end,
+        location_ids=context.location_ids,
     )
     return {"trend": trend, "contacts": contacts}
 
@@ -142,7 +164,12 @@ def analytics_conversations_csv(
     get_bot(context, bot_id)
     start, end = _window(from_date, to_date)
     rows: list[dict[str, object]] = service.conversations_csv(
-        context.db, tenant_id=context.tenant_id, bot_id=bot_id, start=start, end=end
+        context.db,
+        tenant_id=context.tenant_id,
+        bot_id=bot_id,
+        start=start,
+        end=end,
+        location_ids=context.location_ids,
     )
     return _csv_response(
         "conversations.csv",
@@ -171,7 +198,12 @@ def analytics_leads_csv(
     get_bot(context, bot_id)
     start, end = _window(from_date, to_date)
     rows: list[dict[str, object]] = service.lead_contacts(
-        context.db, tenant_id=context.tenant_id, bot_id=bot_id, start=start, end=end
+        context.db,
+        tenant_id=context.tenant_id,
+        bot_id=bot_id,
+        start=start,
+        end=end,
+        location_ids=context.location_ids,
     )
     return _csv_response(
         "leads.csv",

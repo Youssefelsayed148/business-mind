@@ -13,7 +13,7 @@ from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from uuid import UUID, uuid4
 
-from sqlalchemy import select, update
+from sqlalchemy import delete, select, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session as OrmSession
 
@@ -24,8 +24,9 @@ from app.core.config import Settings
 from app.core.errors import ApiError
 from app.core.ratelimit import enforce_or_429
 from app.core.tenancy import TenantContext
-from app.db.models import Invitation, Membership, User
+from app.db.models import Invitation, InvitationLocation, Membership, MembershipLocation, User
 from app.identity import mfa as mfa_service
+from app.identity.locations import copy_invitation_scope, validate_locations_in_tenant
 from app.identity.mailer import MailMessage, get_mailer, link
 from app.identity.roles import ORG_ROLES, ORG_TO_LEGACY_ROLE, org_role_of
 from app.identity.sessions import revoke_user_sessions
@@ -45,6 +46,54 @@ def _require_team_actor(ctx: TenantContext) -> None:
     ctx.require_permission("team.manage")
     if ctx.via_agency is not None:  # defense in depth: agency people never hold team.*
         raise ApiError(403, "FORBIDDEN", "You do not have permission for this action.")
+    if ctx.location_ids is not None:
+        # A location-limited person cannot hand out or change access across the organization.
+        raise ApiError(403, "FORBIDDEN", "Team changes need access to every location.")
+
+
+def _scope_metadata(scope: str, locations: frozenset[UUID]) -> dict[str, object]:
+    """Audit detail only for limited scope, so unrestricted records keep their old shape."""
+    if scope != "limited":
+        return {}
+    return {"location_scope": scope, "locations": sorted(str(i) for i in locations)}
+
+
+def resolve_scope(
+    ctx: TenantContext, role: str, location_scope: str, location_ids: list[UUID]
+) -> frozenset[UUID]:
+    """Validate a scope request; returns the location set (empty for ``all``)."""
+    if location_scope == "all":
+        if location_ids:
+            raise ApiError(422, "VALIDATION_ERROR", "location_ids needs location_scope limited.")
+        return frozenset()
+    if role == "owner":
+        raise ApiError(422, "VALIDATION_ERROR", "An Owner always has access to every location.")
+    if not location_ids:
+        raise ApiError(422, "VALIDATION_ERROR", "A limited scope needs at least one location.")
+    try:
+        return validate_locations_in_tenant(ctx.db, ctx.tenant_id, location_ids)
+    except ValueError:
+        raise ApiError(404, "NOT_FOUND", "Location not found.") from None
+
+
+def _apply_scope(
+    ctx: TenantContext, membership: Membership, scope: str, locations: frozenset[UUID]
+) -> None:
+    ctx.db.execute(
+        delete(MembershipLocation).where(
+            MembershipLocation.tenant_id == membership.tenant_id,
+            MembershipLocation.user_id == membership.user_id,
+        )
+    )
+    membership.location_scope = scope
+    ctx.db.add(membership)
+    ctx.db.flush()
+    for location_id in sorted(locations):
+        ctx.db.add(
+            MembershipLocation(
+                tenant_id=membership.tenant_id, user_id=membership.user_id, location_id=location_id
+            )
+        )
 
 
 def _require_assignable(ctx: TenantContext, role: str) -> None:
@@ -72,10 +121,15 @@ def _active_memberships(db: OrmSession, tenant_id: UUID) -> list[Membership]:
 def _guard_last_privileged(
     db: OrmSession, tenant_id: UUID, target: Membership, new_role: str | None
 ) -> None:
-    """Refuse to remove or demote the last Owner, or the last Owner/Admin overall."""
+    """Refuse to remove or demote the last Owner, or the last Owner/Admin overall.
+
+    A location-limited Admin cannot manage the team, so it does not count as an Admin here.
+    """
     current = org_role_of(target.role, target.org_role)
     others = [m for m in _active_memberships(db, tenant_id) if m.user_id != target.user_id]
-    roles = [org_role_of(m.role, m.org_role) for m in others]
+    roles = [
+        org_role_of(m.role, m.org_role) if m.location_scope == "all" else "limited" for m in others
+    ]
     if current == "owner" and new_role != "owner" and "owner" not in roles:
         raise ApiError(403, "LAST_OWNER", "The last Owner cannot be demoted or removed.")
     if (
@@ -117,10 +171,13 @@ def invite(
     email: str,
     role: str,
     expiry_days: int,
+    location_scope: str = "all",
+    location_ids: list[UUID] | None = None,
 ) -> InviteResult:
     """Create a one-time invitation. The caller answers INVITE_MESSAGE in every case."""
     _require_team_actor(ctx)
     _require_assignable(ctx, role)
+    locations = resolve_scope(ctx, role, location_scope, location_ids or [])
     db = ctx.db
     tenant = lock_tenant(db, ctx.tenant_id)
     require_capacity(db, tenant, "seats")  # tenant state only, never email dependent
@@ -158,8 +215,16 @@ def invite(
         expires_at=datetime.now(UTC) + timedelta(days=expiry_days),
         created_by=ctx.user.id,
         new_account=user is None,
+        location_scope=location_scope,
     )
     db.add(invitation)
+    db.flush()
+    for location_id in sorted(locations):
+        db.add(
+            InvitationLocation(
+                invitation_id=invitation.id, tenant_id=ctx.tenant_id, location_id=location_id
+            )
+        )
     record_audit(
         db,
         action="team.invited",
@@ -167,7 +232,11 @@ def invite(
         actor_user_id=ctx.user.id,
         target_type="invitation",
         target_id=str(invitation.id),
-        metadata={"role": role, "new_account": user is None},
+        metadata={
+            "role": role,
+            "new_account": user is None,
+            **_scope_metadata(location_scope, locations),
+        },
     )
     db.commit()
     path = "/accept-invite"
@@ -184,7 +253,13 @@ def invite(
     return InviteResult(link_path=shown)
 
 
-def change_role(ctx: TenantContext, user_id: UUID, new_role: str) -> Membership:
+def change_role(
+    ctx: TenantContext,
+    user_id: UUID,
+    new_role: str,
+    location_scope: str | None = None,
+    location_ids: list[UUID] | None = None,
+) -> Membership:
     _require_team_actor(ctx)
     if user_id == ctx.user.id:
         raise ApiError(403, "SELF_EDIT", "You cannot change your own role.")
@@ -193,9 +268,31 @@ def change_role(ctx: TenantContext, user_id: UUID, new_role: str) -> Membership:
     current = org_role_of(target.role, target.org_role)
     _require_assignable(ctx, new_role)
     _require_may_edit(ctx, current)
-    if new_role == current and target.org_role == new_role:
+    # Omitted scope keeps the member's current one (a limited member stays limited).
+    kept = frozenset(
+        ctx.db.scalars(
+            select(MembershipLocation.location_id).where(
+                MembershipLocation.tenant_id == ctx.tenant_id,
+                MembershipLocation.user_id == user_id,
+            )
+        )
+    )
+    if location_scope is None:
+        if location_ids:
+            raise ApiError(422, "VALIDATION_ERROR", "location_ids needs location_scope.")
+        scope, locations = target.location_scope, kept
+        if scope == "limited" and new_role == "owner":
+            raise ApiError(422, "VALIDATION_ERROR", "An Owner always has access to every location.")
+    else:
+        scope = location_scope
+        locations = resolve_scope(ctx, new_role, location_scope, location_ids or [])
+    scope_unchanged = scope == target.location_scope and locations == kept
+    if new_role == current and target.org_role == new_role and scope_unchanged:
         return target
-    _guard_last_privileged(ctx.db, ctx.tenant_id, target, new_role)
+    guard_role = new_role if scope == "all" else "limited"
+    _guard_last_privileged(ctx.db, ctx.tenant_id, target, guard_role)
+    if not scope_unchanged:
+        _apply_scope(ctx, target, scope, locations)
     target.org_role = new_role
     target.role = ORG_TO_LEGACY_ROLE[new_role]  # type: ignore[assignment]
     ctx.db.add(target)  # dual-write: the legacy column stays truthful
@@ -206,7 +303,7 @@ def change_role(ctx: TenantContext, user_id: UUID, new_role: str) -> Membership:
         actor_user_id=ctx.user.id,
         target_type="membership",
         target_id=str(user_id),
-        metadata={"from": current, "to": new_role},
+        metadata={"from": current, "to": new_role, **_scope_metadata(scope, locations)},
     )
     revoke_user_sessions(ctx.db, user_id)
     ctx.db.commit()
@@ -296,17 +393,18 @@ def accept_into_new_account(
             db.add(user)
     except IntegrityError:
         raise ApiError(409, "ACCOUNT_EXISTS", ACCOUNT_EXISTS) from None
-    db.add(
-        Membership(
-            tenant_id=tenant_id,
-            user_id=user.id,
-            role=invitation.role,
-            org_role=invitation.org_role,
-            status="active",
-        )
+    membership = Membership(
+        tenant_id=tenant_id,
+        user_id=user.id,
+        role=invitation.role,
+        org_role=invitation.org_role,
+        status="active",
     )
+    db.add(membership)
     invitation.accepted_at = now
     db.add(invitation)
+    db.flush()
+    copy_invitation_scope(db, invitation, membership)
     record_audit(
         db,
         action="team.accepted",

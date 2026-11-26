@@ -20,6 +20,7 @@ from app.db.models import (
     Message,
     UsageEvent,
 )
+from app.identity.locations import conversation_location_filter
 from app.inbox.handoff import add_system_message
 
 router = APIRouter(prefix="/api/v1/tenants/{tenant_id}/conversations")
@@ -46,6 +47,7 @@ def _conversation(
         Conversation.id == conversation_id,
         Conversation.tenant_id == context.tenant_id,
         Conversation.source.in_(("website", "channel")),
+        conversation_location_filter(context.location_ids),
     )
     if lock:
         statement = statement.with_for_update()

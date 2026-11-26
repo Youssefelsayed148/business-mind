@@ -5,7 +5,7 @@ from typing import Annotated
 from uuid import UUID, uuid4
 
 from fastapi import APIRouter, Depends
-from sqlalchemy import select
+from sqlalchemy import ColumnElement, select
 
 from app.auth import cookies
 from app.core.config import Settings, get_settings
@@ -13,6 +13,7 @@ from app.core.errors import ApiError
 from app.core.tenancy import TenantContext, TenantContextDep
 from app.db.models import Conversation, FollowUp, Job
 from app.followups.schemas import FollowUpCreate, FollowUpOut
+from app.identity.locations import conversation_location_filter
 from app.jobs.queue import enqueue_job
 
 router = APIRouter(prefix="/api/v1/tenants/{tenant_id}/follow-ups", tags=["follow-ups"])
@@ -20,11 +21,22 @@ CsrfOk = Annotated[None, Depends(cookies.require_csrf)]
 CurrentSettings = Annotated[Settings, Depends(get_settings)]
 
 
+def _in_scope(context: TenantContext) -> ColumnElement[bool]:
+    """Follow-ups follow their conversation's location (website threads are organization-wide)."""
+    return FollowUp.conversation_id.in_(
+        select(Conversation.id).where(
+            Conversation.tenant_id == context.tenant_id,
+            conversation_location_filter(context.location_ids),
+        )
+    )
+
+
 def _follow_up(context: TenantContext, follow_up_id: UUID) -> FollowUp:
     row: FollowUp | None = context.db.execute(
         select(FollowUp).where(
             FollowUp.tenant_id == context.tenant_id,
             FollowUp.id == follow_up_id,
+            _in_scope(context),
         )
     ).scalar_one_or_none()
     if row is None:
@@ -38,7 +50,7 @@ def list_follow_ups(context: TenantContextDep) -> dict[str, object]:
     rows = (
         context.db.execute(
             select(FollowUp)
-            .where(FollowUp.tenant_id == context.tenant_id)
+            .where(FollowUp.tenant_id == context.tenant_id, _in_scope(context))
             .order_by(FollowUp.send_at.desc(), FollowUp.id)
             .limit(500)
         )
@@ -60,6 +72,7 @@ def create_follow_up(
         select(Conversation).where(
             Conversation.tenant_id == context.tenant_id,
             Conversation.id == body.conversation_id,
+            conversation_location_filter(context.location_ids),
         )
     ).scalar_one_or_none()
     if conversation is None:

@@ -22,6 +22,7 @@ from app.core.errors import ApiError
 from app.core.tenancy import TenantContextDep
 from app.db.models import Bot, ChannelConnection, User
 from app.db.session import get_session
+from app.identity.locations import location_filter, validate_locations_in_tenant
 from app.platform.staff import PlatformStaffDep
 from app.quotas.service import limits_for, lock_tenant
 
@@ -42,6 +43,8 @@ class ChannelConnectionCreate(BaseModel):
     display_name: str = Field(min_length=1, max_length=120)
     many_base_url: str = Field(min_length=8, max_length=500)
     many_channel_ref: str | None = Field(default=None, max_length=128)
+    # Honored only with identity v2 on (design 4.2); ignored otherwise.
+    location_id: UUID | None = None
 
     @field_validator("display_name")
     @classmethod
@@ -65,6 +68,8 @@ class ChannelConnectionUpdate(BaseModel):
     many_base_url: str | None = Field(default=None, min_length=8, max_length=500)
     many_channel_ref: str | None = Field(default=None, max_length=128)
     ai_enabled: bool | None = None
+    # Honored only with identity v2 on; ignored otherwise. null makes it organization-wide.
+    location_id: UUID | None = None
 
     @field_validator("display_name")
     @classmethod
@@ -197,6 +202,18 @@ def _require_connection(db: OrmSession, connection_id: UUID, *, lock: bool) -> C
     return connection
 
 
+def _checked_location(
+    db: OrmSession, settings: Settings, tenant_id: UUID, location_id: UUID | None
+) -> UUID | None:
+    if location_id is None or not settings.identity_v2_enabled:
+        return None
+    try:
+        validate_locations_in_tenant(db, tenant_id, [location_id])
+    except ValueError:
+        raise ApiError(404, "NOT_FOUND", "Resource not found.") from None
+    return location_id
+
+
 def _audit(
     db: OrmSession,
     *,
@@ -275,6 +292,7 @@ def create_channel_connection(
             503, "CHANNEL_ENCRYPTION_UNAVAILABLE", "Channel secret encryption is unavailable."
         ) from exc
     _require_free_channel_ref(db, payload.channel, payload.many_channel_ref, exclude=None)
+    location_id = _checked_location(db, settings, tenant.id, payload.location_id)
     connection = ChannelConnection(
         id=uuid4(),
         tenant_id=tenant.id,
@@ -289,6 +307,7 @@ def create_channel_connection(
         secret_key_version=1,
         health_status="unknown",
         created_by=staff.id,
+        location_id=location_id,
     )
     db.add(connection)
     _audit(db, connection=connection, actor=staff, action="created")
@@ -344,6 +363,13 @@ def update_channel_connection(
     if connection.status == "revoked":
         raise ApiError(409, "CONNECTION_REVOKED", "A revoked connection cannot be changed.")
     values = payload.model_dump(exclude_unset=True)
+    if "location_id" in values:
+        if settings.identity_v2_enabled:
+            values["location_id"] = _checked_location(
+                db, settings, connection.tenant_id, values["location_id"]
+            )
+        else:
+            del values["location_id"]
     if "many_base_url" in values and values["many_base_url"] is not None:
         values["many_base_url"] = _validate_base_url(values["many_base_url"], settings)
     if values.get("many_channel_ref"):
@@ -487,7 +513,10 @@ def rotate_channel_secret(
 def list_client_channels(context: TenantContextDep) -> ClientChannelListOut:
     connections = context.db.scalars(
         select(ChannelConnection)
-        .where(ChannelConnection.tenant_id == context.tenant_id)
+        .where(
+            ChannelConnection.tenant_id == context.tenant_id,
+            location_filter(ChannelConnection.location_id, context.location_ids),
+        )
         .order_by(ChannelConnection.created_at, ChannelConnection.id)
     )
     # The client contract intentionally omits Many URLs, channel refs, and secrets.

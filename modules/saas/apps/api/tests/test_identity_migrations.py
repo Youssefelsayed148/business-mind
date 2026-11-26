@@ -1,4 +1,4 @@
-"""Migrations 0032 to 0034: single head, up/down/up, backfill, legacy columns intact."""
+"""Migrations 0032 to 0035: single head, up/down/up, backfill, legacy columns intact."""
 
 from uuid import UUID, uuid4
 
@@ -25,6 +25,7 @@ NEW_TABLES = {
     "user_mfa",
     "user_recovery_codes",
     "password_reset_tokens",
+    "invitation_locations",
 }
 
 
@@ -66,9 +67,10 @@ def test_single_head_chains_on_previous_head() -> None:
     config = Config(API_DIR / "alembic.ini")
     config.set_main_option("script_location", str(API_DIR / "alembic"))
     script = ScriptDirectory.from_config(config)
-    assert script.get_heads() == ["0034_roles_backfill"]
-    chain = [rev.revision for rev in script.walk_revisions()][:4]
+    assert script.get_heads() == ["0035_invitation_locations"]
+    chain = [rev.revision for rev in script.walk_revisions()][:5]
     assert chain == [
+        "0035_invitation_locations",
         "0034_roles_backfill",
         "0033_auth_security",
         "0032_identity_orgs",

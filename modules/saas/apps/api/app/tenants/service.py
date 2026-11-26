@@ -23,6 +23,7 @@ from app.core.errors import ApiError
 from app.core.tenancy import ROLE_LEVELS, TenantContext
 from app.db.models import Invitation, Membership, Tenant, User
 from app.db.models.core import ClientRole
+from app.identity.locations import copy_invitation_scope
 from app.quotas.service import lock_tenant, require_capacity
 from app.tenants.schemas import MAX_INVITATION_EXPIRY_DAYS
 
@@ -297,6 +298,9 @@ class TenantService:
             db.add(membership)
         invitation.accepted_at = now
         db.add(invitation)
+        if invitation.org_role is not None:
+            # Created by the identity-v2 team API: carry its location scope over.
+            copy_invitation_scope(db, invitation, membership)
         record_audit(
             db,
             action="invitation.accepted",

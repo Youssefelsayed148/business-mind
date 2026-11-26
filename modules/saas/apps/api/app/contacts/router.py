@@ -9,7 +9,7 @@ from typing import Annotated
 from uuid import UUID, uuid4
 
 from fastapi import APIRouter, Depends, Query, Response
-from sqlalchemy import delete, select, update
+from sqlalchemy import delete, func, select, update
 
 from app.auth import cookies
 from app.contacts.schemas import ContactCreate, ContactOut, ContactUpdate, StageRename
@@ -17,6 +17,11 @@ from app.core.audit import record_audit
 from app.core.errors import ApiError
 from app.core.tenancy import TenantContext, TenantContextDep
 from app.db.models import Contact, ContactIdentity, ContactStage, Conversation, Message
+from app.identity.locations import (
+    conversation_location_filter,
+    location_filter,
+    validate_locations_in_tenant,
+)
 from app.quotas.service import lock_tenant, require_capacity
 
 router = APIRouter(prefix="/api/v1/tenants/{tenant_id}/contacts", tags=["contacts"])
@@ -25,11 +30,52 @@ CsrfOk = Annotated[None, Depends(cookies.require_csrf)]
 
 def _contact(context: TenantContext, contact_id: UUID) -> Contact:
     row: Contact | None = context.db.execute(
-        select(Contact).where(Contact.tenant_id == context.tenant_id, Contact.id == contact_id)
+        select(Contact).where(
+            Contact.tenant_id == context.tenant_id,
+            Contact.id == contact_id,
+            location_filter(Contact.location_id, context.location_ids),
+        )
     ).scalar_one_or_none()
     if row is None:
         raise ApiError(404, "NOT_FOUND", "Resource not found.")
     return row
+
+
+def _creation_location(context: TenantContext, requested: UUID | None) -> UUID | None:
+    """The location a new contact takes (design 4.2). Only identity v2 knows locations."""
+    if context.permissions is None:
+        return None
+    allowed = context.location_ids
+    if requested is not None:
+        if allowed is not None and requested not in allowed:
+            raise ApiError(404, "NOT_FOUND", "Resource not found.")
+        try:
+            validate_locations_in_tenant(context.db, context.tenant_id, [requested])
+        except ValueError:
+            raise ApiError(404, "NOT_FOUND", "Resource not found.") from None
+        return requested
+    if allowed is None:
+        return None
+    if len(allowed) == 1:
+        return next(iter(allowed))
+    raise ApiError(422, "VALIDATION_ERROR", "location_id is required for location-limited access.")
+
+
+def _require_all_conversations_in_scope(context: TenantContext, contact_id: UUID) -> None:
+    """Merge and erase touch every conversation of the contact: refuse if any is out of scope."""
+    if context.location_ids is None:
+        return
+    outside = context.db.scalar(
+        select(func.count())
+        .select_from(Conversation)
+        .where(
+            Conversation.tenant_id == context.tenant_id,
+            Conversation.contact_id == contact_id,
+            ~conversation_location_filter(context.location_ids),
+        )
+    )
+    if outside:
+        raise ApiError(403, "FORBIDDEN", "This contact has conversations outside your locations.")
 
 
 def _stages(context: TenantContext) -> list[ContactStage]:
@@ -114,7 +160,10 @@ def list_contacts(
             "VALIDATION_ERROR",
             "channel must be one of website, whatsapp, messenger, instagram.",
         )
-    query = select(Contact).where(Contact.tenant_id == context.tenant_id)
+    query = select(Contact).where(
+        Contact.tenant_id == context.tenant_id,
+        location_filter(Contact.location_id, context.location_ids),
+    )
     if q:
         query = query.where(
             (Contact.display_name.ilike(f"%{q}%"))
@@ -175,7 +224,13 @@ def create_contact(body: ContactCreate, context: TenantContextDep, _: CsrfOk) ->
     )
     if body.stage not in {row.name for row in _stages(context)}:
         raise ApiError(422, "VALIDATION_ERROR", "Unknown contact stage.")
-    row = Contact(id=uuid4(), tenant_id=context.tenant_id, **body.model_dump(mode="json"))
+    location_id = _creation_location(context, body.location_id)
+    row = Contact(
+        id=uuid4(),
+        tenant_id=context.tenant_id,
+        location_id=location_id,
+        **body.model_dump(mode="json", exclude={"location_id"}),
+    )
     context.db.add(row)
     context.db.commit()
     return ContactOut.model_validate(row)
@@ -192,6 +247,9 @@ def list_stages(context: TenantContextDep) -> dict[str, object]:
 @router.patch("/stages")
 def rename_stage(body: StageRename, context: TenantContextDep, _: CsrfOk) -> dict[str, str]:
     context.require_role("admin")
+    if context.location_ids is not None:
+        # A rename rewrites every contact of the organization, including other locations.
+        raise ApiError(403, "FORBIDDEN", "Organization-wide stages need unrestricted access.")
     _stages(context)
     if body.old_name == body.name:
         return {"name": body.name}
@@ -220,14 +278,22 @@ def export_contacts(context: TenantContextDep) -> Response:
     context.require_role("admin")
     rows = (
         context.db.execute(
-            select(Contact).where(Contact.tenant_id == context.tenant_id).order_by(Contact.id)
+            select(Contact)
+            .where(
+                Contact.tenant_id == context.tenant_id,
+                location_filter(Contact.location_id, context.location_ids),
+            )
+            .order_by(Contact.id)
         )
         .scalars()
         .all()
     )
     identity_rows = context.db.execute(
         select(ContactIdentity.contact_id, ContactIdentity.channel)
-        .where(ContactIdentity.tenant_id == context.tenant_id)
+        .where(
+            ContactIdentity.tenant_id == context.tenant_id,
+            ContactIdentity.contact_id.in_([row.id for row in rows]),
+        )
         .distinct()
         .order_by(ContactIdentity.channel)
     )
@@ -282,6 +348,7 @@ def merge_contact(
     source, target = _contact(context, contact_id), _contact(context, target_id)
     if source.id == target.id:
         raise ApiError(422, "VALIDATION_ERROR", "Choose two different contacts.")
+    _require_all_conversations_in_scope(context, source.id)
     context.db.execute(
         update(Conversation)
         .where(Conversation.tenant_id == context.tenant_id, Conversation.contact_id == source.id)
@@ -330,7 +397,11 @@ def get_contact(contact_id: UUID, context: TenantContextDep) -> dict[str, object
     conversations = (
         context.db.execute(
             select(Conversation)
-            .where(Conversation.tenant_id == context.tenant_id, Conversation.contact_id == row.id)
+            .where(
+                Conversation.tenant_id == context.tenant_id,
+                Conversation.contact_id == row.id,
+                conversation_location_filter(context.location_ids),
+            )
             .order_by(Conversation.created_at.desc())
         )
         .scalars()
@@ -430,6 +501,7 @@ def erase_contact(
 ) -> Response:
     context.require_role("admin")
     row = _contact(context, contact_id)
+    _require_all_conversations_in_scope(context, row.id)
     conversations = (
         context.db.execute(
             select(Conversation).where(

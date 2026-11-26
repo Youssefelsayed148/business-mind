@@ -20,6 +20,7 @@ from app.core.config import Settings, get_settings
 from app.core.errors import ApiError
 from app.core.tenancy import TenantContextDep
 from app.db.models import Contact, Conversation, Message
+from app.identity.locations import conversation_location_filter
 from app.knowledge.service import get_bot
 
 router = APIRouter(prefix="/api/v1/tenants/{tenant_id}/bots/{bot_id}")
@@ -58,6 +59,7 @@ def get_conversation_scoped(
                 Conversation.tenant_id == context.tenant_id,
                 Conversation.bot_id == bot_id,
                 Conversation.source != "playground",
+                conversation_location_filter(context.location_ids),
             )
         )
         .scalars()
@@ -106,6 +108,7 @@ def list_conversations(
             Conversation.tenant_id == context.tenant_id,
             Conversation.bot_id == bot_id,
             Conversation.source != "playground",
+            conversation_location_filter(context.location_ids),
         )
         .order_by(Conversation.last_message_at.desc().nullslast())
         .limit(limit)
@@ -120,6 +123,7 @@ def list_conversations(
             Conversation.tenant_id == context.tenant_id,
             Conversation.bot_id == bot_id,
             Conversation.source != "playground",
+            conversation_location_filter(context.location_ids),
         )
     ).scalar_one()
     return ConversationListResponse(

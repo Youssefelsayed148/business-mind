@@ -78,6 +78,32 @@ class MembershipLocation(Base):
     )
 
 
+class InvitationLocation(Base):
+    """The locations a ``limited`` invitation grants once it is accepted (design 4.2)."""
+
+    __tablename__ = "invitation_locations"
+
+    invitation_id: Mapped[UUID] = mapped_column(nullable=False)
+    tenant_id: Mapped[UUID] = mapped_column(nullable=False)
+    location_id: Mapped[UUID] = mapped_column(nullable=False)
+
+    __table_args__ = (
+        PrimaryKeyConstraint("invitation_id", "location_id"),
+        ForeignKeyConstraint(
+            ["invitation_id"],
+            ["invitations.id"],
+            name="fk_invitation_locations_invitation",
+            ondelete="CASCADE",
+        ),
+        ForeignKeyConstraint(
+            ["tenant_id", "location_id"],
+            ["locations.tenant_id", "locations.id"],
+            name="fk_invitation_locations_location",
+            ondelete="CASCADE",
+        ),
+    )
+
+
 class Agency(Base):
     __tablename__ = "agencies"
 

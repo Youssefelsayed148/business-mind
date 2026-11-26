@@ -11,6 +11,7 @@ from sqlalchemy.orm import Session
 from app.analytics.service import _range_window
 from app.core.errors import ApiError
 from app.core.tenancy import TenantContextDep
+from app.identity.locations import conversation_location_sql
 
 router = APIRouter(prefix="/api/v1/tenants/{tenant_id}/analytics", tags=["analytics"])
 MAX_TIMESERIES_DAYS = 366
@@ -50,8 +51,7 @@ def _channel_filter_aliased(prefix: str, channel: str | None) -> tuple[str, dict
     ).replace("channel IN", f"{prefix}channel IN"), params
 
 
-_CHANNEL_BREAKDOWN_SQL = text(
-    """
+_CHANNEL_BREAKDOWN_SQL = """
     SELECT c.channel AS channel,
            count(*) AS conversations,
            count(*) FILTER (
@@ -73,19 +73,19 @@ _CHANNEL_BREAKDOWN_SQL = text(
           AND m.sender_type IN ('agent', 'ai')
     ) fr ON TRUE
     WHERE c.tenant_id = :tenant_id AND c.source IN ('website', 'channel')
-      AND c.created_at >= :start AND c.created_at <= :end
+      AND c.created_at >= :start AND c.created_at <= :end<<LOC>>
     GROUP BY c.channel ORDER BY c.channel
     """
-)
 
 
 def _channel_breakdown(
     context: TenantContextDep, start: datetime, end: datetime
 ) -> list[dict[str, Any]]:
+    loc_sql, loc_params = conversation_location_sql("c", context.location_ids)
     rows = (
         context.db.execute(
-            _CHANNEL_BREAKDOWN_SQL,
-            {"tenant_id": context.tenant_id, "start": start, "end": end},
+            text(_CHANNEL_BREAKDOWN_SQL.replace("<<LOC>>", loc_sql)),
+            {"tenant_id": context.tenant_id, "start": start, "end": end, **loc_params},
         )
         .mappings()
         .all()
@@ -117,21 +117,23 @@ def _conversations_by_campaign(
     end: datetime,
     channel: str | None = None,
 ) -> dict[str, int]:
+    loc_sql, loc_params = conversation_location_sql("c", context.location_ids)
     sql = """
     SELECT c.origin->>'campaign_name' AS campaign, count(*) AS conversations
     FROM conversations c
     WHERE c.tenant_id = :tenant_id AND c.source = 'channel'
       AND c.origin ? 'campaign_name'
-      AND c.created_at >= :start AND c.created_at <= :end
+      AND c.created_at >= :start AND c.created_at <= :end{loc}
     {channel}
     GROUP BY 1 ORDER BY conversations DESC, campaign
     """
     rows = context.db.execute(
-        text(sql.format(channel="AND c.channel = :channel" if channel else "")),
+        text(sql.format(channel="AND c.channel = :channel" if channel else "", loc=loc_sql)),
         {
             "tenant_id": context.tenant_id,
             "start": start,
             "end": end,
+            **loc_params,
             **({"channel": channel} if channel else {}),
         },
     ).all()
@@ -144,6 +146,7 @@ def _totals(
     start: datetime,
     end: datetime,
     channel: str | None = None,
+    location_ids: frozenset[UUID] | None = None,
 ) -> dict[str, Any]:
     """Conversation totals and mean first human reply for one window.
 
@@ -151,7 +154,15 @@ def _totals(
     """
     channel_filter, channel_params = _channel_filter(channel)
     alias_filter, _ = _channel_filter_aliased("c.", channel)
-    params: dict[str, Any] = {"tenant_id": tenant_id, "start": start, "end": end, **channel_params}
+    loc_plain, loc_params = conversation_location_sql("conversations", location_ids)
+    loc_alias, _ = conversation_location_sql("c", location_ids)
+    params: dict[str, Any] = {
+        "tenant_id": tenant_id,
+        "start": start,
+        "end": end,
+        **channel_params,
+        **loc_params,
+    }
     counts = (
         db.execute(
             text(
@@ -160,7 +171,7 @@ def _totals(
                 count(*) FILTER (WHERE status = 'resolved') AS resolved,
                 count(*) FILTER (WHERE status <> 'resolved') AS open
             FROM conversations
-            WHERE tenant_id = :tenant_id AND {channel_filter}
+            WHERE tenant_id = :tenant_id AND {channel_filter}{loc_plain}
               AND created_at >= :start AND created_at <= :end"""
             ),
             params,
@@ -175,7 +186,7 @@ def _totals(
                 FROM conversations c
                 JOIN messages m ON m.tenant_id = c.tenant_id
                   AND m.conversation_id = c.id AND m.sender_type = 'agent'
-                WHERE c.tenant_id = :tenant_id AND {alias_filter}
+                WHERE c.tenant_id = :tenant_id AND {alias_filter}{loc_alias}
                   AND c.created_at >= :start AND c.created_at <= :end
                 GROUP BY c.id, c.created_at
             )
@@ -204,25 +215,30 @@ def handoff_analytics(
     start, end = _window(from_iso, to_iso)
     channel_filter, channel_params = _channel_filter(channel)
     alias_filter, _ = _channel_filter_aliased("c.", channel)
+    loc_plain, loc_params = conversation_location_sql("conversations", context.location_ids)
+    loc_alias, _ = conversation_location_sql("c", context.location_ids)
     base_params: dict[str, Any] = {
         "tenant_id": context.tenant_id,
         "start": start,
         "end": end,
         **channel_params,
+        **loc_params,
     }
-    totals = _totals(context.db, context.tenant_id, start, end, channel)
+    totals = _totals(context.db, context.tenant_id, start, end, channel, context.location_ids)
     total = totals["total"]
     handoffs = totals["handoffs"]
     response_time = totals["response_seconds"]
     span = end - start
     previous_end = start - timedelta(seconds=1)
     previous_start = previous_end - span
-    previous = _totals(context.db, context.tenant_id, previous_start, previous_end, channel)
+    previous = _totals(
+        context.db, context.tenant_id, previous_start, previous_end, channel, context.location_ids
+    )
     channels = (
         context.db.execute(
             text(
                 f"""SELECT channel, count(*) AS count FROM conversations
-            WHERE tenant_id = :tenant_id AND {channel_filter}
+            WHERE tenant_id = :tenant_id AND {channel_filter}{loc_plain}
               AND created_at >= :start AND created_at <= :end
             GROUP BY channel ORDER BY channel"""
             ),
@@ -235,7 +251,7 @@ def handoff_analytics(
         context.db.execute(
             text(
                 f"""SELECT sentiment, count(*) AS count FROM conversations
-            WHERE tenant_id = :tenant_id AND {channel_filter}
+            WHERE tenant_id = :tenant_id AND {channel_filter}{loc_plain}
               AND created_at >= :start AND created_at <= :end
               AND sentiment IS NOT NULL
             GROUP BY sentiment ORDER BY sentiment"""
@@ -251,7 +267,7 @@ def handoff_analytics(
                 f"""SELECT users.email AS member_name, count(*) AS count
             FROM conversations c
             JOIN users ON users.id = c.assigned_user_id
-            WHERE c.tenant_id = :tenant_id AND {alias_filter}
+            WHERE c.tenant_id = :tenant_id AND {alias_filter}{loc_alias}
               AND c.created_at >= :start AND c.created_at <= :end
               AND c.status <> 'resolved'
               AND c.assigned_user_id IS NOT NULL
@@ -300,10 +316,12 @@ def conversation_timeseries(
         raise ApiError(
             422, "VALIDATION_ERROR", f"The window must not exceed {MAX_TIMESERIES_DAYS} days."
         )
+    loc_sql, loc_params = conversation_location_sql("c", context.location_ids)
     rows = (
         context.db.execute(
             text(
-                """SELECT d.day::date AS day,
+                (
+                    """SELECT d.day::date AS day,
                 count(c.id) AS conversations,
                 count(c.id) FILTER (WHERE c.handoff_reason IS NOT NULL) AS handoffs,
                 count(c.id) FILTER (WHERE c.status = 'resolved') AS resolved
@@ -313,8 +331,9 @@ def conversation_timeseries(
             LEFT JOIN conversations c
               ON c.tenant_id = :tenant_id AND c.source = 'website'
              AND c.created_at >= :start AND c.created_at <= :end
-             AND (c.created_at AT TIME ZONE 'UTC')::date = d.day::date
+             AND (c.created_at AT TIME ZONE 'UTC')::date = d.day::date<<LOC>>
             GROUP BY d.day ORDER BY d.day"""
+                ).replace("<<LOC>>", loc_sql)
             ),
             {
                 "tenant_id": context.tenant_id,
@@ -322,6 +341,7 @@ def conversation_timeseries(
                 "end": end,
                 "start_day": start.date(),
                 "end_day": end.date(),
+                **loc_params,
             },
         )
         .mappings()
