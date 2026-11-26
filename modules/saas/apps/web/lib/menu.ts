@@ -72,7 +72,7 @@ export const MENU: readonly MenuEntry[] = [
   // Client, under /app/[tenant].
   {
     group: "Channels",
-    label: "Accounts",
+    label: "Channels",
     path: "/channels",
     minimumRole: "viewer",
     shipped: true,

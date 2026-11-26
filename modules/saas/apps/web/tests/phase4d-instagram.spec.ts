@@ -380,7 +380,9 @@ test("accounts: health, AI settings and SaaS delegation send the right calls", a
     saas_delegation_enabled: true,
   });
   // Delegated accounts never get Many's take over or resume controls.
-  await expect(page.getByText(/take over|resume/i)).toHaveCount(0);
+  await expect(
+    page.getByRole("button", { name: /take over|resume/i }),
+  ).toHaveCount(0);
 });
 
 /* ----------------------------------------------------------------- campaigns */

@@ -93,8 +93,8 @@ test("menu: WhatsApp needs Admin; Facebook and Channels are for everyone", () =>
     menu
       .visibleMenu({ isStaff: false, role: r, tenantId: "T" })
       .map((x) => x.entry.label);
-  assert.deepEqual(labels("viewer"), ["Accounts", "Facebook campaigns"]);
-  assert.deepEqual(labels("manager"), ["Accounts", "Facebook campaigns"]);
+  assert.deepEqual(labels("viewer"), ["Channels", "Facebook campaigns"]);
+  assert.deepEqual(labels("manager"), ["Channels", "Facebook campaigns"]);
   assert.ok(labels("admin").includes("WhatsApp templates"));
   assert.ok(labels("owner").includes("WhatsApp health"));
   assert.deepEqual(labels(null), []);

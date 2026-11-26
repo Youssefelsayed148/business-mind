@@ -1,5 +1,6 @@
 "use client";
 
+import { safeHttpUrl } from "@/lib/safe-url";
 import { useMemo, useState } from "react";
 
 import { ManyError } from "@/lib/many";
@@ -171,17 +172,18 @@ export default function InstagramCampaignsPage() {
             &middot; {targetLabel(c)}
           </span>
           <span className="muted">Created {formatDateTime(c.created_at)}</span>
-          {c.target_scope === "specific_media" && c.target_media_url && (
-            <a
-              href={c.target_media_url}
-              target="_blank"
-              rel="noreferrer noopener"
-              dir="ltr"
-              className="ig-url"
-            >
-              {c.target_media_url}
-            </a>
-          )}
+          {c.target_scope === "specific_media" &&
+            safeHttpUrl(c.target_media_url) && (
+              <a
+                href={safeHttpUrl(c.target_media_url) ?? undefined}
+                target="_blank"
+                rel="noreferrer noopener"
+                dir="ltr"
+                className="ig-url"
+              >
+                {c.target_media_url}
+              </a>
+            )}
         </div>
       ),
     },

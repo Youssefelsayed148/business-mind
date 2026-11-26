@@ -253,6 +253,16 @@ for (const role of ["admin", "editor", "viewer", "staff"] as const) {
       "Conversations",
       "Contacts",
       "Insights",
+      "Channels",
+      ...(admin
+        ? [
+            "WhatsApp contacts",
+            "WhatsApp templates",
+            "WhatsApp campaigns",
+            "WhatsApp health",
+          ]
+        : []),
+      "Facebook campaigns",
       ...(admin ? ["Request a change", "Team", "Tenant data and audit"] : []),
       ...(client ? [] : ["Platform admin"]),
     ];

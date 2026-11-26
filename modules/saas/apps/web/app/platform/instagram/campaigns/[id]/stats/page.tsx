@@ -1,5 +1,6 @@
 "use client";
 
+import { safeHttpUrl } from "@/lib/safe-url";
 import { useParams } from "next/navigation";
 import { useState, type ReactNode } from "react";
 
@@ -42,9 +43,16 @@ function words(value: string) {
 }
 
 function ExternalLink({ href }: { href: string }) {
+  const safe = safeHttpUrl(href);
+  if (!safe)
+    return (
+      <span dir="ltr" className="ig-url">
+        {href}
+      </span>
+    );
   return (
     <a
-      href={href}
+      href={safe}
       target="_blank"
       rel="noreferrer noopener"
       dir="ltr"
