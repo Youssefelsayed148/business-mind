@@ -288,6 +288,7 @@ def _race(engine: Engine, user_id: Any, code: str, workers: int = 4) -> list[boo
         session = session_factory(engine)()
         try:
             user = session.get(User, user_id)
+            assert user is not None
             barrier.wait()
             return mfa.verify_second_factor(session, settings, user, code)
         finally:
