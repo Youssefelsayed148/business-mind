@@ -1,0 +1,30 @@
+.optin-page {
+  min-block-size: 100vh;
+  display: grid;
+  place-items: center;
+  padding: var(--space-4);
+  background: var(--bg);
+}
+.optin-card {
+  inline-size: min(100%, 32rem);
+  display: grid;
+  gap: var(--space-4);
+  padding: var(--space-5);
+}
+.optin-card h1 {
+  margin: 0;
+}
+.optin-card form,
+.optin-card [data-testid="optin-done"] {
+  display: grid;
+  gap: var(--space-4);
+}
+.optin-mark {
+  display: inline-grid;
+  place-items: center;
+  inline-size: 3rem;
+  block-size: 3rem;
+  border-radius: var(--radius-sm);
+  background: var(--accent-soft);
+  color: var(--accent);
+}

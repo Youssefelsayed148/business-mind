@@ -115,6 +115,19 @@ python scripts/identity_migrate.py verify-mapping                       # both s
 
 The proxy (`MANY_PROXY_ENABLED`, off by default) also needs `IDENTITY_V2_ENABLED`, `SSO_ISSUER_ENABLED` and a Many with `SSO_ASSERTION_ENABLED` and the matching `SSO_PUBLIC_KEYS`. `MANY_API_BASE_URL` defaults to `http://many-api:8000`, the one host `CHANNEL_INTERNAL_ALLOWED_HOSTS` allows. With it off, every `/api/v1/many/*` path answers 404 like an unknown route. The browser never receives a Many token or a workspace id; only the paths listed in `modules/saas/apps/api/app/identity/many_routes.py` are forwarded. Turning the flag off is the rollback.
 
+#### The public opt-in call (Phase 4C)
+
+`POST /api/v1/many/public/whatsapp/opt-in/{token}` is the only proxy call without a login. It is
+off with the proxy flag, accepts only `{"phone": "+<6 to 20 digits>"}`, is limited here (10 per
+address and 100 per link per hour) and is forwarded with the customer's address in
+`X-Forwarded-For`. **Prerequisite before turning it on:** Many records the address it sees as
+consent evidence and applies its own per-address limit (`WHATSAPP_PUBLIC_OPT_IN_IP_LIMIT`, 10 per
+hour). `docker-compose.unified.yml` starts Many's uvicorn without `--proxy-headers`, so Many would
+see this API's address for every customer: one shared limit and wrong evidence. Start Many with
+`--proxy-headers --forwarded-allow-ips=<the SaaS API's address>` (not `*`) before relying on it, or
+keep serving the opt-in page from the old dashboard (the link base is `DASHBOARD_BASE_URL`).
+Not tested here (no Docker daemon).
+
 ### Rollback ladder
 
 1. Turn the flags off (seconds): Many's own login works as before, SSO tokens are rejected, SaaS roles fall back to the legacy column.

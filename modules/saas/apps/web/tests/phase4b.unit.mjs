@@ -229,3 +229,51 @@ test("logical CSS check flags physical sides and honours the escape", () => {
   for (const css of good) assert.deepEqual(physicalCssLines(css), [], css);
   assert.deepEqual(physicalCssLines("/*\nleft: 0;\n*/\n.a { right: 0 }"), [4]);
 });
+
+test("Many error bodies reduce to a plain message", () => {
+  const m = many.manyMessage;
+  assert.equal(
+    m({ detail: "Template is not approved" }, 409),
+    "Template is not approved",
+  );
+  assert.equal(
+    m({ detail: { code: "opt_in_keyword_required" } }, 409),
+    "opt in keyword required",
+  );
+  assert.equal(m({ detail: { message: "Nope", code: "x" } }, 409), "Nope");
+  assert.equal(
+    m({ detail: [{ msg: "field required" }, { msg: "too short" }] }, 422),
+    "field required, too short",
+  );
+  assert.equal(
+    m({ error: { code: "FORBIDDEN", message: "No access." } }, 403),
+    "No access.",
+  );
+  assert.equal(
+    m(null, 500),
+    "The channel service had a problem. Try again later.",
+  );
+  assert.equal(m("<html>", 422), "Some fields need attention.");
+  assert.ok(!/\b\d{3}\b/.test(m({}, 404)));
+});
+
+test("ManyError feeds the same failure kinds", () => {
+  const E = many.ManyError;
+  const k = many.manyFailureKind;
+  assert.equal(k(new E(401, "x")), "session");
+  assert.equal(k(new E(403, "x")), "forbidden");
+  assert.equal(k(new E(404, "x")), "not_available");
+  assert.equal(k(new E(502, "x", "MANY_UNAVAILABLE")), "unavailable");
+  assert.equal(k(new E(409, "x")), "error");
+});
+
+test("Many proxy URLs: organization id encoded, leading slash dropped", () => {
+  assert.equal(
+    many.manyUrl({ kind: "staff" }, "/stats/overview"),
+    "/api/v1/many/staff/stats/overview",
+  );
+  assert.equal(
+    many.manyUrl({ kind: "org", tenantId: "a/b" }, "whatsapp/accounts?x=1"),
+    "/api/v1/many/orgs/a%2Fb/whatsapp/accounts?x=1",
+  );
+});

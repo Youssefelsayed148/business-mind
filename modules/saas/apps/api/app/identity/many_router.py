@@ -12,6 +12,9 @@ is one allowlisted call forwarded with a server-minted Many token.
 
 from __future__ import annotations
 
+import hashlib
+import json
+import re
 from typing import Annotated
 from uuid import UUID
 
@@ -26,6 +29,7 @@ from app.auth.security import hash_token
 from app.core.audit import record_audit
 from app.core.config import Settings, get_settings
 from app.core.errors import ApiError
+from app.core.ratelimit import client_ip, rate_limit
 from app.db.models import Membership, Tenant, User
 from app.db.session import get_session
 from app.identity import many_proxy, many_routes
@@ -306,4 +310,90 @@ async def proxy_staff(
         path=many_path,
         query=query,
         body=body,
+    )
+
+
+# --- the one public call: WhatsApp opt-in (Phase 4C) -------------------------------------------
+#
+# The opt-in link a business hands to a customer opens a public page that posts the customer's
+# phone number. There is no login. The call is allowed, rate limited here (the Many side sees
+# only this API's address), validated strictly and forwarded with the customer's address in
+# X-Forwarded-For. Many records the address it sees as consent evidence and counts its own
+# per-address limit on it: Many must be started with --proxy-headers and trust this API's
+# address, otherwise it records this API's address for everyone (docs/RUNBOOK-DEV.md).
+
+_OPT_IN_TOKEN = re.compile(r"^[A-Za-z0-9._-]{20,1500}$")
+OPT_IN_IP_LIMIT = 10
+OPT_IN_TOKEN_LIMIT = 100
+OPT_IN_WINDOW_SECONDS = 3600
+OPT_IN_MAX_BODY = 2048
+_OPT_IN_PHONE = re.compile(r"^\+[0-9]{6,20}$")
+
+
+def _opt_in_call(
+    *,
+    db: OrmSession,
+    settings: Settings,
+    request: Request,
+    signed_token: str,
+    raw_body: bytes | None,
+) -> Response:
+    if not _OPT_IN_TOKEN.match(signed_token):
+        raise _not_found()
+    try:
+        data = json.loads(raw_body or b"")
+        phone = data["phone"] if isinstance(data, dict) and set(data) == {"phone"} else None
+    except (ValueError, KeyError, TypeError):
+        phone = None
+    if not isinstance(phone, str):
+        raise ApiError(422, "VALIDATION_ERROR", "Enter your number with the country code.")
+    phone = phone.strip()
+    if not _OPT_IN_PHONE.match(phone):
+        raise ApiError(422, "VALIDATION_ERROR", "Enter your number with the country code.")
+    address = client_ip(request)
+    token_key = hashlib.sha256(signed_token.encode("utf-8")).hexdigest()[:32]
+    for key, limit in (
+        (f"many-opt-in:ip:{address}", OPT_IN_IP_LIMIT),
+        (f"many-opt-in:token:{token_key}", OPT_IN_TOKEN_LIMIT),
+    ):
+        count, _ = rate_limit(db, key=key, limit=limit, window_seconds=OPT_IN_WINDOW_SECONDS)
+        if count > limit:
+            db.commit()
+            raise ApiError(429, "RATE_LIMITED", "Too many requests. Please try again later.")
+    db.commit()
+    try:
+        result = many_proxy.send_to_many(
+            settings,
+            "POST",
+            f"/public/whatsapp/opt-in/{signed_token}",
+            {
+                "content-type": "application/json",
+                "accept": "application/json",
+                "x-forwarded-for": address,
+            },
+            json.dumps({"phone": phone}).encode("utf-8"),
+        )
+    except many_proxy.ManyUnavailable as exc:
+        raise many_proxy.unavailable() from exc
+    if result.status >= 500:
+        raise many_proxy.unavailable()
+    return _respond(result)
+
+
+@router.post("/public/whatsapp/opt-in/{signed_token}", include_in_schema=False)
+async def proxy_public_opt_in(
+    signed_token: str,
+    _on: ProxyOn,
+    request: Request,
+    db: DbSession,
+    settings: CurrentSettings,
+) -> Response:
+    raw_body = await _body(request, OPT_IN_MAX_BODY)
+    return await run_in_threadpool(
+        _opt_in_call,
+        db=db,
+        settings=settings,
+        request=request,
+        signed_token=signed_token,
+        raw_body=raw_body,
     )
