@@ -44,6 +44,13 @@ def check(name: str, method: str, host: str, path: str, expect: str) -> None:
         ok = got["status"] in (401, 403) and not got["edge_deny"] and is_json_detail
     elif expect == "deny_or_unreached":
         ok = got["edge_deny"] or got["status"] in (400, 404)
+    elif expect == "app_4xx_json":
+        # The app answered with its own JSON error (flag off: 404): reached, not denied at the edge.
+        ok = 400 <= got["status"] < 500 and not got["edge_deny"] and is_json_detail
+    elif expect == "redirect_or_4xx":
+        ok = got["status"] in (307, 308, 404, 405) and not got["edge_deny"]
+    elif expect == "not_found":
+        ok = got["status"] in (404, 405) and not got["edge_deny"]
     elif expect == "ok":
         ok = got["status"] < 500 and not got["edge_deny"]
     else:
@@ -109,6 +116,53 @@ check("many-health", "GET", MANY, "/health", "ok")
 check("many-dashboard", "GET", MANY, "/", "ok")
 check("saas-api-ready", "GET", SAAS_API, "/ready", "ok")
 check("saas-web", "GET", SAAS_WEB, "/", "ok")
+
+# (c) SSO exchange (Phase 3, design 2.6). The stack runs with the flags off, so the app answers 404;
+# with SSO on it would answer 400/401. Either way it is the APP answering, never an edge deny.
+for path in (
+    "/auth/sso/exchange",
+    "//auth/sso/exchange",
+    "/auth/./sso/exchange",
+    "/auth/sso/../sso/exchange",
+    "/auth/%73so/exchange",
+    "/auth/sso/%65xchange",
+):
+    check("sso-exchange-reaches-the-app", "POST", MANY, path, "app_4xx_json")
+# Mixed case: the regex twin applies the same limit and forwards as written; FastAPI is case
+# sensitive, so the handler is not reached and the app answers 404.
+for path in ("/AUTH/sso/exchange", "/Auth/SSO/Exchange", "/auth/SSO/exchange", "/auth/sso/EXCHANGE"):
+    check("sso-exchange-mixedcase", "POST", MANY, path, "app_4xx_json")
+check("sso-exchange-trailing-slash", "POST", MANY, "/auth/sso/exchange/", "redirect_or_4xx")
+# Not routed to Many on the SaaS hosts (404 from the SaaS API or from Next, never 2xx).
+for host in (SAAS_API, SAAS_WEB):
+    for path in ("/auth/sso/exchange", "/AUTH/sso/exchange"):
+        check("sso-exchange-not-on-saas-hosts", "POST", host, path, "not_found")
+# SaaS issuing routes are ordinary app routes on the SaaS hosts (flag off: the app answers 404).
+for host in (SAAS_API, SAAS_WEB):
+    check("sso-issuer-routes-reach-the-saas-app", "POST", host, "/api/v1/sso/assertions", "app_4xx_json")
+    check("sso-issuer-authorize-reaches-the-saas-app", "GET", host, "/api/v1/sso/authorize", "app_4xx_json")
+# The signed routes stay denied right next to the new location.
+check("signed-still-denied-after-sso", "POST", MANY, "/api/saas/messages", "deny")
+
+
+def burst(name: str, host: str, path: str, total: int = 30) -> None:
+    """The exchange zone limits per client address, so a burst gets 429s from the edge itself.
+
+    The earlier exchange checks already spent part of the burst allowance, so the first requests
+    here may be limited too; what matters is that the 429s come from nginx (a plain error page,
+    never the app's JSON) and that none of the answers is a 2xx.
+    """
+    answers = [call("POST", host, path, b"{}") for _ in range(total)]
+    edge_429 = [a for a in answers if a["status"] == 429 and not a["body"].lstrip().startswith("{")]
+    ok = len(edge_429) >= 5 and not any(200 <= a["status"] < 300 for a in answers)
+    results.append({"check": name, "method": "POST", "host": host, "path": path, "expect": "rate_limited",
+                    "status": 429 if edge_429 else answers[-1]["status"], "edge_deny": False,
+                    "body": f"{len(edge_429)} of {total} requests answered 429 by the edge", "ok": ok})
+    print(json.dumps(results[-1]), flush=True)
+
+
+# Last on purpose: it trips the limiter for this client address on the exchange path only.
+burst("sso-exchange-rate-limited-at-the-edge", MANY, "/auth/sso/exchange")
 
 failed = [r for r in results if not r["ok"]]
 print(f"SUMMARY nginx_checks total={len(results)} passed={len(results) - len(failed)} failed={len(failed)}")

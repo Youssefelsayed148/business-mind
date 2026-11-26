@@ -15,11 +15,14 @@ from app.auth.schemas import (
     RegisterRequest,
 )
 from app.auth.service import AuthService
+from app.core.audit import record_audit
 from app.core.config import Settings, get_settings
 from app.core.errors import ApiError
 from app.core.ratelimit import client_ip, rate_limit
 from app.db.models import User
 from app.db.session import get_session
+from app.identity import login as identity_login
+from app.identity.sessions import session_owner
 
 router = APIRouter(prefix="/api/v1/auth", tags=["auth"])
 
@@ -81,7 +84,19 @@ def login(
     _login_rate_limited(db, request, settings)
     service = AuthService(db, settings)
     presented = cookies.read_session_token(request, settings)
-    user, token = service.login(body.email, body.password, rotate_token=presented)
+    if settings.identity_v2_enabled:
+        user, token = identity_login.login(
+            db,
+            settings,
+            email=body.email,
+            password=body.password,
+            mfa_code=body.mfa_code,
+            rotate_token=presented,
+            ip=client_ip(request),
+            user_agent=request.headers.get("user-agent"),
+        )
+    else:
+        user, token = service.login(body.email, body.password, rotate_token=presented)
     cookies.set_session_cookie(
         response, settings, token=token, max_age_seconds=settings.session_lifetime_seconds
     )
@@ -128,7 +143,19 @@ def logout(
 ) -> OkResponse:
     """Cookie-authenticated write ⇒ CSRF-checked. Revokes the presented session."""
     service = AuthService(db, settings)
-    service.logout(token=cookies.read_session_token(request, settings))
+    presented = cookies.read_session_token(request, settings)
+    if settings.identity_v2_enabled and presented:
+        owner = session_owner(db, presented)
+        if owner is not None:
+            record_audit(
+                db,
+                action="auth.logout",
+                tenant_id=None,
+                actor_user_id=owner,
+                target_type="user",
+                target_id=str(owner),
+            )
+    service.logout(token=presented)
     cookies.clear_session_cookie(response, settings)
     return OkResponse()
 

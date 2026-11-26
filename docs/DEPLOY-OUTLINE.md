@@ -18,11 +18,38 @@ Nothing in this document has been executed or approved. There is no deploy scrip
 2. Back up both databases (Many pg15, SaaS pg17) and verify a restore on a throwaway host (`docs/backup-and-restore.md`).
 3. Prepare the host: Docker, firewall (only the edge port(s) open), DNS for the three hosts, secrets in place.
 4. Build images (`docker compose ... build`); constraints file `backend/constraints.txt` for reproducible Many installs.
-5. Run both Alembic chains separately (`many-migrate`, `saas-migrate`); heads must match the repo (Many `0030_meta_account_erasure`, SaaS `0031_contact_erasure` at Phase 2b start).
+5. Run both Alembic chains separately (`many-migrate`, `saas-migrate`); heads must match the repo (Phase 3: Many `0031_sso_link`, SaaS `0034_roles_backfill`; they were `0030_meta_account_erasure` and `0031_contact_erasure` at Phase 2b start).
 6. Start databases, redis, APIs, workers, dashboards, then nginx; check every healthcheck.
 7. Edge verification from outside: signed routes (`/api/saas/*`, `/saas/*`, `/api/channels/*`) return the edge 403; JWT admin routes return the app's 401/403 unauthenticated.
 8. Delegation stays OFF per channel until decision 2 is resolved and the owner approves turning it on, one channel at a time.
 9. Rollback: stop the new stack, restore the databases from the step 2 backups, return DNS to the previous target.
+
+## Identity (Phase 3): decisions and steps before it is switched on
+
+Design: `docs/IDENTITY-DESIGN.md`. Outline only; nothing here is approved or executed.
+
+**Open prerequisites**
+
+- **Email provider (D4).** Only the console mailer exists, so invitations and password-reset links are not delivered by email. Without a provider the inviter must hand over the one-time link, and self-service reset is not usable by real people. Pick a provider before enabling `IDENTITY_V2_ENABLED` for customers.
+- **First Owner per organization (D10).** The role backfill maps legacy admins to Admin, not Owner, so no organization has an Owner after the migration. Only platform staff can assign the first Owner (team role change); decide who, per organization, before cutover.
+- **TLS.** The assertion travels in a URL fragment and the session cookie is `Secure` in production; both need TLS at the edge (decision 1 above).
+
+**Key custody**
+
+- The SaaS holds the only private key (`SSO_SIGNING_KEY_PEM`); Many holds public keys only (`SSO_PUBLIC_KEYS`), so a Many compromise cannot forge an identity. Store both in the secret manager or a host-only env file, never in git, never in logs or chat.
+- `MFA_SECRET_ENCRYPTION_KEYS` (Fernet, newest first) protects stored TOTP secrets. Losing it locks every enrolled person out of login; back it up with the same care as the channel-secret keys, and rotate by prepending a new key.
+- Rotation and emergency revocation: `docs/RUNBOOK-DEV.md` (identity section).
+
+**Order of switching on (each step needs approval, one at a time, with a backup before the first)**
+
+1. Run both migration chains (Many `0031_sso_link`, SaaS `0032` to `0034`); everything is still off.
+2. Configure keys and `SSO_RETURN_ALLOWLIST` (exact Many dashboard callback URLs); set the Many organization to workspace mapping (`tenants.many_workspace_id` and `workspaces.saas_tenant_id`) for the pilot organization only.
+3. Staff first: enroll MFA for every staff account (`/api/v1/auth/mfa/enroll` and `/confirm`), then set `MFA_ENFORCE_STAFF=true`, then `SSO_ISSUER_ENABLED=true` and `SSO_ASSERTION_ENABLED=true`.
+4. One pilot organization: assign its Owner, then `IDENTITY_V2_ENABLED=true`. Admins get a 14-day MFA grace when `MFA_ENFORCE_ADMINS=true`.
+5. Run the user migration (`scripts/identity_migrate.py`) only against restored copies first (dry run, review, apply, verify), then production with explicit approval.
+6. Edge check from outside: `/auth/sso/exchange` answers from the app (never an edge deny), is rate limited, and is not served on the SaaS hosts; the signed routes still return the edge 403.
+
+Rollback: flags off, then empty `SSO_PUBLIC_KEYS`, then the migration downgrades after a backup (`docs/RUNBOOK-DEV.md`).
 
 ## Hardening list before production
 
@@ -31,4 +58,4 @@ Nothing in this document has been executed or approved. There is no deploy scrip
 
 ## Out of scope here
 
-Identity, single dashboard shell, unified data (Phases 3 to 5); Many DNS transport pinning and `host:port` allowlist entries (Phase 6 candidates).
+The single dashboard shell and unified data (Phases 4 and 5); Many DNS transport pinning and `host:port` allowlist entries (Phase 6 candidates).

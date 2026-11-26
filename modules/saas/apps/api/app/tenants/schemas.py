@@ -41,6 +41,16 @@ class TenantOut(BaseModel):
     created_at: datetime
 
 
+class TenantSummaryOut(BaseModel):
+    """GET /tenants/{id}/summary (permission org.summary): nothing beyond this."""
+
+    organization_id: UUID
+    organization_name: str
+    role: str
+    role_cap: str | None = None  # set only for agency access: the cap on the grant
+    via_agency: bool
+
+
 class TenantUpdateRequest(BaseModel):
     """Tenant-level settings (P4-04): retention only for now; admin only."""
 

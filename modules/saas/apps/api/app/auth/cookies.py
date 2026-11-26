@@ -13,6 +13,7 @@ from app.core.config import Settings, get_settings
 from app.core.errors import ApiError
 from app.db.models import Session, User
 from app.db.session import get_session
+from app.identity.sessions import enforce_session_policy
 
 CSRF_HEADER_NAME = "X-CSRF-Token"
 SESSION_COOKIE_NAME = "chatbot_session"  # keep in sync with Settings.session_cookie_name default
@@ -102,4 +103,6 @@ def get_current_user(
     user = db.get(User, row.user_id)
     if user is None or not user.is_active:
         raise ApiError(401, "SESSION_INVALID", "Session user no longer exists.")
+    if settings.identity_v2_enabled:
+        enforce_session_policy(db, settings, row, user, now)
     return user

@@ -96,9 +96,49 @@ Deviations from the design: `channel_location_map` not created (nothing reads it
 
 Deviations from the design: `agency_grants.location_ids` is a join table (`agency_grant_locations`) for referential integrity; the stored `editor` role is the Agent role (alias, no data rewrite); a direct membership wins over an agency grant (can only narrow). Known gaps: location-limited callers are refused on every tenant route with the flag on until query sites use `locations.location_filter`; agency users hold no `org.read`, so they cannot open the tenant detail route; the permission map is enforced only through `get_tenant_context` (platform routes unchanged); no grant management routes yet (service functions only; routes belong with PR C team/agency UI).
 
+## Phase 3 PR C: identity, issuing and team (branch `phase-3/identity-impl-c`, stacked on `phase-3/identity-impl-b`, 2026-11-25, WSL + Docker, observed values only)
+
+Review of PRs #6 and #7 (owner asked for a review, then PR C; all three are to be merged together, A then B then C):
+- No blockers. Five nits fixed. PR A (`685c111`): jti TTL 120 -> 150 (the widest verifiable window is exactly 120 s), shadow-user creation in a savepoint so a concurrent first exchange reuses the winner instead of a 500 (`user_conflict` / `user_inactive` refusals), client scope `/workspaces` prefix replaced by the exact `/workspaces/me`. PR B (`f6a9ee8`): grant creation uses a savepoint instead of `rollback()`, same-cap grants resolve narrowest first deterministically. PR A was merged into PR B with a merge commit (no rebase, no force-push).
+- Tests at that point: Many 201 passed (sso session, assertion, guard, exchange, config, flag-off identical); SaaS agency grants, role matrix and location scope 29 passed.
+
+Commits (all behind flags that default OFF; flag-off identical is proven per commit, see the notes):
+
+| Commit | What | Own tests |
+|---|---|---|
+| (a) `f150459` | `org.summary` and `GET /tenants/{id}/summary` (agency gets it, still no other `org.*`) | 14 |
+| (b) `929078b` | SSO issuing: `POST /api/v1/sso/assertions`, `GET /api/v1/sso/authorize`, EdDSA 60 s, mfa claim, exact redirect allowlist, state | 31 |
+| (e) `c9f3dcc` | console mailer (built before c and d, which send through it) | 4 |
+| (c) `fcbf1d3` | team management: invitations v2, new-account acceptance, role change, deactivate, last-Owner rule, grants for the Owner, agency-admin assignment | 36 |
+| (d) `a7f65b5` | reset, TOTP MFA, session idle/absolute policy, device list, revoke-all, login buckets, dummy hash, audit events | 49 |
+| (f) `f4743b7` | `scripts/identity_migrate.py` (dry-run default, advisory lock, hash algorithm of every Many row) | 13 (Many venv) / 12 + 1 skipped (SaaS venv) |
+| (g) | `nginx/unified.conf` exchange location + limit zone + case-insensitive twin, `check_nginx.py` +21 checks, `.env.unified.example`, compose passthrough | 69 edge checks |
+| (h) | `docs/RUNBOOK-DEV.md`, `docs/DEPLOY-OUTLINE.md`, this file | n/a |
+
+End-of-PR gate (each run once, on a snapshot of the final tree unless noted):
+
+| Check | Result |
+|---|---|
+| SaaS full suite (`p3repo.sh saas full_test`, DB `saas_p2_full_test`, no-egress netns) | 1441 passed, 4 warnings, 26 min 26 s |
+| Many full suite (`p3repo.sh many full`, DB `many_test_r1`) | 1286 passed, 3 warnings, 2 min 58 s |
+| ruff check / ruff format --check / strict mypy over `app tests alembic` (SaaS) | clean / 334 files formatted / 327 source files, no issues |
+| `scripts/check_instagram_frozen.py` | OK, 5 frozen files identical to `origin/main` |
+| `scripts/check_policy_copies.py` | OK, byte-identical |
+| `scripts/check_contract_copies.py` and `modules/saas/scripts/check_contract_copies.py` | both OK |
+| `scripts/dev-up.sh test` (unified stack, no egress) | six e2e cases PASS; nginx edge checks 69 of 69 (the 48 existing + 21 new); `nginx -t` ran with the container start. A first run was 68 of 69: my new burst check wrongly assumed a fresh limiter bucket; the check was fixed and the run repeated (images reused, `NO_BUILD=1`) |
+| Secret scan over every line this branch adds vs `origin/main` | no key, token or credential patterns; only synthetic test passwords. `unified-e2e.env` was already tracked (throwaway values) |
+| Cross-check, one-off | a SaaS-signed assertion passes Many's real `verify_assertion` (separate venvs); one with `locations` set is refused by it |
+
+Notes:
+- The new routes (summary, team, grants, reset, MFA, sessions, SSO issuing) are in the OpenAPI document with their flags off, but answer exactly like an unknown route (404 `{"detail":"Not Found"}`, before authentication and body validation). The exact route-count contract test now expects 102 tenant routes (was 93).
+- Decision 2 holds: no request body can assign location scope `limited` (invitations, role change and grants reject location fields); `LOCATION_SCOPE_UNSUPPORTED` stays; the flag stays off. PR D lifts it.
+- Revoking a grant, changing a role, deactivating a member and resetting a password or MFA revoke the affected sessions (design 6.5); two older tests now expect a 401 right after a grant is revoked.
+
+Not built or not applied (details in the final report): any web UI (team, invite acceptance, reset, MFA pages); an API to create agencies or add agency people (staff only via the service layer); memberships and the org-to-workspace mapping in `identity_migrate.py`; an enrollment-only session state for MFA (enforcement happens when an assertion is minted); an in-app rate limit on the Many exchange (the edge zone only).
+
 ## Next
 - Phase 3 (owner decisions on PR B, 2026-11-25, recommendations accepted): (1) agency users get a narrow read-only `GET /api/v1/tenants/{id}/summary` (organization name, caller's effective role and cap, `via_agency`) under a new permission `org.summary` held by every role incl. agency; still no `org.read` or other `org.*` for agency; added to PR C. (2) Location filters are a separate PR D (inbox, contacts, knowledge, analytics, channels query sites; then remove the `LOCATION_SCOPE_UNSUPPORTED` refusal); until PR D merges, PR C must not expose any way to assign `limited` scope (team UI/API keep it disabled) and the flag stays off. (3) Deviations accepted: grant locations as a join table, stored `editor` is the Agent alias, a direct membership wins over an agency grant.
-- Phase 3 order: owner review of PR A (#6) and PR B (#7); then PR C (summary route, SSO issuing, team management, reset, MFA, console mailer, `identity_migrate.py` with a per-row hash-algorithm report, nginx and `check_nginx.py`, docs); then PR D (location filters). Do not start PR C before the owner says A and B were reviewed.
+- Phase 3 order: PR C is implemented on `phase-3/identity-impl-c` (draft PR, stacked on B); the owner reviews A (#6), B (#7) and C and merges them together (A, then B, then C); then PR D (location filters, plan first). Do not start PR D before the owner says C was reviewed.
 - Review/merge PR #1 and the Phase 1b PR (owner).
 - Phase 2: owner review of the draft PR and the CI workflow proposal; then the remaining One infrastructure work (also: re-home SaaS CI from `modules/saas/.github/`, which is inactive; the SaaS has no CI here until then).
 
@@ -123,6 +163,7 @@ Deviations from the design: `agency_grants.location_ids` is a join table (`agenc
 - Root `.gitignore` does not ignore a root-level `.env.local` (only `dashboard/.env.local`).
 
 ## Last session
+- 2026-11-25 (Phase 3 PR C), Claude Code on WSL + Docker: reviewed PRs #6 and #7, fixed the five nits, implemented PR C commits (a) to (h) on `phase-3/identity-impl-c`, ran the end-of-PR gate (table above), pushed, opened the draft PR. Stopped for the owner's review; PR D not started. Nothing merged. Local leftovers: containers `phase3-pg15` and `phase3-pg17`, WSL `~/phase3/` (snapshot, results), the rebuilt `unified-*` images, session scratchpad scripts (outside the repo). The unified e2e stack was torn down by `dev-up.sh test`.
 - 2026-11-25 (Phase 3 PR B), Claude Code on WSL + Docker: branch `phase-3/identity-impl-b` from the PR A head (PR #6 still open, `main` unchanged at the #5 merge). SaaS migrations 0032 to 0034, models, `app/identity/{roles,locations,agency,access}.py`, flagged `TenantContext` permission checks, route-permission map, 32 new tests (results table above). Stopped before PR C, awaiting owner review. Local leftovers: containers `phase3-pg15` and `phase3-pg17`, WSL `~/phase3/` (snapshots, results). A stale socket bridge had to be cleared after the WSL restart.
 - 2026-11-24 (Phase 3 PR A), Claude Code on WSL + Docker: PR #5 merged by the owner's approval; implemented commits 1 to 7 of the identity plan on `phase-3/identity-impl-a` (results table above). Stopped before PR B, awaiting owner review. Local leftovers: Docker containers `phase3-pg15` and `phase3-pg17` (ports 55415 and 55417), WSL `~/phase3/` (clone `repo`, snapshots, results logs, harness scripts), the rebuilt `unified-*` images.
 - 2026-11-24 (Phase 3 design), Claude Code, cloud container without Docker or installed Python dependencies: created branch `phase-3/identity-design` from `origin/main` (`cc3b9ab`); wrote `docs/IDENTITY-DISCOVERY.md` and `docs/IDENTITY-DESIGN.md`; updated this file. Observed: Alembic heads read from the files (Many `0030_meta_account_erasure`, SaaS `0031_contact_erasure`, one head each); `scripts/check_policy_copies.py` OK; `scripts/check_contract_copies.py` (Many root) OK; the SaaS-root contract check was not run (my `--root modules/saas` guess failed because the manifest is under the repo-root `docs/`). Test baselines NOT verified here (no dependencies); numbers above are from the Phase 2b gate. Only docs files changed. Nothing merged.

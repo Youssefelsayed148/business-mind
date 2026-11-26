@@ -26,7 +26,7 @@ from app.db.models import (
 from app.identity import agency as svc
 from app.identity.access import resolve_access
 from app.identity.roles import agency_permissions
-from tests.helpers import csrf_headers
+from tests.helpers import PASSWORD, csrf_headers
 from tests.identity_helpers import Person, join, make_person, make_tenant
 
 FORBIDDEN = "You do not have permission for this action."
@@ -155,7 +155,9 @@ def test_effective_role_is_the_cap_and_never_team_agency_billing_org(
     patch = client.patch(s.url(""), json={"name": "Hijack"}, headers=csrf_headers(client))
     assert patch.status_code == 403 and FORBIDDEN in patch.text
     for permission in agency_permissions("admin"):
-        assert not permission.startswith(("team.", "agency.", "billing.", "org."))
+        assert permission == "org.summary" or not permission.startswith(
+            ("team.", "agency.", "billing.", "org.")
+        )
 
 
 def test_cap_viewer_cannot_reply_and_owner_cap_is_rejected(v2_app: FastAPI, db: Session) -> None:
@@ -227,6 +229,13 @@ def test_revocation_is_immediate_and_audited_with_both_ids(v2_app: FastAPI, db: 
     assert s.agent.client.get(s.url()).status_code != 404
     svc.revoke_grant(_ctx(db, s.tenant_id, s.owner), grant_id=grant.id)
     db.commit()
+    # The assignee's sessions end with the grant (design 6.5) ...
+    assert s.agent.client.get(s.url()).status_code == 401
+    # ... and a fresh login finds no access either.
+    relogin = s.agent.client.post(
+        "/api/v1/auth/login", json={"email": s.agent.email, "password": PASSWORD}
+    )
+    assert relogin.status_code == 200
     assert s.agent.client.get(s.url()).status_code == 404
     events = db.execute(
         select(AuditEvent).where(

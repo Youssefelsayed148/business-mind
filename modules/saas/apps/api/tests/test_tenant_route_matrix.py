@@ -60,6 +60,20 @@ CHANNEL_PLATFORM_ROUTE_ROLES = {
 }
 
 
+# Routes that exist only while IDENTITY_V2_ENABLED is on (Phase 3); flag off they 404.
+FLAG_ON_ONLY_ROUTES = {
+    ("GET", "/api/v1/tenants/{tenant_id}/summary"),
+    ("GET", "/api/v1/tenants/{tenant_id}/team/members"),
+    ("POST", "/api/v1/tenants/{tenant_id}/team/invitations"),
+    ("PATCH", "/api/v1/tenants/{tenant_id}/team/members/{user_id}"),
+    ("DELETE", "/api/v1/tenants/{tenant_id}/team/members/{user_id}"),
+    ("GET", "/api/v1/tenants/{tenant_id}/agency/grants"),
+    ("POST", "/api/v1/tenants/{tenant_id}/team/members/{user_id}/mfa-reset"),
+    ("POST", "/api/v1/tenants/{tenant_id}/agency/grants"),
+    ("DELETE", "/api/v1/tenants/{tenant_id}/agency/grants/{grant_id}"),
+}
+
+
 @pytest.mark.parametrize("role", ["viewer", "editor", "admin", "staff"])
 def test_every_openapi_route_role_and_cross_tenant(
     app: Any, db: Any, tmp_path: Path, monkeypatch: Any, role: str
@@ -164,6 +178,7 @@ def test_every_openapi_route_role_and_cross_tenant(
         attachment_id=attachment_id,
         tag="matrix",
         user_id=uuid4(),
+        grant_id=uuid4(),
     )
     extra, extra_payload = logged_in(app, "matrix-target@example.com")
     db.add(Membership(tenant_id=tid, user_id=UUID(extra_payload["id"]), role="viewer"))
@@ -376,6 +391,11 @@ def test_every_openapi_route_role_and_cross_tenant(
                     denied.text,
                 )
             response = client.request(method, path, headers=csrf_headers(client), **kwargs)
+            if (method, template) in FLAG_ON_ONLY_ROUTES:
+                # Identity routes: flag off, they answer like an unknown route.
+                assert response.status_code == 404, (role, method, template, response.text)
+                assert response.json() == {"detail": "Not Found"}
+                continue
             assert (
                 (200 <= response.status_code < 300) if allowed else response.status_code == 403
             ), (role, method, template, minimum, response.status_code, response.text)
@@ -420,7 +440,7 @@ def test_exact_route_contract_and_operator_knowledge(app: Any) -> None:
         for method, operation in methods.items()
         if method.upper() in {"GET", "POST", "PUT", "PATCH", "DELETE"}
     }
-    assert len(actual) == len(TENANT_ROUTE_ROLES) == 93
+    assert len(actual) == len(TENANT_ROUTE_ROLES) == 102
     assert actual == TENANT_ROUTE_ROLES
     base = "/api/v1/tenants/{tenant_id}/bots/{bot_id}"
     for suffix in (

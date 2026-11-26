@@ -19,6 +19,7 @@ from app.core.errors import ApiError
 from app.core.tenancy import CurrentUserDep, TenantContextDep
 from app.db.models import User
 from app.db.session import get_session
+from app.identity.gate import identity_v2_only
 from app.tenants.payloads import invitation_payload
 from app.tenants.schemas import (
     AcceptInvitationRequest,
@@ -29,6 +30,7 @@ from app.tenants.schemas import (
     MemberRoleUpdateRequest,
     TenantCreateRequest,
     TenantOut,
+    TenantSummaryOut,
     TenantUpdateRequest,
 )
 from app.tenants.service import TenantService
@@ -75,6 +77,25 @@ def create_tenant(
     service = TenantService(db)
     tenant = service.create_tenant(user, body.name, body.slug)
     return TenantOut.model_validate(tenant)
+
+
+@router.get("/api/v1/tenants/{tenant_id}/summary", response_model=TenantSummaryOut)
+def tenant_summary(
+    _: Annotated[None, Depends(identity_v2_only)], context: TenantContextDep
+) -> TenantSummaryOut:
+    """Who am I here: organization name, effective role and cap, and whether via an agency.
+
+    Read-only and held by every role including agency access (permission org.summary).
+    It exposes no other organization data.
+    """
+    via_agency = context.via_agency is not None
+    return TenantSummaryOut(
+        organization_id=context.tenant.id,
+        organization_name=context.tenant.name,
+        role=context.effective_org_role or "platform_staff",
+        role_cap=context.org_role if via_agency else None,
+        via_agency=via_agency,
+    )
 
 
 @router.get("/api/v1/tenants/{tenant_id}", response_model=TenantOut)

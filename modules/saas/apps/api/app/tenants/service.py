@@ -284,11 +284,15 @@ class TenantService:
             if existing.status == "active":
                 raise ApiError(409, "ALREADY_MEMBER", "You are already a member of this tenant.")
             existing.role = invitation.role
+            existing.org_role = invitation.org_role
             existing.status = "active"
             membership = existing
         else:
             membership = Membership(
-                tenant_id=invitation.tenant_id, user_id=user.id, role=invitation.role
+                tenant_id=invitation.tenant_id,
+                user_id=user.id,
+                role=invitation.role,
+                org_role=invitation.org_role,
             )
             db.add(membership)
         invitation.accepted_at = now

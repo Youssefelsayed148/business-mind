@@ -13,10 +13,22 @@ LEGACY_TO_ORG_ROLE: Final[dict[str, str]] = {
     "editor": "agent",
     "admin": "admin",
 }
+# Stored legacy role written next to a new org_role (dual-write while the flag exists).
+ORG_TO_LEGACY_ROLE: Final[dict[str, str]] = {
+    "owner": "admin",
+    "admin": "admin",
+    "manager": "editor",
+    "agent": "editor",
+    "viewer": "viewer",
+}
 # Roles an agency grant may cap at; never Owner (design 4.3).
 GRANT_ROLE_CAPS: Final[tuple[str, ...]] = ("admin", "manager", "agent", "viewer")
 # Permission families an agency person never holds, whatever the cap is.
 AGENCY_FORBIDDEN_PREFIXES: Final[tuple[str, ...]] = ("team.", "agency.", "billing.", "org.")
+# The one exception inside a forbidden family: the read-only summary an agency
+# person needs to see which organization and role they are acting as (owner
+# decision on PR B). It is not org.read or any other org.* permission.
+AGENCY_ALLOWED_EXCEPTIONS: Final[frozenset[str]] = frozenset({"org.summary"})
 
 _READ = frozenset(
     {
@@ -28,6 +40,7 @@ _READ = frozenset(
         "campaigns.read",
         "bots.read",
         "org.read",
+        "org.summary",
     }
 )
 _AGENT = _READ | {"inbox.reply", "contacts.write"}
@@ -91,11 +104,13 @@ def permissions_for_role(role: str) -> frozenset[str]:
 
 
 def agency_permissions(role_cap: str) -> frozenset[str]:
-    """What an agency person holds: the cap's permissions minus team/agency/billing/org."""
+    """What an agency person holds: the cap's permissions minus team/agency/billing/org
+    (except org.summary)."""
     if role_cap not in GRANT_ROLE_CAPS:
         raise ValueError(f"invalid agency role cap: {role_cap!r}")
     return frozenset(
         p
         for p in ROLE_PERMISSIONS[role_cap]
-        if not any(p.startswith(prefix) for prefix in AGENCY_FORBIDDEN_PREFIXES)
+        if p in AGENCY_ALLOWED_EXCEPTIONS
+        or not any(p.startswith(prefix) for prefix in AGENCY_FORBIDDEN_PREFIXES)
     )

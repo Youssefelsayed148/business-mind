@@ -45,9 +45,66 @@ Set to `saas-api` for Many and `many-api` for SaaS in the compose files.
 | Many `/api/saas/*` and `/saas/*` (HMAC-signed service-to-service) | public, with the `saas_signed` rate limit (lines 64 and 71) | **denied, 403**, `^~` prefix locations; SaaS reaches them as `http://many-api:8000` |
 | SaaS `/api/channels/*` (signed events endpoint) | not proxied | **denied, 403** on both SaaS hosts (the web host rewrites `/api/*` to saas-api) |
 | All other Many routes (`/webhooks/meta`, `/api/`, `/auth/`, `/instagram/`, ..., `/`) | as is | copied unchanged (upstream names differ) |
+| `/auth/sso/exchange` (Phase 3) | not present | exact location with its own rate-limit zone and a case-insensitive twin, Many host only |
 | SaaS web and API | not present | served by hostname (no Next basePath, so no SaaS code change) |
 
 The deny response is `403` with body `denied at the edge` and header `X-Edge-Deny: 1`, so it cannot be confused with an application answer. `e2e/phase2/check_nginx.py` proves the deny rules for spelling variants (double slash, percent-encoding, dot segments) and that they do not shadow the JWT/session admin routes; results are in `docs/PHASE-2-RESULTS.md`.
+
+## Identity and SSO (Phase 3): every flag is OFF by default
+
+Design: `docs/IDENTITY-DESIGN.md`. Nothing below runs unless you turn a flag on in `.env.unified`. With all flags off both apps behave exactly as before Phase 3 (new routes answer 404 like unknown routes, no new column is read).
+
+### Flag matrix
+
+| Flag | App | Default | Effect when off |
+|---|---|---|---|
+| `IDENTITY_V2_ENABLED` | SaaS | false | roles, locations, agencies, team routes, reset, MFA routes, session policy and login hardening are inactive; `memberships.role` stays authoritative |
+| `SSO_ISSUER_ENABLED` | SaaS | false | `/api/v1/sso/*` answers 404, nothing is minted |
+| `SSO_ASSERTION_ENABLED` | Many | false | `/auth/sso/exchange` answers 404, `sso_access` tokens are rejected |
+| `MFA_ENFORCE_STAFF`, `MFA_ENFORCE_ADMINS` | SaaS | false | MFA is optional (enforcement is applied when an assertion is minted; admins get a 14-day grace from the day they joined) |
+| `SSO_REQUIRE_MFA_FOR_ADMIN` | Many | false | the exchange does not check the `mfa` claim |
+
+Other settings (names only, values in `.env.unified`): SaaS `SSO_SIGNING_KID`, `SSO_SIGNING_KEY_PEM`, `SSO_RETURN_ALLOWLIST` (JSON list of exact callback URLs), `MFA_SECRET_ENCRYPTION_KEYS`, `PUBLIC_BASE_URL`, `MAILER_BACKEND` (`console` is the only backend: it sends nothing, the invite screen shows the one-time link); Many `SSO_PUBLIC_KEYS` (JSON `{kid: PEM public key}`), `SSO_ISSUER`, `SSO_AUDIENCE`, `SSO_TOKEN_MINUTES`.
+
+### Make dev keys (never commit them; keep them outside the checkout)
+
+```bash
+# Ed25519 pair for the SSO assertion (SaaS signs, Many verifies)
+openssl genpkey -algorithm ed25519 -out ~/sso-dev-private.pem
+openssl pkey -in ~/sso-dev-private.pem -pubout -out ~/sso-dev-public.pem
+# One-line forms for .env.unified (PEM with literal \n sequences)
+awk 'NF {sub(/\r/, ""); printf "%s\\n", $0}' ~/sso-dev-private.pem   # -> SSO_SIGNING_KEY_PEM=...
+awk 'NF {sub(/\r/, ""); printf "%s\\n", $0}' ~/sso-dev-public.pem    # inside SSO_PUBLIC_KEYS={"dev-1":"..."}
+# SSO_SIGNING_KID=dev-1   (must be a key id present in Many's SSO_PUBLIC_KEYS)
+# Fernet key for MFA secrets
+python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"   # -> MFA_SECRET_ENCRYPTION_KEYS
+```
+
+SaaS startup refuses an unusable signing key when `SSO_ISSUER_ENABLED=true`; Many refuses an empty or malformed `SSO_PUBLIC_KEYS` when `SSO_ASSERTION_ENABLED=true`. Key rotation, with no downtime: add the new public key to Many's map, switch the SaaS to the new `kid`, remove the old key after two minutes. Emergency revocation: remove the `kid` from Many (all outstanding assertions die within 60 seconds, Many tokens within 10 minutes).
+
+### Edge: the exchange route
+
+`nginx/unified.conf` has `location = /auth/sso/exchange` (public on the Many host only) with its own limit zone (`sso_exchange`, 30 requests per minute per client address, burst 10, answers 429) and a case-insensitive twin `~* ^/auth/sso/exchange/?$` so no spelling dodges the limit. The SaaS hosts do not route that path to Many. `nginx/default.conf` is not edited. Re-run `scripts/dev-up.sh test` after any change to `unified.conf`.
+
+### Migrating Many users (rehearsal only, never production in Phase 3)
+
+`scripts/identity_migrate.py` links Many users to SaaS users offline. Dry run first; the report (with emails and the hash algorithm of every Many row, never a hash) is written outside the repository:
+
+```bash
+MANY_DATABASE_URL=... SAAS_DATABASE_URL=... python scripts/identity_migrate.py report --out ~/identity-report.json
+# review it, take a backup of both databases, then:
+python scripts/identity_migrate.py apply --report-hash <hash from the report> --confirm-databases <many_db>,<saas_db> --yes
+python scripts/identity_migrate.py verify
+```
+
+Only argon2id hashes are carried; any other algorithm is reported as "needs set-password link" and gets an unusable password until a link is used. Memberships and the organization to workspace mapping are not applied by the tool. Its tests need a disposable Postgres (`APP_ENV=test`, `TEST_DATABASE_URL`).
+
+### Rollback ladder
+
+1. Turn the flags off (seconds): Many's own login works as before, SSO tokens are rejected, SaaS roles fall back to the legacy column.
+2. Empty `SSO_PUBLIC_KEYS` in Many: every exchange is refused.
+3. Downgrade Many `0031_sso_link` and SaaS `0034` to `0032` only after a fresh backup (shadow users are harmless leftovers).
+4. Full restore from backup.
 
 ## Constraints file
 

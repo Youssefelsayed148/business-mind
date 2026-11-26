@@ -92,6 +92,10 @@ class AuthService:
         self.db.commit()
         return user, token
 
+    def start_session(self, user: User) -> tuple[Session, str]:
+        """Issue a session for a user who just authenticated by another proven path."""
+        return self._create_session(user)
+
     def login(self, email: str, password: str, *, rotate_token: str | None) -> tuple[User, str]:
         """Verify credentials, issue a fresh session and rotate the presented one."""
         user = self.db.scalar(select(User).where(User.email == email.strip()).with_for_update())
@@ -218,6 +222,9 @@ class AuthService:
             .where(Session.user_id == user.id, Session.revoked_at.is_(None))
             .values(revoked_at=datetime.now(UTC))
         )
+
+    def revoke_token(self, token: str) -> None:
+        self._revoke_token(token)
 
     def _revoke_token(self, token: str) -> None:
         row = self.db.execute(
