@@ -1,0 +1,184 @@
+/* Facebook and WhatsApp channels page and Facebook campaigns page (Phase 4C).
+ * Tokens only; logical properties so right-to-left text works. */
+
+.mc-sections {
+  display: grid;
+  gap: var(--space-6);
+}
+.mc-section {
+  display: grid;
+  gap: var(--space-4);
+}
+.mc-section-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--space-3);
+}
+.mc-section-head h2 {
+  margin-block-end: var(--space-1);
+}
+.mc-section-head p {
+  margin: 0;
+}
+.mc-empty-action {
+  display: flex;
+  justify-content: center;
+  margin-block-start: var(--space-3);
+}
+.mc-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: var(--space-3);
+}
+.mc-account {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  padding: var(--space-4);
+  display: grid;
+  gap: var(--space-4);
+}
+.mc-account-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-3);
+}
+.mc-account-name {
+  display: grid;
+  gap: var(--space-1);
+  flex: 1 1 14rem;
+  min-inline-size: 0;
+  overflow-wrap: anywhere;
+}
+.mc-account-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  align-items: center;
+}
+.mc-account-detail {
+  display: grid;
+  gap: var(--space-4);
+}
+.mc-panel {
+  display: grid;
+  gap: var(--space-4);
+  padding: var(--space-4);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface-raised);
+}
+.mc-panel-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--space-3);
+}
+.mc-panel-head h3 {
+  margin-block-end: var(--space-1);
+  font-size: var(--text-md);
+}
+.mc-panel-head p {
+  margin: 0;
+}
+.mc-badges {
+  display: flex;
+  gap: var(--space-2);
+}
+.mc-check {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  font-weight: 550;
+}
+.mc-check span {
+  display: grid;
+  gap: var(--space-1);
+}
+.mc-option {
+  align-items: flex-start;
+  padding: var(--space-3);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+}
+.mc-grid {
+  display: grid;
+  gap: var(--space-4);
+  grid-template-columns: repeat(auto-fit, minmax(14rem, 1fr));
+}
+.mc-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+.mc-facts {
+  display: grid;
+  gap: var(--space-3);
+  grid-template-columns: repeat(auto-fit, minmax(10rem, 1fr));
+  margin: 0;
+  font-size: var(--text-sm);
+}
+.mc-facts dt {
+  font-weight: 650;
+}
+.mc-facts dd {
+  margin: 0;
+  color: var(--muted);
+}
+
+/* Facebook campaigns */
+.mf-page {
+  display: grid;
+  gap: var(--space-5);
+}
+.mf-form {
+  max-inline-size: none;
+  display: grid;
+  gap: var(--space-4);
+}
+.mf-grid {
+  display: grid;
+  gap: var(--space-4);
+  grid-template-columns: repeat(auto-fit, minmax(16rem, 1fr));
+}
+.mf-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: var(--space-2);
+}
+.mf-keywords,
+.mf-keywords-inline {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+.mf-keyword {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding-block: var(--space-1);
+  padding-inline: var(--space-3);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+}
+.mf-add-keyword {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+.mf-row-actions {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
