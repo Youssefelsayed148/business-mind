@@ -1,5 +1,7 @@
 import type { NextConfig } from "next";
 
+import { OLD_URL_REDIRECTS } from "./lib/old-urls";
+
 // The dashboard talks to the FastAPI backend through a same-origin proxy so the
 // session cookies stay first-party (no CORS, no third-party cookie issues).
 // The proxy target is configurable; container deployments point it at the api service.
@@ -46,6 +48,10 @@ const config: NextConfig = {
         ],
       },
     ];
+  },
+  async redirects() {
+    // Temporary (307) on purpose: these destinations change as pages ship (Phase 4).
+    return OLD_URL_REDIRECTS.map((rule) => ({ ...rule, permanent: false }));
   },
   async rewrites() {
     return [

@@ -256,6 +256,13 @@ export async function safetyFixture(page: Page, platform = false) {
       return reply({ id: tenant, name: "Safety org", retention_days: 30 });
     if (suffix === "/change-requests" || path === "platform/change-requests")
       return reply([]);
+    // The shell asks who the person is here (Phase 4B); with identity v2 off the
+    // API answers 404 and the shell falls back to the stored role.
+    if (suffix === "/summary")
+      return route.fulfill({
+        status: 404,
+        json: { error: { code: "NOT_FOUND", message: "Not found." } },
+      });
     unexpected.push(path);
     return route.fulfill({
       status: 404,

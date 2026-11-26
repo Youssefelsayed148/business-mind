@@ -7,6 +7,10 @@ import { roleSatisfies, useSession } from "./session";
 import { Icon } from "./icons";
 import { LinkButton } from "./ui";
 import { ThemeToggle } from "./theme";
+import { visibleMenu } from "./menu";
+import { ORG_ROLE_LABEL } from "./org-role";
+import { switchTarget } from "./org-switch";
+import { useOrgRole } from "./use-org-role";
 
 type Destination = {
   label: string;
@@ -45,10 +49,14 @@ export function AppShell({
         tenant_name: org.name,
       }))
     : (me?.memberships ?? []);
+  // One organization and no staff flag: nothing to switch, so no switcher (12.3).
+  const showSwitcher =
+    Boolean(me?.is_platform_staff) || organizations.length > 1;
   const organizationName =
     organizations.find((org) => org.tenant_id === tenantId)?.tenant_name ??
     membership?.tenant_name;
   const role = tenantId ? roleIn(tenantId) : null;
+  const { role: orgRole } = useOrgRole(tenantId);
   const base = `/app/${tenantId}`;
   // Inbox, History and the per-bot saved threads are one module.
   const inConversations = (path: string) =>
@@ -87,6 +95,13 @@ export function AppShell({
           href: "/platform/operations",
           symbol: <Icon name="operations" />,
         },
+        ...visibleMenu({ isStaff: true, role: null }).map(
+          ({ entry, href }) => ({
+            label: entry.label,
+            href,
+            symbol: <Icon name="external" />,
+          }),
+        ),
         {
           label: "Organization workspaces",
           href: "/app",
@@ -293,7 +308,7 @@ export function AppShell({
             {platform
               ? "Platform admin"
               : tenantId
-                ? `Organization workspace · ${organizationName ?? "Workspace"} · ${role ?? "Checking access"}`
+                ? `Organization workspace · ${organizationName ?? "Workspace"} · ${orgRole ? ORG_ROLE_LABEL[orgRole] : (role ?? "Checking access")}`
                 : "Your organizations"}
           </span>
           <button
@@ -307,36 +322,42 @@ export function AppShell({
           </button>
           {me && (
             <nav aria-label="Organization" className="account-nav">
-              <label className="sr-only" htmlFor="org-selector">
-                Organization
-              </label>
-              <select
-                id="org-selector"
-                aria-label="Organization selector"
-                value={tenantId ?? ""}
-                onChange={(event) => {
-                  const id = event.target.value;
-                  const archived =
-                    me.is_platform_staff &&
-                    staffOrganizations?.some(
-                      (org) => org.id === id && org.status === "archived",
+              {showSwitcher && (
+                <label className="sr-only" htmlFor="org-selector">
+                  Organization
+                </label>
+              )}
+              {showSwitcher && (
+                <select
+                  id="org-selector"
+                  aria-label="Organization selector"
+                  value={tenantId ?? ""}
+                  onChange={(event) => {
+                    const id = event.target.value;
+                    const archived =
+                      me.is_platform_staff &&
+                      staffOrganizations?.some(
+                        (org) => org.id === id && org.status === "archived",
+                      );
+                    router.push(
+                      switchTarget({
+                        pathname,
+                        currentTenantId: tenantId,
+                        nextTenantId: id,
+                        isStaff: me.is_platform_staff,
+                        archived: Boolean(archived),
+                      }),
                     );
-                  router.push(
-                    archived
-                      ? `/platform/clients/${id}`
-                      : me.is_platform_staff
-                        ? `/app/${id}/bots`
-                        : `/app/${id}`,
-                  );
-                }}
-              >
-                {!tenantId && <option value="">Switch organization</option>}
-                {organizations.map((m) => (
-                  <option key={m.tenant_id} value={m.tenant_id}>
-                    {m.tenant_name}
-                  </option>
-                ))}
-              </select>
+                  }}
+                >
+                  {!tenantId && <option value="">Switch organization</option>}
+                  {organizations.map((m) => (
+                    <option key={m.tenant_id} value={m.tenant_id}>
+                      {m.tenant_name}
+                    </option>
+                  ))}
+                </select>
+              )}
               {me.is_platform_staff && staffOrganizationsError && (
                 <span role="alert">{staffOrganizationsError}</span>
               )}

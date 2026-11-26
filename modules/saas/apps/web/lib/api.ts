@@ -1057,6 +1057,20 @@ export async function createTenant(name: string): Promise<Tenant> {
   return api<Tenant>("tenants", { method: "POST", body: { name } });
 }
 
+export interface TenantSummary {
+  organization_id: string;
+  organization_name: string;
+  /** owner, admin, manager, agent, viewer, or platform_staff. */
+  role: string;
+  role_cap: string | null;
+  via_agency: boolean;
+}
+
+/** Who am I here. 404 while identity v2 is off: the caller then falls back to the stored role. */
+export async function tenantSummary(tenantId: string): Promise<TenantSummary> {
+  return api<TenantSummary>(`tenants/${tenantId}/summary`);
+}
+
 export async function getTenant(tenantId: string): Promise<Tenant> {
   return api<Tenant>(`tenants/${tenantId}`);
 }
