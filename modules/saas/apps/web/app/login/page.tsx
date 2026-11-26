@@ -4,6 +4,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { Suspense, useEffect, useState } from "react";
 
+import { cleanCode } from "@/lib/identity";
 import { PasswordField } from "@/lib/password-field";
 import { ThemeToggle } from "@/lib/theme";
 import * as api from "@/lib/api";
@@ -22,11 +23,23 @@ function LoginForm() {
   const [emailError, setEmailError] = useState<string | null>(null);
   const [passwordError, setPasswordError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
+  // Two-step verification (identity v2): asked only after the API says a code is needed.
+  const [needsCode, setNeedsCode] = useState(false);
+  const [mfaCode, setMfaCode] = useState("");
+  const [codeError, setCodeError] = useState<string | null>(null);
+  const [identityV2, setIdentityV2] = useState(false);
   const next = searchParams.get("next") ?? "";
 
   // The session-expired redirect lands here with the original path preserved.
   const destination =
     next.startsWith("/") && !next.startsWith("//") ? next : "/app";
+
+  useEffect(() => {
+    void api
+      .authConfig()
+      .then((config) => setIdentityV2(config.identity_v2 === true))
+      .catch(() => undefined);
+  }, []);
 
   useEffect(() => {
     void api.me().then((existing) => {
@@ -42,13 +55,28 @@ function LoginForm() {
     setEmailError(missingEmail);
     setPasswordError(missingPassword);
     if (missingEmail || missingPassword) return;
+    const code = needsCode ? cleanCode(mfaCode) : null;
+    if (needsCode && !code) {
+      setCodeError("Enter the 6-digit code from your app, or a recovery code.");
+      return;
+    }
+    setCodeError(null);
     setSubmitting(true);
     try {
-      await api.login(email, password);
+      await api.login(email, password, code ?? undefined);
       await refresh(); // update the session context before navigating
       router.push(destination);
     } catch (caught) {
-      setError(caught instanceof Error ? caught.message : "Sign in failed.");
+      const apiCode = (caught as { code?: string }).code;
+      if (apiCode === "MFA_REQUIRED") {
+        setNeedsCode(true);
+        setError(null);
+      } else if (apiCode === "INVALID_MFA_CODE") {
+        setNeedsCode(true);
+        setCodeError("That code is not correct. Try again.");
+      } else {
+        setError(caught instanceof Error ? caught.message : "Sign in failed.");
+      }
     } finally {
       setSubmitting(false);
     }
@@ -100,14 +128,41 @@ function LoginForm() {
               />
             )}
           </Field>
+          {needsCode && (
+            <Field
+              label="Verification code"
+              hint="From your authenticator app, or one of your recovery codes."
+              error={codeError ?? undefined}
+            >
+              {(control) => (
+                <input
+                  {...control}
+                  type="text"
+                  name="mfa-code"
+                  autoComplete="one-time-code"
+                  inputMode="text"
+                  dir="ltr"
+                  autoFocus
+                  value={mfaCode}
+                  onChange={(event) => setMfaCode(event.target.value)}
+                />
+              )}
+            </Field>
+          )}
           {error && <Notice message={error} tone="error" scope="item" />}
           <Button type="submit" disabled={submitting}>
             {submitting ? "Signing in…" : "Sign in"}
           </Button>
         </form>
-        <p className="auth-footer">
-          Forgot your password? Contact your administrator.
-        </p>
+        {identityV2 ? (
+          <p className="auth-footer">
+            <Link href="/forgot-password">Forgot your password?</Link>
+          </p>
+        ) : (
+          <p className="auth-footer">
+            Forgot your password? Contact your administrator.
+          </p>
+        )}
         <p className="auth-footer">
           <Link href="/privacy">Privacy</Link> |{" "}
           <Link href="/terms">Terms of use</Link>

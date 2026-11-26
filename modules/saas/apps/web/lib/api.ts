@@ -278,8 +278,14 @@ export interface Me {
   memberships: Membership[];
 }
 
-export function authConfig(): Promise<{ self_serve_signup: boolean }> {
-  return api<{ self_serve_signup: boolean }>("auth/config");
+export function authConfig(): Promise<{
+  self_serve_signup: boolean;
+  /** Present (true) only while identity v2 is on: reset, two-step verification, team screens. */
+  identity_v2?: boolean;
+}> {
+  return api<{ self_serve_signup: boolean; identity_v2?: boolean }>(
+    "auth/config",
+  );
 }
 
 export interface Tenant {
@@ -1024,8 +1030,17 @@ export async function selfServiceSignup(
   });
 }
 
-export async function login(email: string, password: string): Promise<Me> {
-  return api<Me>("auth/login", { method: "POST", body: { email, password } });
+export async function login(
+  email: string,
+  password: string,
+  mfaCode?: string,
+): Promise<Me> {
+  return api<Me>("auth/login", {
+    method: "POST",
+    body: mfaCode
+      ? { email, password, mfa_code: mfaCode }
+      : { email, password },
+  });
 }
 
 export async function logout(): Promise<void> {
@@ -2291,3 +2306,99 @@ export async function createChangeRequest(
 export function listAssignees(tenantId: string): Promise<Member[]> {
   return api(`tenants/${tenantId}/inbox/assignees`);
 }
+
+// --- identity v2 screens (Phase 4E). Every route answers 404 while the flag is off. ----------
+
+export async function passwordResetRequest(email: string): Promise<string> {
+  const reply = await api<{ message: string }>("auth/password-reset/request", {
+    method: "POST",
+    body: { email },
+  });
+  return reply.message;
+}
+
+export async function passwordResetConfirm(
+  token: string,
+  newPassword: string,
+): Promise<void> {
+  await api<unknown>("auth/password-reset/confirm", {
+    method: "POST",
+    body: { token, new_password: newPassword },
+  });
+}
+
+export interface MfaStatus {
+  enrolled: boolean;
+  pending: boolean;
+  recovery_codes_remaining: number;
+  required: boolean;
+  available: boolean;
+}
+export const mfaStatus = () => api<MfaStatus>("auth/mfa");
+export const mfaEnroll = () =>
+  api<{ secret: string; otpauth_uri: string }>("auth/mfa/enroll", {
+    method: "POST",
+  });
+export const mfaConfirm = (code: string) =>
+  api<{ recovery_codes: string[] }>("auth/mfa/confirm", {
+    method: "POST",
+    body: { code },
+  });
+
+export interface SessionRow {
+  id: string;
+  created_at: string;
+  last_seen_at: string | null;
+  user_agent: string | null;
+  current: boolean;
+}
+export const listSessions = () => api<SessionRow[]>("auth/sessions");
+export const revokeOtherSessions = () =>
+  api<{ revoked: number }>("auth/sessions/revoke-all", {
+    method: "POST",
+    body: { keep_current: true },
+  });
+
+export type OrgRoleName = "owner" | "admin" | "manager" | "agent" | "viewer";
+export interface TeamMember {
+  user_id: string;
+  email: string;
+  role: OrgRoleName;
+  status: string;
+  location_scope: string;
+  location_ids: string[];
+  joined_at: string;
+}
+export const teamMembers = (tenantId: string) =>
+  api<TeamMember[]>(`tenants/${tenantId}/team/members`);
+export const teamInvite = (
+  tenantId: string,
+  email: string,
+  role: OrgRoleName,
+) =>
+  api<{ message: string; link_path: string | null }>(
+    `tenants/${tenantId}/team/invitations`,
+    { method: "POST", body: { email, role } },
+  );
+export const teamChangeRole = (
+  tenantId: string,
+  userId: string,
+  role: OrgRoleName,
+) =>
+  api<TeamMember>(`tenants/${tenantId}/team/members/${userId}`, {
+    method: "PATCH",
+    body: { role },
+  });
+export const teamDeactivate = (tenantId: string, userId: string) =>
+  api<void>(`tenants/${tenantId}/team/members/${userId}`, {
+    method: "DELETE",
+  });
+export const teamResetMfa = (tenantId: string, userId: string) =>
+  api<void>(`tenants/${tenantId}/team/members/${userId}/mfa-reset`, {
+    method: "POST",
+  });
+export const acceptInviteNewAccount = (token: string, password: string) =>
+  api<Me>("invitations/accept-new", {
+    method: "POST",
+    body: { token, password },
+  });

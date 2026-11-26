@@ -4,7 +4,9 @@ import { useParams, useRouter } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
 
 import * as api from "@/lib/api";
-import type { Invitation, Member, Role } from "@/lib/api";
+import type { Invitation, Member, Role, TeamMember } from "@/lib/api";
+import { TeamV2 } from "@/lib/team-v2";
+import { useOrgRole } from "@/lib/use-org-role";
 import { roleSatisfies, useSession } from "@/lib/session";
 import {
   Button,
@@ -24,7 +26,7 @@ import "@/app/team-screen.css";
 const CHANGEABLE_ROLES: Role[] = ["viewer", "editor", "admin"];
 const PURPOSE = "Invite teammates and manage their access to this workspace.";
 
-export default function MembersPage() {
+function LegacyMembers() {
   const params = useParams<{ tenant: string }>();
   const tenantId = params.tenant;
   const router = useRouter();
@@ -394,5 +396,45 @@ export default function MembersPage() {
         )}
       </FormSection>
     </main>
+  );
+}
+
+/**
+ * Identity v2 on: the five-role team screen. Identity v2 off: the team routes answer 404 and the
+ * earlier screen above is shown unchanged.
+ */
+export default function MembersPage() {
+  const params = useParams<{ tenant: string }>();
+  const tenantId = params.tenant;
+  const { role: actor } = useOrgRole(tenantId);
+  const [mode, setMode] = useState<
+    | { kind: "checking" }
+    | { kind: "legacy" }
+    | { kind: "v2"; rows: TeamMember[] }
+  >({ kind: "checking" });
+
+  const reload = useCallback(async () => {
+    try {
+      setMode({ kind: "v2", rows: await api.teamMembers(tenantId) });
+    } catch (caught) {
+      // 404 = identity v2 off. Anything else also falls back: the earlier screen reports its own errors.
+      void caught;
+      setMode({ kind: "legacy" });
+    }
+  }, [tenantId]);
+  useEffect(() => {
+    const timer = setTimeout(() => void reload(), 0);
+    return () => clearTimeout(timer);
+  }, [reload]);
+
+  if (mode.kind === "checking") return <Loading />;
+  if (mode.kind === "legacy") return <LegacyMembers />;
+  return (
+    <TeamV2
+      tenantId={tenantId}
+      actor={actor}
+      initial={mode.rows}
+      reload={reload}
+    />
   );
 }

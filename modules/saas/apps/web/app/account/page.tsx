@@ -12,6 +12,7 @@ import { useRouter } from "next/navigation";
 
 import { AccountForm } from "@/lib/account";
 import { AppShell } from "@/lib/app-header";
+import { MfaPanel, SessionsPanel } from "@/lib/security-panels";
 import { useSession } from "@/lib/session";
 import { Card, PageHeader } from "@/lib/ui";
 import "@/app/auth-screen.css";
@@ -39,6 +40,8 @@ export default function AccountPage() {
           </p>
         </Card>
         <AccountForm />
+        <MfaPanel />
+        <SessionsPanel />
       </main>
     </AppShell>
   );
