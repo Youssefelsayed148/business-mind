@@ -114,13 +114,13 @@ test("leads: renders rows, filters are sent as the old page sent them", async ({
 
   // Platform is filtered on the loaded rows: no new request, the WhatsApp row stays.
   const before = calls.filter((c) => c.path === "leads").length;
-  await page.getByLabel("Platform").selectOption("whatsapp");
+  await page.getByLabel("Platform", { exact: true }).selectOption("whatsapp");
   await expect(table).not.toContainText("maria");
   await expect(table).toContainText("omar");
   expect(calls.filter((c) => c.path === "leads").length).toBe(before);
 
   // Campaign and account go to the server.
-  await page.getByLabel("Campaign").selectOption("c1");
+  await page.getByLabel("Campaign", { exact: true }).selectOption("c1");
   await expect
     .poll(() => calls.some((c) => c.query.includes("campaign_id=c1")))
     .toBe(true);
@@ -296,8 +296,12 @@ test("messages: a failed retry shows the plain message, not a status", async ({
   });
   await page.goto("/platform/messages");
   await page.getByTestId("retry-m1").click();
-  await expect(page.getByRole("alert")).toContainText("Already retried.");
-  await expect(page.getByRole("alert")).not.toContainText("409");
+  await expect(
+    page.locator('[role="alert"]:not(#__next-route-announcer__)'),
+  ).toContainText("Already retried.");
+  await expect(
+    page.locator('[role="alert"]:not(#__next-route-announcer__)'),
+  ).not.toContainText("409");
 });
 
 test("messages: empty, 403 and 502", async ({ page }) => {
@@ -394,7 +398,7 @@ test("logs: filters go to the server with the old parameter names", async ({
   await expect(page.getByTestId("staff-logs")).toBeVisible();
   expect(calls.find((c) => c.path === "logs")?.query).toBe("?limit=100");
   await page.getByLabel("Level").selectOption("error");
-  await page.getByLabel("Campaign").selectOption("c1");
+  await page.getByLabel("Campaign", { exact: true }).selectOption("c1");
   await page.getByLabel("Event type").selectOption({ label: "Login failed" });
   await page.getByLabel("Limit").fill("25");
   await expect

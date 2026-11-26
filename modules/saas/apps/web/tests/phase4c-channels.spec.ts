@@ -253,7 +253,7 @@ test("admin disconnects a Page after confirming (DELETE, then the list reloads);
     "Facebook Page disconnected.",
   );
   expect(many.count("DELETE", "facebook/accounts/p1")).toBe(1);
-  expect(many.count("GET", "facebook/accounts")).toBe(2);
+  await expect.poll(() => many.count("GET", "facebook/accounts")).toBe(2);
 });
 
 test("owner hard-deletes a WhatsApp number (DELETE .../hard)", async ({
@@ -274,7 +274,7 @@ test("owner hard-deletes a WhatsApp number (DELETE .../hard)", async ({
     "permanently deleted",
   );
   expect(many.count("DELETE", "whatsapp/accounts/w1/hard")).toBe(1);
-  expect(many.count("GET", "whatsapp/accounts")).toBe(2);
+  await expect.poll(() => many.count("GET", "whatsapp/accounts")).toBe(2);
 });
 
 test("a failed disconnect shows the plain message and keeps the list", async ({
@@ -328,7 +328,7 @@ test("admin saves AI settings with the right PATCH body, and the list reloads", 
     ai_tone_instructions: "",
     ai_daily_message_cap: 250,
   });
-  expect(many.count("GET", "facebook/accounts")).toBe(2);
+  await expect.poll(() => many.count("GET", "facebook/accounts")).toBe(2);
 });
 
 test("WhatsApp AI settings have no unsolicited-message option and omit it from the body", async ({
@@ -625,7 +625,7 @@ test("manager creates a campaign: POST body has the Page, fields and keywords; t
     ai_enabled: false,
     keywords: ["promo", "price"],
   });
-  expect(many.count("GET", "facebook/campaigns")).toBe(2);
+  await expect.poll(() => many.count("GET", "facebook/campaigns")).toBe(2);
 });
 
 test("a failed save keeps the form open and shows the plain message", async ({

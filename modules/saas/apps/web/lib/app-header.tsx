@@ -137,6 +137,16 @@ export function AppShell({
             href: `${base}/analytics`,
             symbol: <Icon name="insights" />,
           },
+          // Many channel pages (Phase 4C): shown by role; the API still decides.
+          ...visibleMenu({
+            isStaff: false,
+            role: orgRole,
+            tenantId,
+          }).map(({ entry, href }) => ({
+            label: entry.label,
+            href,
+            symbol: <Icon name="conversations" />,
+          })),
           ...(roleSatisfies(role, "admin")
             ? [
                 {

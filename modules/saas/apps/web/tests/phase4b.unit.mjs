@@ -72,17 +72,32 @@ test("role levels order owner > admin > manager > agent > viewer; null never pas
   assert.ok(!role.orgRoleSatisfies(null, "viewer"));
 });
 
-test("menu: staff entries only for staff; unshipped entries never shown", () => {
+test("menu: staff entries only for staff; client entries need a tenant", () => {
   const staff = menu.visibleMenu({ isStaff: true, role: null });
-  assert.deepEqual(
-    staff.map((x) => x.href),
-    ["/platform/many"],
-  );
-  assert.deepEqual(
-    menu.visibleMenu({ isStaff: false, role: "owner", tenantId: "t" }),
-    [],
-  );
+  assert.ok(staff.every((x) => x.href.startsWith("/platform/")));
+  assert.ok(staff.some((x) => x.href === "/platform/many"));
+  assert.ok(staff.some((x) => x.href === "/platform/instagram/accounts"));
+  // A client never sees a staff entry, and without a tenant sees no client entry.
+  const client = menu.visibleMenu({
+    isStaff: false,
+    role: "owner",
+    tenantId: "T",
+  });
+  assert.ok(client.every((x) => x.href.startsWith("/app/T/")));
+  assert.deepEqual(menu.visibleMenu({ isStaff: false, role: "owner" }), []);
   assert.ok(menu.MENU.every((e) => typeof e.shipped === "boolean"));
+});
+
+test("menu: WhatsApp needs Admin; Facebook and Channels are for everyone", () => {
+  const labels = (r) =>
+    menu
+      .visibleMenu({ isStaff: false, role: r, tenantId: "T" })
+      .map((x) => x.entry.label);
+  assert.deepEqual(labels("viewer"), ["Accounts", "Facebook campaigns"]);
+  assert.deepEqual(labels("manager"), ["Accounts", "Facebook campaigns"]);
+  assert.ok(labels("admin").includes("WhatsApp templates"));
+  assert.ok(labels("owner").includes("WhatsApp health"));
+  assert.deepEqual(labels(null), []);
 });
 
 test("menu: client entries follow the role once they ship", () => {
@@ -154,41 +169,39 @@ test("switcher keeps the page, cuts before ids, falls back safely", () => {
   );
 });
 
-test("old URLs: every old Many page has a rule; moved targets are encoded", () => {
-  const sources = old.OLD_URL_REDIRECTS.map((r) => r.source);
-  for (const page of [
-    "/overview",
-    "/accounts",
-    "/campaigns",
-    "/conversations",
-    "/facebook-campaigns",
-    "/leads",
-    "/logs",
-    "/messages",
-    "/whatsapp",
-  ]) {
-    assert.ok(sources.includes(page), page);
-  }
+test("old URLs: every old Many page has a destination that exists in the new app", () => {
+  const rules = Object.fromEntries(
+    old.OLD_URL_REDIRECTS.map((r) => [r.source, r.destination]),
+  );
+  assert.equal(rules["/overview"], "/platform/many");
+  assert.equal(rules["/campaigns"], "/platform/instagram/campaigns");
+  assert.equal(rules["/campaigns/new"], "/platform/instagram/campaigns/new");
+  assert.equal(rules["/campaigns/:id"], "/platform/instagram/campaigns/:id");
   assert.equal(
-    old.OLD_URL_REDIRECTS.find((r) => r.source === "/overview").destination,
-    "/platform/many",
+    rules["/campaigns/:id/stats"],
+    "/platform/instagram/campaigns/:id/stats",
   );
-  for (const r of old.OLD_URL_REDIRECTS) {
-    assert.ok(
-      r.destination.startsWith("/platform/") ||
-        r.destination.startsWith("/moved?from=%2F"),
-      r.destination,
-    );
-    assert.ok(
-      !sources.includes(r.destination.split("?")[0]) ||
-        r.destination.startsWith("/moved"),
-    );
-  }
+  assert.equal(rules["/conversations"], "/platform/instagram/conversations");
+  for (const page of ["leads", "logs", "messages"])
+    assert.equal(rules[`/${page}`], `/platform/${page}`);
+  assert.equal(rules["/whatsapp"], "/app");
+  assert.equal(rules["/facebook-campaigns"], "/app");
+  // Specific campaign rules come before the general ones (first match wins in Next).
+  const order = old.OLD_URL_REDIRECTS.map((r) => r.source);
+  assert.ok(order.indexOf("/campaigns/new") < order.indexOf("/campaigns/:id"));
   assert.ok(
-    !sources.includes("/privacy") &&
-      !sources.includes("/terms") &&
-      !sources.includes("/login"),
+    order.indexOf("/campaigns/:id/stats") < order.indexOf("/campaigns/:id"),
   );
+  // /accounts is a real page; the public pages are the same in both apps.
+  for (const own of [
+    "/accounts",
+    "/privacy",
+    "/terms",
+    "/login",
+    "/opt-in/:token",
+  ]) {
+    assert.ok(!(own in rules), own);
+  }
 });
 
 test("Many failures reduce to five kinds", () => {

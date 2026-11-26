@@ -74,8 +74,8 @@ for (const [status, text] of [
     await page.goto(`/opt-in/${TOKEN}`);
     await page.getByLabel("WhatsApp number").fill("+201001234567");
     await page.getByRole("button", { name: "Continue" }).click();
-    await expect(page.getByRole("alert")).toContainText(text);
-    await expect(page.getByRole("alert")).not.toContainText(String(status));
+    await expect(page.locator(".field-error")).toContainText(text);
+    await expect(page.locator(".field-error")).not.toContainText(String(status));
   });
 }
 

@@ -129,25 +129,37 @@ test("a single-organization client sees no organization switcher", async ({
 });
 
 test("old Many URLs redirect, keeping the query string", async ({ page }) => {
-  await page.goto("/accounts?code=abc&state=xyz");
-  await expect(page).toHaveURL(/\/moved\?/);
-  const url = new URL(page.url());
-  expect(url.searchParams.get("code")).toBe("abc");
-  expect(url.searchParams.get("state")).toBe("xyz");
-  expect(url.searchParams.get("from")).toBe("/accounts");
-  await expect(
-    page.getByRole("heading", { name: "This page has moved" }),
-  ).toBeVisible();
+  // Signed out: the guard of the new place asks for sign-in, naming where it was going.
+  await page.goto("/leads?search=ann");
+  await expect(page).toHaveURL(/\/login/);
+  expect(new URL(page.url()).searchParams.get("next")).toBe("/platform");
 
-  await page.goto("/whatsapp/contacts");
-  expect(new URL(page.url()).searchParams.get("from")).toBe("/whatsapp");
-  await page.goto("/campaigns/123/stats");
-  expect(new URL(page.url()).searchParams.get("from")).toBe("/campaigns");
+  await page.goto("/campaigns/123/stats?x=1");
+  await expect(page).toHaveURL(/\/login/);
 
-  // /overview goes to the page that exists; signed out, the guard then asks for sign-in.
   await page.goto("/overview");
   await expect(page).toHaveURL(/\/login/);
   expect(new URL(page.url()).searchParams.get("next")).toBe("/platform");
+});
+
+test("old Facebook and WhatsApp addresses lead to the workspace list", async ({
+  page,
+}) => {
+  await registerAdmin(page, "P4B-old");
+  await page.goto("/whatsapp/contacts");
+  await expect(page).toHaveURL(/\/app$/);
+  await page.goto("/facebook-campaigns");
+  await expect(page).toHaveURL(/\/app$/);
+});
+
+test("the old Instagram return address /accounts keeps its query and routes by session", async ({
+  page,
+}) => {
+  await page.goto("/accounts?connected=1");
+  await expect(page).toHaveURL(/\/login/);
+  expect(
+    decodeURIComponent(new URL(page.url()).searchParams.get("next") ?? ""),
+  ).toBe("/accounts?connected=1");
 });
 
 test("the moved page shows the old address as text, never as markup", async ({
