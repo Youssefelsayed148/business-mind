@@ -700,6 +700,7 @@ the real stack with SSO and Many on (that needs the WSL stack and the flags, 4F)
 | `scripts/test_unified_nginx.py` | 4 passed |
 | `check_instagram_frozen.py` | OK |
 | ruff on the changed Python files | clean |
+| SaaS API suite (Postgres 16, pgvector 0.6.0) | 1558 passed, 10 failed: embedding readiness (3), hybrid retrieval (4), r19 index (1), RAG evaluation (2); the known environmental pgvector failures |
 
 ### 17.3 Not run, and why (the owner's machine has what this container lacks)
 
