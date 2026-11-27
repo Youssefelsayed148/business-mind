@@ -161,6 +161,7 @@ Not done / open:
 - The SSE stream fixes the caller's scope when it connects.
 
 ## Next
+- **Phase 5 plan written, awaiting the owner's approval: `docs/PHASE-5-PLAN.md` (read-only discovery, questions Q1 to Q7, steps 5.0 to 5F, the list of what is left from every earlier phase). First step after approval is `docs/DATA-UNIFICATION.md` (docs only). The owner runs the WSL gates for Phase 4 first (plan section 7).**
 - **The Phase 4 plan, status, decisions and known gaps are in `docs/PHASE-4-PLAN.md`; update it every Phase 4 session. Next after the review of 4A to 4E is 4F (close: deny the public exchange at the edge, nginx paths, screenshots, old-tab walk, full gates on the WSL stack); show the plan first. 4C and 4D were built together with four page-porting agents (plan section 15).**
 - **Phase 4 (one dashboard), step 1: WRITTEN, awaiting the owner's review (was greenlit 2026-11-26).** Write `docs/UI-INVENTORY.md` (every page of both apps: route, purpose, API, role) and the menu, naming, language/RTL and theme proposal, then stop for approval. Owner decision 2026-11-26: Many pages that client logins cannot open (campaigns, conversations, messages, leads, logs, stats, Instagram) start as staff-only in the unified UI.
 - Phase 4 must also cover the identity wiring Phase 3 left out: server-side SSO exchange in the new shell (the public exchange is removed then, D3), the organization to workspace mapping, and the team, invitation, reset and MFA screens.
