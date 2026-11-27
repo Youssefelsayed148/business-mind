@@ -19,7 +19,7 @@ Status values: not started / in progress / in review / done / blocked.
 | 4C. Client pages | `claude/blissful-allen-b63jty` (same session branch) | [#12](https://github.com/Youssefelsayed148/business-mind/pull/12) | in review | Client and staff browser tests pass |
 | 4D. Staff pages | `claude/blissful-allen-b63jty` (same session branch) | [#12](https://github.com/Youssefelsayed148/business-mind/pull/12) | in review | Every old tab has a place |
 | 4E. Identity screens | `claude/blissful-allen-b63jty` (same session branch) | [#12](https://github.com/Youssefelsayed148/business-mind/pull/12) | in review | One login reaches every page the role allows |
-| 4F. Close | `phase-4/close` | - | not started | All exit criteria pass |
+| 4F. Close | `claude/blissful-allen-b63jty` (same session branch) | [#12](https://github.com/Youssefelsayed148/business-mind/pull/12) | in review; the parts that need the WSL stack are not run | All exit criteria pass |
 
 Each step is one branch and one draft PR, and stops for the owner's review.
 
@@ -100,7 +100,7 @@ fixing it.
 | 7 identity screens | fixed in 4E (screens built; real-API check with the flag on) | sign-in second step, password reset, invitation without an account, two-step verification and devices on Account, team screen v2; `phase4e-identity.spec.ts` (mocks) and `phase4e-real-v2.spec.ts` (real API) |
 | 8 web test baseline | partly done in 4B (Node 22, not 24) | lint, typecheck, build and the full Playwright suite ran green on Node 22 (14); the Node 24 run is still owed |
 | 9 role visibility in the web app | fixed in 4B (display only) | `useOrgRole` reads `GET /tenants/{id}/summary` and falls back to the stored role when identity v2 is off; unit tests `phase4b.unit.mjs`; the badge now shows Owner, Admin, Manager, Agent or Viewer |
-| 10 nginx paths | open, not testable here | no Docker daemon in the cloud session; with the proxy the new shell does not depend on it; recheck when the old dashboard is run in the unified compose |
+| 10 nginx paths | open, not testable here (still open after 4F: no Docker or nginx in the cloud session) | no Docker daemon in the cloud session; with the proxy the new shell does not depend on it; recheck when the old dashboard is run in the unified compose |
 | 11 WhatsApp reads need Owner or Admin | confirmed | allowlist cross-check: Manager, Agent and Viewer are refused on every WhatsApp read, in the SaaS proxy and in Many |
 | 12 global vs workspace role in ported pages | fixed in 4C | pages read the organization role (`useOrgRole`), never `/auth/me`; viewer, agent and manager tests in `phase4c-channels.spec.ts` and `phase4c-whatsapp.spec.ts` |
 | 13 missing Next 16 docs | closed in 4B | docs are in `modules/saas/node_modules/next/dist/docs` once `npm ci` has run in `modules/saas`; notes in 14.3 |
@@ -666,3 +666,64 @@ visibility test caught; fixed.
 Partly shown: with the screens in place, a signed-in person reaches the pages their role allows
 through the menu, and the API refuses the rest (specs from 4C and 4D). Not yet proven end to end on
 the real stack with SSO and Many on (that needs the WSL stack and the flags, 4F).
+
+## 17. Step 4F record (2026-11-27)
+
+### 17.1 What was done
+
+- **Public SSO exchange denied at the edge** (IDENTITY-DESIGN D3 option b). `nginx/unified.conf`
+  now answers `403` with `X-Edge-Deny: 1` for `/auth/sso/exchange` and `/api/auth/sso/exchange`,
+  in every spelling (two exact locations and two case-insensitive twins). The `sso_exchange`
+  limit zone is gone. The SaaS API still reaches the route over the internal address
+  `http://many-api:8000`, so the proxy is not affected. Many's own `/auth/login` is not shadowed.
+  Rollback: restore the previous `unified.conf`. `docs/RUNBOOK-DEV.md` and `docs/DEPLOY-OUTLINE.md`
+  are updated.
+- `scripts/test_unified_nginx.py` (static checks) and `e2e/phase2/check_nginx.py` (live checks,
+  15 spellings plus the SaaS hosts plus the login route) were rewritten for the deny.
+- **Page walk** `tests/phase4f-walk.spec.ts`: all 10 staff pages and 9 client pages, in a wide
+  and a phone window, left to right and with the document forced right to left, with Arabic in the
+  data. Per page: a heading shows, no browser error, no sideways page scroll, and every Arabic
+  text from the data sits inside an element with its own direction.
+- One real fault found and fixed: the shared confirm dialog title put a campaign name into an
+  English sentence with no direction of its own (`lib/ui.tsx`, `dir="auto"` on the title).
+- 38 screenshots (wide and phone, right to left, for every page) are in `docs/ui-screenshots/`.
+  The data is synthetic (Playwright answers the Many calls), so they show layout and bidi, not
+  real Many data.
+
+### 17.2 Gates (cloud container; observed)
+
+| Gate | Result |
+|---|---|
+| Web lint, typecheck, logical-CSS check, 93 unit tests | pass, on Node 24.22.3 |
+| Web build | pass on Node 24 (the first run per session stops on the Next 16.4.3 notice, the second builds) |
+| Full web Playwright suite on Node 24 | 295 passed, 0 failed, 3 skipped (the flagged real-API spec) |
+| `scripts/test_unified_nginx.py` | 4 passed |
+| `check_instagram_frozen.py` | OK |
+| ruff on the changed Python files | clean |
+
+### 17.3 Not run, and why (the owner's machine has what this container lacks)
+
+- **Live nginx checks** (`check_nginx.py`, `scripts/dev-up.sh test`): no Docker and no nginx here.
+  The new deny is proven only by the static test and by reading the file. Run `dev-up.sh test`
+  before merging.
+- **Gap 10** (nginx paths for the old dashboard): not testable here.
+- **The old tabs in the old dashboard, in a real browser**: not run. The new pages, redirects and
+  menu are covered by the specs of 4B to 4D and by the walk above.
+- **Real Many behind the pages, real Meta flows, real authenticator and email.**
+- **Both full backend suites on the WSL stack** (Postgres 15 and 17): see the results table in the
+  progress file for what ran in this container.
+- Screenshots were not checked by a person on a real phone.
+
+### 17.4 Exit criteria status
+
+- Every old tab has a place, with screenshots: **yes for the new pages** (38 screenshots, the map in
+  section 15.2); the walk of the old dashboard itself is not run.
+- One login reaches every page the role allows, forbidden cases tested: **yes in browser specs and
+  API tests; not shown on the real stack** with SSO and Many on.
+- Smoke test per page, typecheck, lint, build: **yes**.
+- Flags off, both apps as today: **yes, by the existing suites** (nothing was changed behind a
+  flag except the auth config line and the proxy, both off by default).
+- Backend suites, dev-up: **not all run here** (17.3).
+
+Phase 4 is therefore **complete in code and in the browser specs, and not closed**: the gates in
+17.3 must pass on the WSL stack first.
