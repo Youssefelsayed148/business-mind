@@ -47,7 +47,7 @@ Design: `docs/IDENTITY-DESIGN.md`. Outline only; nothing here is approved or exe
 3. Staff first: enroll MFA for every staff account (`/api/v1/auth/mfa/enroll` and `/confirm`), then set `MFA_ENFORCE_STAFF=true`, then `SSO_ISSUER_ENABLED=true` and `SSO_ASSERTION_ENABLED=true`.
 4. One pilot organization: assign its Owner, then `IDENTITY_V2_ENABLED=true`. Admins get a 14-day MFA grace when `MFA_ENFORCE_ADMINS=true`.
 5. Run the user migration (`scripts/identity_migrate.py`) only against restored copies first (dry run, review, apply, verify), then production with explicit approval.
-6. Edge check from outside: `/auth/sso/exchange` answers from the app (never an edge deny), is rate limited, and is not served on the SaaS hosts; the signed routes still return the edge 403.
+6. Edge check from outside: `/auth/sso/exchange` and `/api/auth/sso/exchange` return the edge 403 (`X-Edge-Deny: 1`) in every spelling and are not served on the SaaS hosts; the signed routes still return the edge 403; Many's own `/auth/login` still reaches the app.
 
 Rollback: flags off, then empty `SSO_PUBLIC_KEYS`, then the migration downgrades after a backup (`docs/RUNBOOK-DEV.md`).
 
