@@ -9,6 +9,7 @@ import { channelOptions } from "@/lib/insights";
 import * as api from "@/lib/api";
 import type { Contact } from "@/lib/api";
 import { roleSatisfies, useSession } from "@/lib/session";
+import { useCustomerLinksAvailable } from "@/lib/use-customer-links";
 import {
   Button,
   Card,
@@ -29,6 +30,7 @@ export default function ContactsPage() {
   const { roleIn } = useSession();
   const canEdit = roleSatisfies(roleIn(tenantId), "editor");
   const canExport = roleSatisfies(roleIn(tenantId), "admin");
+  const showPeople = useCustomerLinksAvailable(tenantId, canExport);
   const [contacts, setContacts] = useState<Contact[] | null>(null);
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
@@ -78,15 +80,25 @@ export default function ContactsPage() {
         title="Contacts"
         purpose="Keep visitor details, consent and conversation history together."
         actions={
-          canExport && contacts && contacts.length > 0 ? (
-            <LinkButton
-              variant="secondary"
-              className="contacts-export"
-              href={`/api/v1/tenants/${tenantId}/contacts/export.csv`}
-            >
-              Export CSV
-            </LinkButton>
-          ) : undefined
+          <>
+            {showPeople && (
+              <LinkButton
+                variant="secondary"
+                href={`/app/${tenantId}/contacts/links`}
+              >
+                People across channels
+              </LinkButton>
+            )}
+            {canExport && contacts && contacts.length > 0 && (
+              <LinkButton
+                variant="secondary"
+                className="contacts-export"
+                href={`/api/v1/tenants/${tenantId}/contacts/export.csv`}
+              >
+                Export CSV
+              </LinkButton>
+            )}
+          </>
         }
       />
       {error && <Notice tone="error" message={error} />}

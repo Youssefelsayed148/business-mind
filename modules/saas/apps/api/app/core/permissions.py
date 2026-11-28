@@ -1,6 +1,12 @@
 """Reviewed authorization declarations. The tenant dependency enforces this metadata."""
 
 TENANT_ROUTE_ROLES: dict[tuple[str, str], str] = {
+    ("GET", "/api/v1/tenants/{tenant_id}/customer-overview"): "admin",
+    ("POST", "/api/v1/tenants/{tenant_id}/customer-links/{link_id}/erase"): "admin",
+    ("GET", "/api/v1/tenants/{tenant_id}/erasure-cases"): "admin",
+    ("POST", "/api/v1/tenants/{tenant_id}/erasure-cases/{case_id}/retry"): "admin",
+    ("GET", "/api/v1/tenants/{tenant_id}/customer-links"): "admin",
+    ("GET", "/api/v1/tenants/{tenant_id}/contacts/{contact_id}/customer-links"): "admin",
     ("GET", "/api/v1/tenants/{tenant_id}/bots/{bot_id}/rag/costs"): "platform_staff_only",
     ("GET", "/api/v1/tenants/{tenant_id}/bots/{bot_id}/rag/traces"): "platform_staff_only",
     ("GET", "/api/v1/tenants/{tenant_id}/bots/{bot_id}/rag"): "platform_staff_only",
@@ -164,6 +170,12 @@ _B = _T + "/bots/{bot_id}"
 _C = _T + "/conversations/{conversation_id}"
 
 TENANT_ROUTE_PERMISSIONS: dict[tuple[str, str], str] = {
+    ("GET", _T + "/customer-overview"): "org.customer_links",
+    ("POST", _T + "/customer-links/{link_id}/erase"): "org.customer_erase",
+    ("GET", _T + "/erasure-cases"): "org.customer_erase",
+    ("POST", _T + "/erasure-cases/{case_id}/retry"): "org.customer_erase",
+    ("GET", _T + "/customer-links"): "org.customer_links",
+    ("GET", _T + "/contacts/{contact_id}/customer-links"): "org.customer_links",
     # Bot configuration and RAG internals stay staff-only (D5).
     ("GET", _B + "/rag/costs"): "rag.settings",
     ("GET", _B + "/rag/traces"): "rag.settings",

@@ -282,9 +282,167 @@ export function authConfig(): Promise<{
   self_serve_signup: boolean;
   /** Present (true) only while identity v2 is on: reset, two-step verification, team screens. */
   identity_v2?: boolean;
+  /** Present (true) only while the Phase 5 people-across-channels view is on. */
+  data_unification?: boolean;
 }> {
-  return api<{ self_serve_signup: boolean; identity_v2?: boolean }>(
-    "auth/config",
+  return api<{
+    self_serve_signup: boolean;
+    identity_v2?: boolean;
+    data_unification?: boolean;
+  }>("auth/config");
+}
+
+export type LinkPlatform = "instagram" | "facebook" | "whatsapp";
+export type LinkState = "linked" | "many_only" | "saas_only" | "conflict";
+
+export interface CustomerLink {
+  id: string;
+  platform: LinkPlatform;
+  state: LinkState;
+  /** The username Many holds (people known only to Many); may be empty. */
+  display_name: string | null;
+  contact_id: string | null;
+  contact_name: string | null;
+  seen_at: string | null;
+}
+
+export function customerLinks(
+  tenantId: string,
+  filters: {
+    platform?: string;
+    state?: string;
+    q?: string;
+    limit?: number;
+    offset?: number;
+  } = {},
+): Promise<{ total: number; items: CustomerLink[] }> {
+  const query = new URLSearchParams();
+  for (const [key, value] of Object.entries(filters)) {
+    if (value !== undefined && value !== "") query.set(key, String(value));
+  }
+  const suffix = query.size ? `?${query.toString()}` : "";
+  return api<{ total: number; items: CustomerLink[] }>(
+    `tenants/${tenantId}/customer-links${suffix}`,
+  );
+}
+
+export type ErasureState =
+  "requested" | "saas_erased" | "complete" | "needs_action";
+
+export interface ErasureCase {
+  id: string;
+  platform: LinkPlatform;
+  state: ErasureState;
+  reason: string | null;
+  /** A plain sentence for a state that needs attention; no technical detail. */
+  message: string | null;
+  created_at: string;
+  completed_at: string | null;
+}
+
+export function eraseCustomerLink(
+  tenantId: string,
+  linkId: string,
+  requestId: string,
+): Promise<ErasureCase> {
+  return api<ErasureCase>(
+    `tenants/${tenantId}/customer-links/${linkId}/erase`,
+    {
+      method: "POST",
+      body: { request_id: requestId },
+    },
+  );
+}
+
+export function erasureCases(
+  tenantId: string,
+): Promise<{ items: ErasureCase[] }> {
+  return api<{ items: ErasureCase[] }>(`tenants/${tenantId}/erasure-cases`);
+}
+
+export function retryErasureCase(
+  tenantId: string,
+  caseId: string,
+): Promise<ErasureCase> {
+  return api<ErasureCase>(`tenants/${tenantId}/erasure-cases/${caseId}/retry`, {
+    method: "POST",
+  });
+}
+
+export interface CustomerOverview {
+  range: { from: string; to: string; days: number };
+  people: {
+    source: string;
+    by_platform: Record<
+      string,
+      {
+        linked: number;
+        many_only: number;
+        saas_only: number;
+        conflict: number;
+        total: number;
+      }
+    >;
+    known_to_outreach: number;
+    known_to_chat: number;
+  };
+  chat: {
+    source: string;
+    contacts: number;
+    new_contacts: number;
+    conversations: number;
+    handoffs: number;
+    messages: { visitor: number; ai: number; agent: number };
+  };
+  ai: {
+    source: string;
+    calls: number;
+    tokens: number;
+    calls_with_cost: number;
+    cost_usd: number;
+  };
+  not_available: string[];
+}
+
+export function customerOverview(
+  tenantId: string,
+  days: number,
+): Promise<CustomerOverview> {
+  return api<CustomerOverview>(
+    `tenants/${tenantId}/customer-overview?days=${days}`,
+  );
+}
+
+export interface AuditRow {
+  source: "saas" | "many";
+  at: string;
+  action: string;
+  summary: string;
+  level: string;
+  tenant_id: string | null;
+}
+
+export function combinedAudit(
+  filters: { source?: string; tenant_id?: string; limit?: number } = {},
+): Promise<{ items: AuditRow[]; many_unavailable: boolean; notes: string[] }> {
+  const query = new URLSearchParams();
+  for (const [key, value] of Object.entries(filters)) {
+    if (value !== undefined && value !== "") query.set(key, String(value));
+  }
+  const suffix = query.size ? `?${query.toString()}` : "";
+  return api<{
+    items: AuditRow[];
+    many_unavailable: boolean;
+    notes: string[];
+  }>(`platform/combined-audit${suffix}`);
+}
+
+export function contactCustomerLinks(
+  tenantId: string,
+  contactId: string,
+): Promise<{ items: CustomerLink[] }> {
+  return api<{ items: CustomerLink[] }>(
+    `tenants/${tenantId}/contacts/${contactId}/customer-links`,
   );
 }
 

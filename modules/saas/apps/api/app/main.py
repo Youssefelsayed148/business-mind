@@ -24,6 +24,9 @@ from app.identity.team_router import router as team_router
 from app.inbox.listing import router as inbox_listing_router
 from app.inbox.router import router as inbox_router
 from app.knowledge.router import router as knowledge_router
+from app.linking.client_router import router as linking_client_router
+from app.linking.router import audit_router as linking_audit_router
+from app.linking.router import router as linking_router
 from app.platform.bots import router as platform_bots_router
 from app.platform.router import router as platform_router
 from app.platform.users import router as platform_users_router
@@ -54,6 +57,7 @@ def create_app() -> FastAPI:
     )
     tenant_routers = (
         changes_router,
+        linking_client_router,
         team_router,
         tenants_router,
         tenant_data_router,
@@ -88,6 +92,8 @@ def create_app() -> FastAPI:
         platform_bots_router,
         changes_router,
         channels_router,
+        linking_router,
+        linking_audit_router,
     ):
         for route in source_router.routes:
             if isinstance(route, APIRoute) and route.path.startswith("/api/v1/platform"):
@@ -102,6 +108,9 @@ def create_app() -> FastAPI:
     application.include_router(identity_auth_router)
     application.include_router(sso_router)
     application.include_router(many_proxy_router)
+    application.include_router(linking_router)
+    application.include_router(linking_audit_router)
+    application.include_router(linking_client_router)
     application.include_router(team_router)
     application.include_router(tenants_router)
     application.include_router(tenant_data_router)

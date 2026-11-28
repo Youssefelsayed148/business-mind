@@ -48,6 +48,8 @@ class Settings(BaseSettings):
     # Server-side proxy to the Many API (Phase 4A, decision P1). Off by default: with it off every
     # /api/v1/many/* path answers like an unknown route. It needs identity v2 and SSO issuing.
     many_proxy_enabled: bool = False
+    # Phase 5: link Many leads to SaaS contacts (docs/DATA-UNIFICATION.md). Off: every route 404.
+    data_unification_enabled: bool = False
     many_api_base_url: str = ""
     # How long a Many session token is reused; Many's own token lives 10 minutes by default.
     many_proxy_token_cache_seconds: int = Field(default=420, ge=30, le=540)

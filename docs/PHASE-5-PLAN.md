@@ -1,6 +1,6 @@
 # Phase 5 plan: unified data and behaviour
 
-Status: **plan only, awaiting the owner's approval.** Written 2026-11-27 from a read of the code
+Status: **plan approved 2026-11-28 (owner accepted Q1 to Q7 as recommended and approved merging PRs #11 and #12, both merged). Step 5.0 design: `docs/DATA-UNIFICATION.md`, awaiting review.** Written 2026-11-27 from a read of the code
 (nothing here was run or tested). Facts marked "read" come from files; "owner-reported" comes from
 the owner's message and was not observed by me.
 
@@ -61,12 +61,12 @@ Consequences for the design:
 | Step | Content | Done when |
 |---|---|---|
 | 5.0 Design | `docs/DATA-UNIFICATION.md` (what is read, Q1 to Q7 answered, data model, API, failure cases). Docs only. | Owner approves |
-| 5A Link | SaaS table for links, reversible migration, deterministic job that fills it from Many reads through the internal call, backfill idempotent, duplicate and conflict rules | Synthetic dataset: no duplicates, re-run changes nothing, tenant isolation tests; the same on a restored copy |
-| 5B Timeline | Contact page in the SaaS shows linked Many conversations (read only) | Role and tenant tests, browser spec |
-| 5C Erasure | One SaaS-started flow, per-side status, retries, tests with fakes first | Erasing a person removes data in both parts on test data; idempotent re-run; failure of one side is visible and retryable |
-| 5D Analytics | Combined read model and page | Numbers equal the sources on a fixed dataset |
-| 5E Audit | Combined read view | Role and isolation tests |
-| 5F Close | WSL full gates, restored-copy link test, record | Exit criteria |
+| 5A Link (built 2026-11-28, in review) | SaaS table for links, reversible migration, deterministic job that fills it from Many reads through the internal call, backfill idempotent, duplicate and conflict rules | Synthetic dataset: no duplicates, re-run changes nothing, tenant isolation tests; the same on a restored copy |
+| 5B Timeline (built 2026-11-28, in review; the client view of the link, without Many conversation text) | Contact page in the SaaS shows linked Many conversations (read only) | Role and tenant tests, browser spec |
+| 5C Erasure (built 2026-11-28, in review) | One SaaS-started flow, per-side status, retries, tests with fakes first | Erasing a person removes data in both parts on test data; idempotent re-run; failure of one side is visible and retryable |
+| 5D Analytics (built 2026-11-28, in review) | Combined read model and page | Numbers equal the sources on a fixed dataset |
+| 5E Audit (built 2026-11-28, in review) | Combined read view | Role and isolation tests |
+| 5F Close (gates run 2026-11-28; the restored-copy check and WSL gates are the owner's) | WSL full gates, restored-copy link test, record | Exit criteria |
 
 Gates for every step (as before): both backend suites, script tests, policy and contract copy
 checks, `scripts/check_instagram_frozen.py`, `scripts/dev-up.sh test`, web lint, typecheck,

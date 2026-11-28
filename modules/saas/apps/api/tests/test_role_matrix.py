@@ -10,6 +10,7 @@ from uuid import UUID, uuid4
 from fastapi import FastAPI
 from sqlalchemy.orm import Session
 
+from app.core.config import get_settings
 from app.core.permissions import TENANT_ROUTE_PERMISSIONS, TENANT_ROUTE_ROLES
 from app.identity.roles import (
     ALL_PERMISSIONS,
@@ -53,6 +54,8 @@ GOLDEN: dict[str, set[str]] = {
     "contacts.stages": {OWN, A},
     "conversations.delete": {OWN, A},
     "contacts.export": {OWN, A},
+    "org.customer_links": {OWN, A},
+    "org.customer_erase": {OWN, A},
     "analytics.export": {OWN, A},
     "data.export": {OWN, A},
     "knowledge.write": {OWN, A, M},
@@ -179,7 +182,18 @@ def _broken_for_allowed_caller(response: Any) -> bool:
     return response.status_code == 500 or any(text in response.text for text in LEGACY_REFUSALS)
 
 
+def _with_data_flag(app: FastAPI) -> None:
+    """The Phase 5 people routes answer 404 until DATA_UNIFICATION_ENABLED is on (before any role
+    check, like every flagged route), so the matrix turns it on next to identity v2."""
+    from tests.conftest import build_test_settings
+
+    app.dependency_overrides[get_settings] = lambda: build_test_settings(
+        identity_v2_enabled=True, data_unification_enabled=True
+    )
+
+
 def test_http_role_matrix_every_route_every_role(v2_app: FastAPI, db: Session) -> None:
+    _with_data_flag(v2_app)
     org = build_org(v2_app, db, "Alpha")
     other = build_org(v2_app, db, "Beta")
     staff = make_person(v2_app, "staff", staff=True, db=db)
@@ -210,6 +224,7 @@ def test_http_role_matrix_every_route_every_role(v2_app: FastAPI, db: Session) -
 
 
 def test_http_role_matrix_every_route_every_agency_cap(v2_app: FastAPI, db: Session) -> None:
+    _with_data_flag(v2_app)
     mismatches: list[str] = []
     for cap in GRANT_ROLE_CAPS:
         scenario = _setup(v2_app, db)
@@ -241,6 +256,7 @@ def test_http_role_matrix_every_route_every_agency_cap(v2_app: FastAPI, db: Sess
 
 
 def test_anonymous_gets_401_on_every_tenant_route(v2_app: FastAPI, db: Session) -> None:
+    _with_data_flag(v2_app)
     from fastapi.testclient import TestClient
 
     tenant_id = make_tenant(db)

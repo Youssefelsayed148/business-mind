@@ -63,6 +63,9 @@ _ADMIN = _MANAGER | {
     "audit.view",
     "data.erase",
     "org.settings",
+    # Phase 5B: people across channels. org.* keeps agency people out (whole-organization data).
+    "org.customer_links",
+    "org.customer_erase",
 }
 _OWNER = _ADMIN | {
     "channels.hard_delete",

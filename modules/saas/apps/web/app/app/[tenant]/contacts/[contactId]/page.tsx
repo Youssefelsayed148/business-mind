@@ -5,6 +5,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 
 import * as api from "@/lib/api";
 import type { ContactProfile } from "@/lib/api";
+import { ContactChannelLinks } from "@/lib/contact-channel-links";
 import { roleSatisfies, useSession } from "@/lib/session";
 import {
   Button,
@@ -325,6 +326,7 @@ export default function ContactPage() {
               <p className="muted">No linked channel identities.</p>
             )}
           </Card>
+          <ContactChannelLinks tenantId={tenantId} contactId={contactId} />
           <Card title="Timeline">
             {profile.timeline.length ? (
               <ol className="contacts-list contacts-timeline">

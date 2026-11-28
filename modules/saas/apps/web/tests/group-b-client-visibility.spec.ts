@@ -189,6 +189,12 @@ async function fixture(page: Page, role: Role | "staff", hasBot = true) {
       return respond({ tone_and_rules: null });
     if (suffix.endsWith("/rag/costs")) return respond({ costs: [] });
     if (suffix === "/data/audit") return respond({ events: [] });
+    // Phase 5B: the people-across-channels routes answer 404 while their flag is off.
+    if (suffix.endsWith("/customer-links"))
+      return route.fulfill({
+        status: 404,
+        json: { error: { code: "NOT_FOUND", message: "Resource not found." } },
+      });
     if (suffix === "")
       return respond({
         id: tenant,
