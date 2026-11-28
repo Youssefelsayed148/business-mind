@@ -17,7 +17,7 @@ from app.chat.conversations import append_message
 from app.core.config import get_settings
 from app.db.models import Contact, Conversation, CustomerLink, Message, UsageEvent
 from tests.helpers import make_bot, seeded_tenant
-from tests.test_customer_links import (  # noqa: F401  (fixtures and helpers)
+from tests.test_customer_links import (  # type: ignore[attr-defined]  # noqa: F401
     _connection,
     _map,
     many,

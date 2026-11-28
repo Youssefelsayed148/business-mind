@@ -16,7 +16,7 @@ from app.core.config import get_settings
 from app.db.models import AuditEvent
 from app.identity import many_proxy
 from tests.helpers import seeded_tenant
-from tests.test_customer_links import (  # noqa: F401  (fixtures and helpers)
+from tests.test_customer_links import (  # type: ignore[attr-defined]  # noqa: F401
     FakeMany,
     _ok,
     many,
@@ -44,6 +44,7 @@ def _event(db: Session, tenant_id: Any, action: str, minutes_ago: int) -> None:
         .order_by(AuditEvent.created_at.desc())
         .first()
     )
+    assert row is not None
     db.execute(
         update(AuditEvent)
         .where(AuditEvent.id == row.id)
