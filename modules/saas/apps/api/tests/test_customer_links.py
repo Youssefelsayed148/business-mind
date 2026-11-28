@@ -245,6 +245,34 @@ def test_the_raw_identity_lives_only_in_its_own_column_until_erased(
         assert "SECRET-EXTERNAL-ID-123" not in " ".join(others)
 
 
+# --- volume (stand-in for a restored copy; the owner runs the real one) ------------------------
+
+
+def test_a_large_repeated_dataset_has_no_duplicates_and_reruns_cleanly(
+    uni_app: FastAPI, db: Session, many: FakeMany
+) -> None:
+    users, w1, w2, f1 = _world(uni_app, db, "cl-volume")
+    connection = _connection(db, users, "whatsapp", w1)
+    for n in range(300):  # chat contacts that Many also knows
+        _identity(db, users, connection, "whatsapp", f"person-{n}")
+    db.commit()
+    unique = 2000
+    leads = [
+        _lead("whatsapp", w1 if n < 1000 else w2, f"person-{n}")
+        for _ in range(3)  # every person repeated three times, as a messy copy can be
+        for n in range(unique)
+    ]
+    first = _sync(users, many, [w1, w2], [f1], leads).json()
+    assert first["created"] == unique and first["ignored_leads"] == 0
+    assert first["by_state"] == {"linked": 300, "many_only": unique - 300}
+    rows = _links(db, users.tenant_id)
+    assert len(rows) == unique
+    assert len({(r.platform, r.many_channel_id, r.external_id_digest) for r in rows}) == unique
+    second = _sync(users, many, [w1, w2], [f1], leads).json()
+    assert second["created"] == 0 and second["updated"] == 0 and second["unchanged"] == unique
+    assert len(_links(db, users.tenant_id)) == unique
+
+
 # --- Instagram claims -------------------------------------------------------------------------
 
 

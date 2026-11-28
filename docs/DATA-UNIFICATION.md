@@ -332,7 +332,30 @@ Existing tests changed in 5B to 5E: `tests/test_role_matrix.py` (permission rows
 `group-b-client-visibility.spec.ts` and `group-c-fixtures.ts` (the fake API answers 404 for the new
 routes, like the real API does with the flag off).
 
-## 18. Change log
+## 18. Restored-copy check (the owner runs it; step 5F)
+
+Needs restored copies of both live databases on a throwaway stack (never a live database), the
+migrations applied (`alembic upgrade head`: SaaS head `0037_erasure_cases`), the organization to
+workspace mapping set for one pilot organization (`scripts/identity_migrate.py map-apply`), and
+`DATA_UNIFICATION_ENABLED=true` with the proxy prerequisites. Then, as platform staff:
+
+1. Dry run: `POST /api/v1/platform/tenants/{id}/customer-links/sync?dry_run=true`. Read `created`,
+   `ignored_leads` and `by_state`. Nothing is written.
+2. Real run: the same call without `dry_run`. Then run it again: `created` and `updated` must be 0.
+3. Duplicates (must return no rows; the unique constraint makes it impossible, this proves it):
+   `SELECT tenant_id, platform, many_channel_id, external_id_digest, count(*) FROM customer_links
+   GROUP BY 1,2,3,4 HAVING count(*) > 1;`
+4. Counts: `SELECT platform, state, count(*) FROM customer_links GROUP BY 1,2;` against the number
+   of Many leads on that organization's channels (leads with `whatsapp_account_id`,
+   `facebook_page_id` or an `instagram_account_id` the organization owns).
+5. List `conflict` rows through `GET .../customer-links?state=conflict`; each needs a staff merge.
+6. Note the elapsed time of step 1 for the cutover rehearsal (Phase 7).
+
+A synthetic stand-in runs in `tests/test_customer_links.py` (2,000 people repeated three times, 300
+already chat contacts): 2,000 rows, none duplicated, the second run changes nothing, about a second
+per run. It is not a substitute for the real copy.
+
+## 19. Change log
 
 - 2026-11-28, Claude Code: design written from a read of both data models, the Many erasure
   routes and runbook, the proxy allowlist and the SaaS erase code. Docs only; nothing run.
