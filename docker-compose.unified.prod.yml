@@ -2,14 +2,22 @@
 #   docker compose -f docker-compose.unified.yml -f docker-compose.unified.prod.yml --env-file <prod env> config
 # Requires approval before any real use (docs/DEPLOY-OUTLINE.md).
 #
-# OPEN ITEMS that make this overlay NOT deployable yet (owner decisions):
-#  1. TLS at the edge: nginx/unified.conf is plain HTTP on :80. Terminate TLS in front
-#     (load balancer) or add a TLS server block in a follow-up. Nothing is published on :443 here.
-#  2. Internal TLS: in production the allowlist policy still requires HTTPS for the listed
-#     service names (parse_url require_https). The internal URLs stored in the channel rows
-#     (http://saas-api:8000, http://many-api:8000) would be rejected. Production needs
-#     https:// internal URLs (internal CA / service certificates) before delegation can be turned on.
-#  3. Real domains, real secrets, backups and migration order: see docs/DEPLOY-OUTLINE.md.
+# Phase 6A (2026-11-28): the two TLS items that blocked this overlay are now written here, but
+# NOTHING BELOW HAS RUN as containers (no Docker engine where it was written; `docker compose config`
+# and `nginx -t` only). The first real run is the staging stack (Phase 6B).
+#  1. Edge TLS: nginx publishes 80 (certificate challenge, redirect to HTTPS) and 443 with one
+#     certificate named "edge" from Let's Encrypt (docs/staging/6A-edge-and-internal-tls.md).
+#  2. Internal TLS: many-api and saas-api serve HTTPS on port 8000 with certificates from the private
+#     CA (scripts/tls/make_internal_pki.sh). Every Python service trusts that CA plus the public roots
+#     (SSL_CERT_FILE); nginx verifies the upstreams; the Next server trusts it too. The internal URLs
+#     stored in channel rows must be written as https://many-api:8000 and https://saas-api:8000.
+# Required host paths in the env file: PKI_DIR (output of make_internal_pki.sh), LETSENCRYPT_DIR
+# (usually /etc/letsencrypt), CERTBOT_WEBROOT (for example /var/www/certbot).
+x-trust: &trust
+  SSL_CERT_FILE: /pki/ca-bundle.pem
+  REQUESTS_CA_BUNDLE: /pki/ca-bundle.pem
+  CURL_CA_BUNDLE: /pki/ca-bundle.pem
+x-pki-mount: &pki-mount ${PKI_DIR:?set PKI_DIR to the internal PKI directory}:/pki:ro
 name: unified
 
 services:
@@ -24,14 +32,23 @@ services:
     restart: unless-stopped
     environment:
       APP_ENV: production
+      <<: *trust
+    volumes: [*pki-mount]
+    command: ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--ssl-keyfile", "/pki/many-api.key", "--ssl-certfile", "/pki/many-api.pem"]
+    healthcheck:
+      test: ["CMD", "python", "-c", "import ssl, urllib.request; c = ssl.create_default_context(cafile='/pki/ca.pem'); c.check_hostname = False; urllib.request.urlopen('https://127.0.0.1:8000/health', timeout=5, context=c)"]
   many-worker:
     restart: unless-stopped
     environment:
       APP_ENV: production
+      <<: *trust
+    volumes: [*pki-mount]
   many-beat:
     restart: unless-stopped
     environment:
       APP_ENV: production
+      <<: *trust
+    volumes: [*pki-mount]
   many-migrate:
     environment:
       APP_ENV: production
@@ -48,16 +65,32 @@ services:
     environment:
       ENVIRONMENT: production
       COOKIE_SECURE: "true"
+      MANY_API_BASE_URL: ${MANY_API_BASE_URL:-https://many-api:8000}
+      <<: *trust
+    volumes: [*pki-mount]
+    command: ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--timeout-keep-alive", "65", "--ssl-keyfile", "/pki/saas-api.key", "--ssl-certfile", "/pki/saas-api.pem"]
+    healthcheck:
+      test: ["CMD", "python", "-c", "import ssl, urllib.request; c = ssl.create_default_context(cafile='/pki/ca.pem'); c.check_hostname = False; urllib.request.urlopen('https://127.0.0.1:8000/ready', timeout=5, context=c)"]
   saas-worker:
     restart: unless-stopped
     environment:
       ENVIRONMENT: production
       COOKIE_SECURE: "true"
+      MANY_API_BASE_URL: ${MANY_API_BASE_URL:-https://many-api:8000}
+      <<: *trust
+    volumes: [*pki-mount]
   saas-migrate:
     environment:
       ENVIRONMENT: production
   saas-web:
     restart: unless-stopped
+    build:
+      args:
+        API_PROXY_TARGET: https://saas-api:8000
+    environment:
+      API_PROXY_TARGET: https://saas-api:8000
+      NODE_EXTRA_CA_CERTS: /pki/ca.pem
+    volumes: [*pki-mount]
 
   nginx:
     restart: unless-stopped
@@ -65,6 +98,16 @@ services:
       MANY_HOST: ${MANY_HOST:?set MANY_HOST}
       SAAS_WEB_HOST: ${SAAS_WEB_HOST:?set SAAS_WEB_HOST}
       SAAS_API_HOST: ${SAAS_API_HOST:?set SAAS_API_HOST}
-    # Replaces the dev loopback list. Only nginx is ever published; TLS is open item 1.
+      UPSTREAM_SCHEME: https
+    # Replaces the dev loopback list and the dev mounts. Only nginx is ever published.
     ports: !override
       - "80:80"
+      - "443:443"
+    volumes: !override
+      - ./nginx/unified.conf:/etc/nginx/templates/default.conf.template:ro
+      - ./nginx/redirect.conf.template:/etc/nginx/templates/redirect.conf.template:ro
+      - ./nginx/edge/https:/etc/nginx/edge:ro
+      - ./nginx/upstream/tls:/etc/nginx/upstream:ro
+      - *pki-mount
+      - ${LETSENCRYPT_DIR:?set LETSENCRYPT_DIR}:/etc/letsencrypt:ro
+      - ${CERTBOT_WEBROOT:?set CERTBOT_WEBROOT}:/var/www/certbot:ro

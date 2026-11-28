@@ -41,7 +41,7 @@ Set to `saas-api` for Many and `many-api` for SaaS in the compose files.
 
 | Topic | default.conf | unified.conf |
 |---|---|---|
-| TLS | yes (443, certificates) | no (open deployment decision) |
+| TLS | yes (443, certificates) | dev: no. Prod: yes, chosen by mounting `nginx/edge/https` and `nginx/upstream/tls` (Phase 6A, `docs/staging/6A-edge-and-internal-tls.md`) |
 | Many `/api/saas/*` and `/saas/*` (HMAC-signed service-to-service) | public, with the `saas_signed` rate limit (lines 64 and 71) | **denied, 403**, `^~` prefix locations; SaaS reaches them as `http://many-api:8000` |
 | SaaS `/api/channels/*` (signed events endpoint) | not proxied | **denied, 403** on both SaaS hosts (the web host rewrites `/api/*` to saas-api) |
 | All other Many routes (`/webhooks/meta`, `/api/`, `/auth/`, `/instagram/`, ..., `/`) | as is | copied unchanged (upstream names differ) |

@@ -238,8 +238,12 @@ services:
       MANY_HOST: ${MANY_HOST:-localhost}
       SAAS_WEB_HOST: ${SAAS_WEB_HOST:-saas.localhost}
       SAAS_API_HOST: ${SAAS_API_HOST:-saas-api.localhost}
+      UPSTREAM_SCHEME: http
     volumes:
       - ./nginx/unified.conf:/etc/nginx/templates/default.conf.template:ro
+      # Dev: plain HTTP on port 80 and plain upstreams. The prod overlay replaces these two mounts.
+      - ./nginx/edge/http:/etc/nginx/edge:ro
+      - ./nginx/upstream/plain:/etc/nginx/upstream:ro
     ports:
       # Dev: loopback only. The prod overlay replaces this list.
       - "127.0.0.1:${UNIFIED_HTTP_PORT:-8080}:80"

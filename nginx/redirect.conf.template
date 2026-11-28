@@ -1,0 +1,9 @@
+# Production only (mounted as /etc/nginx/templates/redirect.conf.template by docker-compose.unified.prod.yml).
+# Port 80: certificate renewal challenge, then redirect the three known hosts to HTTPS; anything else is closed.
+server {
+    listen 80 default_server;
+    server_name ${MANY_HOST} ${SAAS_WEB_HOST} ${SAAS_API_HOST};
+    location ^~ /.well-known/acme-challenge/ { root /var/www/certbot; }
+    location = /health { default_type text/plain; return 200 "ok\n"; }
+    location / { return 301 https://$host$request_uri; }
+}
