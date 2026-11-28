@@ -434,7 +434,7 @@ export function combinedAudit(
     items: AuditRow[];
     many_unavailable: boolean;
     notes: string[];
-  }>(`platform/audit${suffix}`);
+  }>(`platform/combined-audit${suffix}`);
 }
 
 export function contactCustomerLinks(

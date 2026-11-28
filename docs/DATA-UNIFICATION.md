@@ -316,7 +316,7 @@ Changes to the design:
 - Test: a fixed dataset where each number equals the source tables (and a direct SQL cross-check),
   a longer period includes older rows, two identical organizations are not summed, empty zeros.
 
-5E, combined audit trail (`GET /api/v1/platform/audit?source=all|saas|many&tenant_id=&limit=`,
+5E, combined audit trail (`GET /api/v1/platform/combined-audit?source=all|saas|many&tenant_id=&limit=` (not `/platform/audit`, which already exists for the Operations page),
 platform staff only, flag-gated; page `/platform/audit`, linked from the staff Logs page):
 - SaaS audit events and Many's `/logs`, newest first, each row tagged with its source; only the
   action, a short sentence and a level are returned (no metadata, no target, no actor).

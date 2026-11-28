@@ -97,7 +97,7 @@ test("staff see the combined audit trail with a source on every row", async ({
   await registerAdmin(page, "P5E", { email });
   promoteToStaff(email);
   const asked: string[] = [];
-  await page.route("**/api/v1/platform/audit**", (route) => {
+  await page.route("**/api/v1/platform/combined-audit**", (route) => {
     asked.push(new URL(route.request().url()).search);
     return route.fulfill({
       json: {
@@ -146,7 +146,7 @@ test("the logs page links to the audit trail only when it answers", async ({
   await page.route("**/api/v1/many/staff/**", (route) =>
     route.fulfill({ json: [] }),
   );
-  await page.route("**/api/v1/platform/audit**", (route) =>
+  await page.route("**/api/v1/platform/combined-audit**", (route) =>
     route.fulfill({
       json: { items: [], many_unavailable: false, notes: [] },
     }),
@@ -155,8 +155,8 @@ test("the logs page links to the audit trail only when it answers", async ({
   await expect(
     page.getByRole("link", { name: "Combined audit trail" }),
   ).toBeVisible();
-  await page.unroute("**/api/v1/platform/audit**");
-  await page.route("**/api/v1/platform/audit**", (route) =>
+  await page.unroute("**/api/v1/platform/combined-audit**");
+  await page.route("**/api/v1/platform/combined-audit**", (route) =>
     route.fulfill({
       status: 404,
       json: { error: { code: "NOT_FOUND", message: "no" } },
@@ -173,7 +173,7 @@ test("without the audit view a direct visit says so", async ({ page }) => {
   const email = uniqueEmail("p5e-off");
   await registerAdmin(page, "P5E-off", { email });
   promoteToStaff(email);
-  await page.route("**/api/v1/platform/audit**", (route) =>
+  await page.route("**/api/v1/platform/combined-audit**", (route) =>
     route.fulfill({
       status: 404,
       json: { error: { code: "NOT_FOUND", message: "no" } },

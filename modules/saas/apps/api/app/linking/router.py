@@ -222,7 +222,7 @@ def remove_claim(
 audit_router = APIRouter(prefix="/api/v1/platform", tags=["customer-links"])
 
 
-@audit_router.get("/audit")
+@audit_router.get("/combined-audit")
 def combined_audit(
     staff: PlatformStaffDep,
     db: DbSession,

@@ -64,7 +64,7 @@ def _many_log(event_type: str, minutes_ago: int, level: str = "info") -> dict[st
 
 
 def _get(users: Any, query: str = "", role: str = "staff") -> Any:
-    return users.call(role, "GET", f"/api/v1/platform/audit{query}")
+    return users.call(role, "GET", f"/api/v1/platform/combined-audit{query}")
 
 
 def test_both_systems_are_merged_newest_first_and_tagged(
@@ -148,3 +148,16 @@ def test_source_choice_limit_staff_only_and_flag(
         assert _get(users, "", role).status_code == 403
     uni_app.dependency_overrides[get_settings] = lambda: proxy_settings()
     assert _get(users).status_code == 404
+
+
+def test_the_existing_platform_audit_route_is_untouched(
+    v2_app: FastAPI, db: Session, many: FakeMany
+) -> None:
+    """The combined view must not shadow `GET /api/v1/platform/audit` (the Operations page uses
+    it) whatever the flag says. A route under the same path once did, with the flag off."""
+    users = seeded_tenant(v2_app, db, prefix="au-existing")
+    for settings in (proxy_settings(), proxy_settings(data_unification_enabled=True)):
+        v2_app.dependency_overrides[get_settings] = lambda settings=settings: settings
+        response = users.call("staff", "GET", "/api/v1/platform/audit")
+        assert response.status_code == 200, response.text
+        assert "events" in response.json() or "items" in response.json()
