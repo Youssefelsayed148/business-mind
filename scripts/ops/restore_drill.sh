@@ -1,0 +1,213 @@
+#!/usr/bin/env bash
+# restore_drill.sh - restore a backup_all.sh backup into a CLEAN THROWAWAY compose project and verify it (Phase 6C).
+# It never touches the running stack: it starts its own project (name must start with "drill") with its own
+# Postgres 15 and Postgres 17+pgvector containers and volumes, no published ports, and a random password that
+# is generated here, never printed and never written to disk. Everything is removed at the end unless --keep.
+#
+# Checks (exit 1 if any fails):
+#   1. SHA256SUMS of the backup folder verify.
+#   2. Row count per table, restored vs the counts recorded at backup time (counts_*.tsv).
+#   3. Alembic version in each restored DB equals the version recorded at backup time.
+#   4. Alembic head equals the head found in this repository's migration files (skip with --skip-repo-head
+#      when you restore an older backup on purpose; then run the migrations and re-check).
+#
+# Usage:
+#   scripts/ops/restore_drill.sh --backup /path/to/backup_20260101T000000Z [--keep] [--project drillNAME] [--skip-repo-head]
+#   scripts/ops/restore_drill.sh --compare-only SOURCE_counts.tsv RESTORED_counts.tsv   (offline compare, no Docker)
+# Exit: 0 all match, 1 mismatch or restore failure, 2 usage or setup error.
+# Status: written and syntax-checked. The Docker part is NOT RUN (no Docker in the build container).
+# The --compare-only part is exercised by scripts/ops/test_ops_compare.sh.
+set -euo pipefail
+umask 077
+
+TAB="$(printf '\t')"
+HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="$(cd "$HERE/../.." && pwd)"
+SQL="$HERE/compare_counts.sql"
+
+usage() {
+  echo "Usage: $0 --backup DIR [--keep] [--project drillNAME] [--skip-repo-head]" >&2
+  echo "       $0 --compare-only SOURCE_counts.tsv RESTORED_counts.tsv" >&2
+  exit 2
+}
+
+# compare_counts SRC RESTORED LABEL -> prints table rows, sets MISMATCHES (global) and ROWS_TOTAL
+MISMATCHES=0
+ROWS_TOTAL=0
+compare_counts() {
+  local src="$1" rest="$2" label="$3" out
+  out="$(awk -F'\t' -v label="$label" '
+    NR==FNR { s[$1]=$2; seen[$1]=1; next }
+    { r[$1]=$2; seen[$1]=1 }
+    END {
+      n=0; for (t in seen) names[++n]=t
+      # simple insertion sort for stable output without gawk extensions
+      for (i=2;i<=n;i++){v=names[i];j=i-1;while(j>0&&names[j]>v){names[j+1]=names[j];j--};names[j+1]=v}
+      bad=0
+      for (i=1;i<=n;i++) {
+        t=names[i]
+        sv=(t in s)?s[t]:"MISSING"; rv=(t in r)?r[t]:"MISSING"
+        st=(sv==rv)?"OK":"MISMATCH"; if (st!="OK") bad++
+        printf "%-6s %-48s %12s %12s  %s\n", label, t, sv, rv, st
+      }
+      printf "#SUMMARY %d %d\n", n, bad
+    }' "$src" "$rest")"
+  printf '%s\n' "$out" | grep -v '^#SUMMARY'
+  local sum; sum="$(printf '%s\n' "$out" | grep '^#SUMMARY')"
+  ROWS_TOTAL=$((ROWS_TOTAL + $(echo "$sum" | awk '{print $2}')))
+  MISMATCHES=$((MISMATCHES + $(echo "$sum" | awk '{print $3}')))
+}
+
+print_header() { printf '%-6s %-48s %12s %12s  %s\n' DB TABLE SOURCE RESTORED RESULT; }
+
+if [ "${1:-}" = "--compare-only" ]; then
+  [ "$#" -eq 3 ] || usage
+  [ -f "$2" ] && [ -f "$3" ] || { echo "Files not found." >&2; exit 2; }
+  print_header
+  compare_counts "$2" "$3" "-"
+  echo "tables compared: $ROWS_TOTAL, mismatches: $MISMATCHES"
+  [ "$MISMATCHES" -eq 0 ] && exit 0 || exit 1
+fi
+
+BACKUP=""; KEEP=0; PROJECT=""; SKIP_REPO_HEAD=0
+while [ "$#" -gt 0 ]; do
+  case "$1" in
+    --backup) [ "$#" -ge 2 ] || usage; BACKUP="$2"; shift 2 ;;
+    --project) [ "$#" -ge 2 ] || usage; PROJECT="$2"; shift 2 ;;
+    --keep) KEEP=1; shift ;;
+    --skip-repo-head) SKIP_REPO_HEAD=1; shift ;;
+    *) usage ;;
+  esac
+done
+[ -n "$BACKUP" ] || usage
+[ -d "$BACKUP" ] || { echo "Backup folder not found: $BACKUP" >&2; exit 2; }
+BACKUP="$(cd "$BACKUP" && pwd)"
+PROJECT="${PROJECT:-drill$(date -u +%H%M%S)}"
+case "$PROJECT" in drill*) ;; *) echo "Refusing: project name must start with 'drill' (got '$PROJECT'). This keeps the drill apart from the running stack." >&2; exit 2 ;; esac
+
+# Never inherit settings of a running stack.
+unset COMPOSE_FILE COMPOSE_PROJECT_NAME COMPOSE_PROFILES COMPOSE_ENV_FILES || true
+
+command -v docker > /dev/null || { echo "docker not found" >&2; exit 2; }
+[ -f "$SQL" ] || { echo "Missing $SQL" >&2; exit 2; }
+for f in many saas; do
+  ls "$BACKUP"/${f}_*.dump > /dev/null 2>&1 || { echo "No ${f}_*.dump in $BACKUP" >&2; exit 2; }
+  [ -f "$BACKUP/counts_${f}.tsv" ] && [ -f "$BACKUP/alembic_${f}.txt" ] || { echo "Missing counts_${f}.tsv or alembic_${f}.txt in $BACKUP" >&2; exit 2; }
+done
+
+echo "== Restore drill: project '$PROJECT', backup '$BACKUP'"
+echo "== Step 1: verify checksums"
+( cd "$BACKUP" && sha256sum -c SHA256SUMS ) || { echo "Checksum verification FAILED." >&2; exit 1; }
+
+WORK="$(mktemp -d)"
+# Throwaway password: random, kept in memory and in the environment of the compose calls only.
+DRILL_PW="$(head -c 24 /dev/urandom | od -An -tx1 | tr -d ' \n')"
+export DRILL_PW
+cat > "$WORK/compose.yml" <<'YML'
+# Generated by restore_drill.sh. Throwaway; no ports published.
+services:
+  pg15:
+    image: postgres:15
+    environment: {POSTGRES_USER: many, POSTGRES_DB: many, POSTGRES_PASSWORD: "${DRILL_PW}"}
+  pg17:
+    image: pgvector/pgvector:pg17
+    environment: {POSTGRES_USER: saas, POSTGRES_DB: saas, POSTGRES_PASSWORD: "${DRILL_PW}"}
+YML
+DC=(docker compose --env-file /dev/null -p "$PROJECT" -f "$WORK/compose.yml")
+
+if [ -n "$("${DC[@]}" ps -aq 2> /dev/null)" ]; then
+  echo "Refusing: compose project '$PROJECT' already has containers. Choose another --project." >&2
+  rm -rf "$WORK"; exit 2
+fi
+
+cleanup() {
+  if [ "$KEEP" -eq 1 ]; then
+    echo "== --keep set: project '$PROJECT' left running. Remove with: docker compose -p $PROJECT -f $WORK/compose.yml down -v"
+  else
+    "${DC[@]}" down -v > /dev/null 2>&1 || true
+    rm -rf "$WORK"
+  fi
+}
+trap cleanup EXIT
+
+declare -A T_START T_SECS
+mark() { T_START[$1]=$SECONDS; }
+done_mark() { T_SECS[$1]=$((SECONDS - T_START[$1])); }
+
+echo "== Step 2: start clean databases"
+mark start
+"${DC[@]}" up -d pg15 pg17
+for spec in "pg15 many many" "pg17 saas saas"; do
+  set -- $spec
+  ok=0
+  for _ in $(seq 1 60); do
+    if "${DC[@]}" exec -T "$1" pg_isready -U "$2" -d "$3" > /dev/null 2>&1; then ok=1; break; fi
+    sleep 2
+  done
+  [ "$ok" -eq 1 ] || { echo "$1 did not become ready in 120 s" >&2; exit 1; }
+done
+done_mark start
+
+restore_one() { # label service user db
+  local label="$1" svc="$2" user="$3" db="$4" dump
+  dump="$(ls "$BACKUP"/${label}_*.dump | head -n 1)"
+  echo "== Step 3 [$label]: pg_restore into throwaway '$db'"
+  mark "restore_$label"
+  "${DC[@]}" exec -T "$svc" pg_restore --no-owner --exit-on-error -U "$user" -d "$db" < "$dump"
+  done_mark "restore_$label"
+  mark "count_$label"
+  "${DC[@]}" exec -T "$svc" psql -X -At -F "$TAB" -v ON_ERROR_STOP=1 -U "$user" -d "$db" < "$SQL" > "$WORK/restored_${label}.tsv"
+  "${DC[@]}" exec -T "$svc" psql -X -At -U "$user" -d "$db" -c "SELECT version_num FROM alembic_version" > "$WORK/alembic_${label}.txt"
+  done_mark "count_$label"
+}
+restore_one many pg15 many many
+restore_one saas pg17 saas saas
+
+repo_head() { # dir -> head revision(s) from migration files
+  python3 -I - "$1" <<'PY'
+import glob, re, sys
+revs, downs = set(), set()
+for f in glob.glob(sys.argv[1] + "/*.py"):
+    t = open(f, encoding="utf-8").read()
+    r = re.search(r'^revision(?::\s*str)?\s*=\s*["\']([^"\']+)', t, re.M)
+    d = re.search(r'^down_revision[^=]*=\s*(.+)$', t, re.M)
+    if r: revs.add(r.group(1))
+    if d: downs.update(re.findall(r'["\']([^"\']+)["\']', d.group(1)))
+print(",".join(sorted(revs - downs)))
+PY
+}
+
+echo "== Step 4: compare"
+print_header
+compare_counts "$BACKUP/counts_many.tsv" "$WORK/restored_many.tsv" many
+compare_counts "$BACKUP/counts_saas.tsv" "$WORK/restored_saas.tsv" saas
+
+echo
+printf '%-6s %-28s %-28s %-28s %s\n' DB 'ALEMBIC SOURCE' 'ALEMBIC RESTORED' 'ALEMBIC REPO HEAD' RESULT
+ALEMBIC_BAD=0
+for label in many saas; do
+  src="$(tr -d '\n ' < "$BACKUP/alembic_${label}.txt")"
+  got="$(tr -d '\n ' < "$WORK/alembic_${label}.txt")"
+  if [ "$label" = many ]; then dir="$REPO_ROOT/backend/alembic/versions"; else dir="$REPO_ROOT/modules/saas/apps/api/alembic/versions"; fi
+  if [ "$SKIP_REPO_HEAD" -eq 1 ]; then head="(skipped)"; elif [ -d "$dir" ] && command -v python3 > /dev/null; then head="$(repo_head "$dir")"; else head="(unavailable)"; fi
+  res=OK
+  [ "$src" = "$got" ] || res=MISMATCH
+  if [ "$head" != "(skipped)" ] && [ "$head" != "$got" ]; then res=MISMATCH; fi
+  [ "$res" = OK ] || ALEMBIC_BAD=$((ALEMBIC_BAD + 1))
+  printf '%-6s %-28s %-28s %-28s %s\n' "$label" "$src" "$got" "$head" "$res"
+done
+
+echo
+echo "Timing (seconds, this machine):"
+printf '  start databases        %s\n' "${T_SECS[start]}"
+printf '  restore many (pg15)    %s\n' "${T_SECS[restore_many]}"
+printf '  restore saas (pg17)    %s\n' "${T_SECS[restore_saas]}"
+printf '  counts many / saas     %s / %s\n' "${T_SECS[count_many]}" "${T_SECS[count_saas]}"
+echo
+echo "tables compared: $ROWS_TOTAL, row-count mismatches: $MISMATCHES, alembic mismatches: $ALEMBIC_BAD"
+if [ "$MISMATCHES" -eq 0 ] && [ "$ALEMBIC_BAD" -eq 0 ]; then
+  echo "RESULT: PASS"
+  exit 0
+fi
+echo "RESULT: FAIL"
+exit 1
