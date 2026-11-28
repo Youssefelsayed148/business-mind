@@ -92,6 +92,8 @@ def create_app() -> FastAPI:
         platform_bots_router,
         changes_router,
         channels_router,
+        linking_router,
+        linking_audit_router,
     ):
         for route in source_router.routes:
             if isinstance(route, APIRoute) and route.path.startswith("/api/v1/platform"):

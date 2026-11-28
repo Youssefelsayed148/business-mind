@@ -63,8 +63,8 @@ def _item(link: CustomerLink, contact_name: str | None) -> dict[str, object]:
 
 @router.get("/customer-links")
 def list_customer_links(
-    context: TenantContextDep,
     _flag_on: FlagOn,
+    context: TenantContextDep,
     platform: Annotated[Platform | None, Query()] = None,
     state: Annotated[State | None, Query()] = None,
     q: Annotated[str | None, Query(max_length=100)] = None,
@@ -100,7 +100,7 @@ def list_customer_links(
 
 @router.get("/contacts/{contact_id}/customer-links")
 def contact_customer_links(
-    contact_id: UUID, context: TenantContextDep, _flag_on: FlagOn
+    _flag_on: FlagOn, contact_id: UUID, context: TenantContextDep
 ) -> dict[str, object]:
     _allowed(context)
     contact = context.db.execute(
@@ -159,12 +159,12 @@ def _erase_allowed(context: TenantContext) -> None:
 
 @router.post("/customer-links/{link_id}/erase", status_code=202)
 def erase_person(
+    _flag_on: FlagOn,
     link_id: UUID,
     body: EraseIn,
     request: Request,
     context: TenantContextDep,
     settings: CurrentSettings,
-    _flag_on: FlagOn,
     _csrf: CsrfOk,
 ) -> dict[str, object]:
     context.require_role("admin")
@@ -190,8 +190,8 @@ def erase_person(
 
 @router.get("/erasure-cases")
 def list_erasure_cases(
-    context: TenantContextDep,
     _flag_on: FlagOn,
+    context: TenantContextDep,
     limit: Annotated[int, Query(ge=1, le=100)] = 50,
 ) -> dict[str, object]:
     context.require_role("admin")
@@ -207,11 +207,11 @@ def list_erasure_cases(
 
 @router.post("/erasure-cases/{case_id}/retry", status_code=202)
 def retry_erasure_case(
+    _flag_on: FlagOn,
     case_id: UUID,
     request: Request,
     context: TenantContextDep,
     settings: CurrentSettings,
-    _flag_on: FlagOn,
     _csrf: CsrfOk,
 ) -> dict[str, object]:
     context.require_role("admin")
@@ -236,8 +236,8 @@ def retry_erasure_case(
 
 @router.get("/customer-overview")
 def customer_overview(
-    context: TenantContextDep,
     _flag_on: FlagOn,
+    context: TenantContextDep,
     days: Annotated[int, Query(ge=1, le=365)] = 30,
 ) -> dict[str, object]:
     _allowed(context)

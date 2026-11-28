@@ -60,8 +60,16 @@ CHANNEL_PLATFORM_ROUTE_ROLES = {
 }
 
 
-# Routes that exist only while IDENTITY_V2_ENABLED is on (Phase 3); flag off they 404.
+# Routes that exist only while a flag is on; flag off they 404 like an unknown route: the identity
+# routes (IDENTITY_V2_ENABLED, Phase 3) and the people-across-channels routes
+# (DATA_UNIFICATION_ENABLED, Phase 5).
 FLAG_ON_ONLY_ROUTES = {
+    ("GET", "/api/v1/tenants/{tenant_id}/customer-links"),
+    ("GET", "/api/v1/tenants/{tenant_id}/contacts/{contact_id}/customer-links"),
+    ("POST", "/api/v1/tenants/{tenant_id}/customer-links/{link_id}/erase"),
+    ("GET", "/api/v1/tenants/{tenant_id}/erasure-cases"),
+    ("POST", "/api/v1/tenants/{tenant_id}/erasure-cases/{case_id}/retry"),
+    ("GET", "/api/v1/tenants/{tenant_id}/customer-overview"),
     ("GET", "/api/v1/tenants/{tenant_id}/summary"),
     ("GET", "/api/v1/tenants/{tenant_id}/team/members"),
     ("POST", "/api/v1/tenants/{tenant_id}/team/invitations"),
@@ -179,6 +187,8 @@ def test_every_openapi_route_role_and_cross_tenant(
         tag="matrix",
         user_id=uuid4(),
         grant_id=uuid4(),
+        link_id=uuid4(),
+        case_id=uuid4(),
     )
     extra, extra_payload = logged_in(app, "matrix-target@example.com")
     db.add(Membership(tenant_id=tid, user_id=UUID(extra_payload["id"]), role="viewer"))
@@ -440,7 +450,7 @@ def test_exact_route_contract_and_operator_knowledge(app: Any) -> None:
         for method, operation in methods.items()
         if method.upper() in {"GET", "POST", "PUT", "PATCH", "DELETE"}
     }
-    assert len(actual) == len(TENANT_ROUTE_ROLES) == 102
+    assert len(actual) == len(TENANT_ROUTE_ROLES) == 108
     assert actual == TENANT_ROUTE_ROLES
     base = "/api/v1/tenants/{tenant_id}/bots/{bot_id}"
     for suffix in (
