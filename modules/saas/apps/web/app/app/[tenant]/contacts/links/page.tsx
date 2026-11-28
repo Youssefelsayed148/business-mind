@@ -20,6 +20,7 @@ import {
   stateLabel,
   stateTone,
 } from "@/lib/customer-links";
+import { CustomerOverviewCard } from "@/lib/customer-overview";
 import { roleSatisfies, useSession } from "@/lib/session";
 import {
   Button,
@@ -168,6 +169,7 @@ export default function PeopleAcrossChannelsPage() {
       {allowed && notice && <Notice tone="info" message={notice} />}
       {allowed && !failure && (
         <>
+          <CustomerOverviewCard tenantId={tenantId} />
           <Card title="Filters">
             <div className="contacts-form">
               <Field label="Channel">

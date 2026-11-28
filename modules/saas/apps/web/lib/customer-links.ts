@@ -93,3 +93,21 @@ export function canRetry(value: string): boolean {
 
 export const ERASE_WARNING =
   "This erases the person's chat contact, conversations and messages here, and asks the outreach service to erase them too. It cannot be undone. Their other channels stay until you erase each one.";
+
+export const RANGE_OPTIONS = [7, 30, 90] as const;
+
+/** "0.012 USD" style; only when some calls had a measured cost. */
+export function costText(callsWithCost: number, costUsd: number): string {
+  if (callsWithCost <= 0) return "Not measured";
+  return `${costUsd.toFixed(costUsd < 1 ? 3 : 2)} USD (${callsWithCost} measured call${callsWithCost === 1 ? "" : "s"})`;
+}
+
+export function sourceLabel(value: string): string {
+  return value === "many" ? "Outreach service" : "Chat inbox";
+}
+
+export function levelTone(value: string): "danger" | "warning" | "neutral" {
+  if (value === "error" || value === "danger") return "danger";
+  if (value === "warning") return "warning";
+  return "neutral";
+}

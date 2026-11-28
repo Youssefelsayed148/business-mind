@@ -302,7 +302,37 @@ Changes to the design:
    the same person's links on other channels stay until each is erased too. The dialog says so.
 4. Many's side is still "UNVERIFIED live" (its own runbook); everything here ran against a fake.
 
-## 17. Change log
+## 17. 5D and 5E record (2026-11-28)
+
+5D, combined overview (`GET /api/v1/tenants/{id}/customer-overview?days=7..365`, permission
+`org.customer_links`, Owner and Admin, flag-gated; shown as a card at the top of the people page):
+- People by channel and state, people known to the outreach service, people known to the chat inbox
+  (from the customer link); chat contacts, conversations, handoffs and messages by sender
+  (visitor, bot, agent) in the period; bot calls, tokens and the measured cost (SaaS).
+- Playground threads and playground usage never count; other organizations never count.
+- Every block carries its source. **Costs:** only the SaaS records them (`cost_usd` on some calls),
+  shown as "Not measured" when no call has one. Many records none and offers no per-organization
+  message counts, so the response lists those as "not available" instead of guessing.
+- Test: a fixed dataset where each number equals the source tables (and a direct SQL cross-check),
+  a longer period includes older rows, two identical organizations are not summed, empty zeros.
+
+5E, combined audit trail (`GET /api/v1/platform/audit?source=all|saas|many&tenant_id=&limit=`,
+platform staff only, flag-gated; page `/platform/audit`, linked from the staff Logs page):
+- SaaS audit events and Many's `/logs`, newest first, each row tagged with its source; only the
+  action, a short sentence and a level are returned (no metadata, no target, no actor).
+- **Not per organization for Many:** Many's log is global and names no organization, so with a
+  tenant filter only SaaS events are shown, with a note. If Many does not answer the SaaS rows still
+  show, flagged. A workspace-scoped Many audit route stays a later, separate ask (question 4).
+- For clients (Owner and Admin) the SaaS trail they already have (`data/audit`) now also contains
+  the link sync, claim and erasure events, and no personal data.
+- Both systems keep writing their own store; nothing is copied.
+
+Existing tests changed in 5B to 5E: `tests/test_role_matrix.py` (permission rows
+`org.customer_links` and `org.customer_erase`), `tests/test_identity_migrations.py` (head and chain),
+`group-b-client-visibility.spec.ts` and `group-c-fixtures.ts` (the fake API answers 404 for the new
+routes, like the real API does with the flag off).
+
+## 18. Change log
 
 - 2026-11-28, Claude Code: design written from a read of both data models, the Many erasure
   routes and runbook, the proxy allowlist and the SaaS erase code. Docs only; nothing run.

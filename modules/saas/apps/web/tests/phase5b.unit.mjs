@@ -82,3 +82,16 @@ test("erasure states have plain words, tones and a retry rule", () => {
   assert.equal(links.canRetry("complete"), false);
   assert.match(links.ERASE_WARNING, /cannot be undone/);
 });
+
+test("overview words: cost only when measured, sources and levels", () => {
+  assert.equal(links.costText(0, 0), "Not measured");
+  assert.equal(links.costText(1, 0.01), "0.010 USD (1 measured call)");
+  assert.equal(links.costText(3, 12.5), "12.50 USD (3 measured calls)");
+  assert.equal(links.sourceLabel("many"), "Outreach service");
+  assert.equal(links.sourceLabel("saas"), "Chat inbox");
+  assert.equal(links.levelTone("error"), "danger");
+  assert.equal(links.levelTone("danger"), "danger");
+  assert.equal(links.levelTone("warning"), "warning");
+  assert.equal(links.levelTone("info"), "neutral");
+  assert.deepEqual([...links.RANGE_OPTIONS], [7, 30, 90]);
+});

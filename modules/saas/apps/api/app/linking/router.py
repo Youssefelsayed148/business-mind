@@ -22,7 +22,7 @@ from app.core.errors import ApiError
 from app.db.models import CustomerLink, ManyChannelClaim, Tenant
 from app.db.session import get_session
 from app.identity import many_proxy
-from app.linking import fetch, service
+from app.linking import audit_view, fetch, service
 from app.platform.staff import PlatformStaffDep
 
 router = APIRouter(prefix="/api/v1/platform/tenants/{tenant_id}", tags=["customer-links"])
@@ -217,3 +217,21 @@ def remove_claim(
     )
     db.commit()
     return Response(status_code=204)
+
+
+audit_router = APIRouter(prefix="/api/v1/platform", tags=["customer-links"])
+
+
+@audit_router.get("/audit")
+def combined_audit(
+    staff: PlatformStaffDep,
+    db: DbSession,
+    settings: CurrentSettings,
+    _flag_on: FlagOn,
+    tenant_id: Annotated[UUID | None, Query()] = None,
+    source: Annotated[Literal["all", "saas", "many"], Query()] = "all",
+    limit: Annotated[int, Query(ge=1, le=200)] = 100,
+) -> dict[str, object]:
+    if tenant_id is not None:
+        _tenant(db, tenant_id)
+    return audit_view.combined(db, settings, staff, tenant_id=tenant_id, source=source, limit=limit)

@@ -64,8 +64,8 @@ Consequences for the design:
 | 5A Link (built 2026-11-28, in review) | SaaS table for links, reversible migration, deterministic job that fills it from Many reads through the internal call, backfill idempotent, duplicate and conflict rules | Synthetic dataset: no duplicates, re-run changes nothing, tenant isolation tests; the same on a restored copy |
 | 5B Timeline (built 2026-11-28, in review; the client view of the link, without Many conversation text) | Contact page in the SaaS shows linked Many conversations (read only) | Role and tenant tests, browser spec |
 | 5C Erasure (built 2026-11-28, in review) | One SaaS-started flow, per-side status, retries, tests with fakes first | Erasing a person removes data in both parts on test data; idempotent re-run; failure of one side is visible and retryable |
-| 5D Analytics | Combined read model and page | Numbers equal the sources on a fixed dataset |
-| 5E Audit | Combined read view | Role and isolation tests |
+| 5D Analytics (built 2026-11-28, in review) | Combined read model and page | Numbers equal the sources on a fixed dataset |
+| 5E Audit (built 2026-11-28, in review) | Combined read view | Role and isolation tests |
 | 5F Close | WSL full gates, restored-copy link test, record | Exit criteria |
 
 Gates for every step (as before): both backend suites, script tests, policy and contract copy

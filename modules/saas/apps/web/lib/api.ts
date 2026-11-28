@@ -369,6 +369,74 @@ export function retryErasureCase(
   });
 }
 
+export interface CustomerOverview {
+  range: { from: string; to: string; days: number };
+  people: {
+    source: string;
+    by_platform: Record<
+      string,
+      {
+        linked: number;
+        many_only: number;
+        saas_only: number;
+        conflict: number;
+        total: number;
+      }
+    >;
+    known_to_outreach: number;
+    known_to_chat: number;
+  };
+  chat: {
+    source: string;
+    contacts: number;
+    new_contacts: number;
+    conversations: number;
+    handoffs: number;
+    messages: { visitor: number; ai: number; agent: number };
+  };
+  ai: {
+    source: string;
+    calls: number;
+    tokens: number;
+    calls_with_cost: number;
+    cost_usd: number;
+  };
+  not_available: string[];
+}
+
+export function customerOverview(
+  tenantId: string,
+  days: number,
+): Promise<CustomerOverview> {
+  return api<CustomerOverview>(
+    `tenants/${tenantId}/customer-overview?days=${days}`,
+  );
+}
+
+export interface AuditRow {
+  source: "saas" | "many";
+  at: string;
+  action: string;
+  summary: string;
+  level: string;
+  tenant_id: string | null;
+}
+
+export function combinedAudit(
+  filters: { source?: string; tenant_id?: string; limit?: number } = {},
+): Promise<{ items: AuditRow[]; many_unavailable: boolean; notes: string[] }> {
+  const query = new URLSearchParams();
+  for (const [key, value] of Object.entries(filters)) {
+    if (value !== undefined && value !== "") query.set(key, String(value));
+  }
+  const suffix = query.size ? `?${query.toString()}` : "";
+  return api<{
+    items: AuditRow[];
+    many_unavailable: boolean;
+    notes: string[];
+  }>(`platform/audit${suffix}`);
+}
+
 export function contactCustomerLinks(
   tenantId: string,
   contactId: string,

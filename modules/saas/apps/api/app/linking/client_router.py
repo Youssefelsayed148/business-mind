@@ -22,7 +22,7 @@ from app.core.config import Settings, get_settings
 from app.core.errors import ApiError
 from app.core.tenancy import TenantContext, TenantContextDep
 from app.db.models import Contact, CustomerLink, ErasureCase
-from app.linking import erasure
+from app.linking import erasure, overview
 
 router = APIRouter(prefix="/api/v1/tenants/{tenant_id}", tags=["customer-links"])
 
@@ -232,3 +232,13 @@ def retry_erasure_case(
         _session_hash(request, settings),
     )
     return _case_out(result)
+
+
+@router.get("/customer-overview")
+def customer_overview(
+    context: TenantContextDep,
+    _flag_on: FlagOn,
+    days: Annotated[int, Query(ge=1, le=365)] = 30,
+) -> dict[str, object]:
+    _allowed(context)
+    return overview.overview(context.db, context.tenant_id, days)

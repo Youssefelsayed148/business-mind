@@ -6,7 +6,8 @@ import { Icon } from "@/lib/icons";
 import { manyRequest } from "@/lib/many";
 import { PageState, type PageStatus } from "@/lib/page-state";
 import { useManyData } from "@/lib/use-many";
-import { Button, Card, Field, PageHeader } from "@/lib/ui";
+import { Button, Card, Field, LinkButton, PageHeader } from "@/lib/ui";
+import { useAuditViewAvailable } from "@/lib/use-customer-links";
 import {
   buildEventTypeOptions,
   eventCategory,
@@ -28,6 +29,7 @@ import "@/app/staff-many-screen.css";
 
 /** The Many activity log with filters, grouped message flows and metadata (platform staff only). */
 export default function StaffLogsPage() {
+  const auditAvailable = useAuditViewAvailable();
   const campaigns = useStaffCampaigns();
   const [filters, setFilters] = useState<LogFilterValues>({
     level: "",
@@ -73,6 +75,13 @@ export default function StaffLogsPage() {
       <PageHeader
         title="Logs"
         purpose="Automation events from the Many activity log, with their metadata. Platform staff only."
+        actions={
+          auditAvailable ? (
+            <LinkButton variant="secondary" href="/platform/audit">
+              Combined audit trail
+            </LinkButton>
+          ) : undefined
+        }
       />
       <Card title="Log filters">
         <div className="staff-many-filter-grid">

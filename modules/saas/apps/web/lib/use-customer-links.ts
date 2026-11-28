@@ -23,3 +23,19 @@ export function useCustomerLinksAvailable(
   }, [tenantId, allowed]);
   return allowed && available;
 }
+
+/** True once the combined audit view answers (flag on, platform staff). */
+export function useAuditViewAvailable(): boolean {
+  const [available, setAvailable] = useState(false);
+  useEffect(() => {
+    let cancelled = false;
+    api
+      .combinedAudit({ source: "saas", limit: 1 })
+      .then(() => !cancelled && setAvailable(true))
+      .catch(() => !cancelled && setAvailable(false));
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+  return available;
+}
