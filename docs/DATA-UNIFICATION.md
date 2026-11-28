@@ -335,7 +335,7 @@ routes, like the real API does with the flag off).
 ## 18. Restored-copy check (the owner runs it; step 5F)
 
 Needs restored copies of both live databases on a throwaway stack (never a live database), the
-migrations applied (`alembic upgrade head`: SaaS head `0037_erasure_cases`), the organization to
+migrations applied (`alembic upgrade head`: SaaS head `0038_grant_location_scope`; the link tables come from `0036` and `0037_erasure_cases`), the organization to
 workspace mapping set for one pilot organization (`scripts/identity_migrate.py map-apply`), and
 `DATA_UNIFICATION_ENABLED=true` with the proxy prerequisites. Then, as platform staff:
 

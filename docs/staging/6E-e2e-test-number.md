@@ -23,7 +23,7 @@ Sources read: `docs/saas-delegation/CANARY.md` and `KNOWN-LIMITS.md`, `docs/end-
 | Edge deny checks from outside pass (6B) | |
 | Meta test number / test Page / test Instagram account connected, webhook subscribed, signature verified | |
 | Recipients allow-listed (count only) | |
-| `alembic current`: Many `0031_sso_link`, SaaS `0037_erasure_cases` (heads read from files at this commit) | |
+| `alembic current`: Many `0031_sso_link`, SaaS `0038_grant_location_scope` (heads read from files at this commit) | |
 | Many native AI on the test channels: off before delegation cases | |
 | SaaS bot and inbox configured for each test channel (one bot per channel account) | |
 | `DATA_UNIFICATION_ENABLED` state for case x6 | |

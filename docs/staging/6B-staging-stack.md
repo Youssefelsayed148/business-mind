@@ -23,7 +23,7 @@ The production overlay (`docker-compose.unified.prod.yml`) on its own server, ow
 6. **PKI and certificate**: `docs/staging/6A-edge-and-internal-tls.md` steps 1 to 3.
 7. **Preflight**: `scripts/staging/preflight.sh` must print `PREFLIGHT PASSED`.
 8. **First deploy**: `scripts/staging/deploy.sh --backup-dir /var/backups/business-mind --first-run`. Later deploys drop `--first-run` so a backup is taken first (needs `scripts/ops/backup_all.sh` from 6C).
-9. **Migration heads** (UNVERIFIED commands, adjust if the container layout differs): Many `0031_sso_link`, SaaS `0037_erasure_cases`. `docker compose -f docker-compose.unified.yml -f docker-compose.unified.prod.yml --env-file .env.unified run --rm --no-deps many-migrate alembic current` and the same with `saas-migrate`. Record both outputs.
+9. **Migration heads** (UNVERIFIED commands, adjust if the container layout differs): Many `0031_sso_link`, SaaS `0038_grant_location_scope`. `docker compose -f docker-compose.unified.yml -f docker-compose.unified.prod.yml --env-file .env.unified run --rm --no-deps many-migrate alembic current` and the same with `saas-migrate`. Record both outputs.
 10. **Outside checks** from your own machine (not the server): `python3 scripts/staging/check_outside.py --many <host> --saas-web <host> --saas-api <host>`; every line must be PASS.
 11. **Meta test number**: in the Meta test app set the webhook callback to `https://<MANY_HOST>/webhooks/meta` with the staging verify token (verification call in `docs/deployment-vps.md` section 7). Never point a live app at staging.
 12. **Delegation stays off** per channel until 6E says which case to run; internal URLs stored in channel rows are `https://`.
