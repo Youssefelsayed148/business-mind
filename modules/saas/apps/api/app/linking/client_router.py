@@ -11,14 +11,18 @@ from __future__ import annotations
 from typing import Annotated, Literal
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, Query, Request
+from pydantic import BaseModel
 from sqlalchemy import func, select
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
+from app.auth import cookies
+from app.auth.security import hash_token
 from app.core.config import Settings, get_settings
 from app.core.errors import ApiError
 from app.core.tenancy import TenantContext, TenantContextDep
-from app.db.models import Contact, CustomerLink
+from app.db.models import Contact, CustomerLink, ErasureCase
+from app.linking import erasure
 
 router = APIRouter(prefix="/api/v1/tenants/{tenant_id}", tags=["customer-links"])
 
@@ -114,3 +118,117 @@ def contact_customer_links(
         .order_by(CustomerLink.platform, CustomerLink.created_at)
     )
     return {"items": [_item(link, contact.display_name) for link in rows]}
+
+
+# --- Phase 5C: one erasure request for one person --------------------------------------------
+
+CsrfOk = Annotated[None, Depends(cookies.require_csrf)]
+
+
+class EraseIn(BaseModel):
+    request_id: UUID
+
+
+def _case_out(case: ErasureCase) -> dict[str, object]:
+    reason = case.reason
+    return {
+        "id": str(case.id),
+        "platform": case.platform,
+        "state": case.state,
+        "reason": reason,
+        "message": erasure.REASON_TEXT.get(reason or "", None),
+        "created_at": case.created_at.isoformat(),
+        "completed_at": case.completed_at.isoformat() if case.completed_at else None,
+    }
+
+
+def _session_hash(request: Request, settings: Settings) -> str | None:
+    token = cookies.read_session_token(request, settings)
+    return hash_token(token) if token else None
+
+
+def _erase_allowed(context: TenantContext) -> None:
+    context.require_permission("org.customer_erase")
+    if context.location_ids is not None:
+        raise ApiError(
+            403,
+            "LOCATION_SCOPE_UNSUPPORTED",
+            "Location-limited access does not include erasing people.",
+        )
+
+
+@router.post("/customer-links/{link_id}/erase", status_code=202)
+def erase_person(
+    link_id: UUID,
+    body: EraseIn,
+    request: Request,
+    context: TenantContextDep,
+    settings: CurrentSettings,
+    _flag_on: FlagOn,
+    _csrf: CsrfOk,
+) -> dict[str, object]:
+    context.require_role("admin")
+    _erase_allowed(context)
+    link = context.db.scalar(
+        select(CustomerLink).where(
+            CustomerLink.tenant_id == context.tenant_id, CustomerLink.id == link_id
+        )
+    )
+    if link is None:
+        raise ApiError(404, "NOT_FOUND", "Resource not found.")
+    case = erasure.start(
+        context.db,
+        settings,
+        context.user,
+        context.tenant,
+        link,
+        body.request_id,
+        _session_hash(request, settings),
+    )
+    return _case_out(case)
+
+
+@router.get("/erasure-cases")
+def list_erasure_cases(
+    context: TenantContextDep,
+    _flag_on: FlagOn,
+    limit: Annotated[int, Query(ge=1, le=100)] = 50,
+) -> dict[str, object]:
+    context.require_role("admin")
+    _erase_allowed(context)
+    rows = context.db.scalars(
+        select(ErasureCase)
+        .where(ErasureCase.tenant_id == context.tenant_id)
+        .order_by(ErasureCase.created_at.desc())
+        .limit(limit)
+    )
+    return {"items": [_case_out(c) for c in rows]}
+
+
+@router.post("/erasure-cases/{case_id}/retry", status_code=202)
+def retry_erasure_case(
+    case_id: UUID,
+    request: Request,
+    context: TenantContextDep,
+    settings: CurrentSettings,
+    _flag_on: FlagOn,
+    _csrf: CsrfOk,
+) -> dict[str, object]:
+    context.require_role("admin")
+    _erase_allowed(context)
+    case = context.db.scalar(
+        select(ErasureCase).where(
+            ErasureCase.tenant_id == context.tenant_id, ErasureCase.id == case_id
+        )
+    )
+    if case is None:
+        raise ApiError(404, "NOT_FOUND", "Resource not found.")
+    result = erasure.resume(
+        context.db,
+        settings,
+        context.user,
+        context.tenant,
+        case,
+        _session_hash(request, settings),
+    )
+    return _case_out(result)

@@ -89,6 +89,7 @@ class _Derived:
     many_lead_id: str | None = None
     display_name: str | None = None
     seen_at: datetime | None = None
+    external_id: str | None = None
 
 
 Key = tuple[str, str, str]  # platform, many channel id, digest
@@ -117,6 +118,7 @@ def derive(db: Session, tenant_id: UUID, snapshot: Snapshot) -> tuple[dict[Key, 
             link_digest(tenant_id, platform, channel_ref, identity.external_id),
         )
         derived[key].contact_ids.add(identity.contact_id)
+        derived[key].external_id = identity.external_id
 
     ignored = 0
     for lead in snapshot.leads:
@@ -129,6 +131,7 @@ def derive(db: Session, tenant_id: UUID, snapshot: Snapshot) -> tuple[dict[Key, 
             link_digest(tenant_id, lead.platform, lead.many_channel_id, lead.external_id),
         )
         derived[key].many_lead_id = lead.many_lead_id
+        derived[key].external_id = lead.external_id
         derived[key].display_name = lead.display_name
         derived[key].seen_at = lead.seen_at
     return dict(derived), ignored
@@ -171,6 +174,7 @@ def sync(db: Session, tenant_id: UUID, snapshot: Snapshot, *, dry_run: bool = Fa
                         external_id_digest=key[2],
                         many_lead_id=item.many_lead_id,
                         display_name=item.display_name,
+                        external_id=item.external_id,
                         lead_seen_at=item.seen_at,
                         source=source,
                         state=state,
@@ -181,11 +185,12 @@ def sync(db: Session, tenant_id: UUID, snapshot: Snapshot, *, dry_run: bool = Fa
             result.skipped_erased += 1  # an erased person is never linked again
             continue
         result.by_state[state] = result.by_state.get(state, 0) + 1
-        if (row.state, row.contact_id, row.many_lead_id, row.display_name) == (
+        if (row.state, row.contact_id, row.many_lead_id, row.display_name, row.external_id) == (
             state,
             contact_id,
             item.many_lead_id,
             item.display_name,
+            item.external_id,
         ):
             result.unchanged += 1
             continue
@@ -195,6 +200,7 @@ def sync(db: Session, tenant_id: UUID, snapshot: Snapshot, *, dry_run: bool = Fa
             row.contact_id = contact_id
             row.many_lead_id = item.many_lead_id
             row.display_name = item.display_name
+            row.external_id = item.external_id
             row.lead_seen_at = item.seen_at
             row.source = source
             row.updated_at = now

@@ -272,7 +272,37 @@ messages are global staff-only routes; showing them to clients needs a workspace
 does not exist, so it stays a later, separate ask), a menu entry, role-specific browser tests
 (roles are covered by the API matrix).
 
-## 16. Change log
+## 16. 5C record (2026-11-28)
+
+Built: one erasure request for one person on one channel, started by an Owner or Admin from the
+people page (confirmation dialog, one request id per click).
+- Migration `0037_erasure_cases`: table `erasure_cases` (state, reason code, opaque ids; no name,
+  message or identifier) and column `customer_links.external_id`. Reversible.
+- `app/linking/erasure.py`: records the case first, erases the SaaS side with the existing audited
+  routine (`channels.erasure.erase_channel_contact`, fed a `contact.erasure` event row), scrubs the
+  link (state `erased`, name, lead id, contact id cleared), then asks Many with the **same request
+  id** through Many's existing `POST /privacy/contact-erasure/{platform}/{channel_id}` (called
+  directly by the server as the acting user, so no allowlist change was needed; section 6.2's
+  "narrow proxy exception" is not used). The raw id is scrubbed when Many reports `local_status:
+  erased`. A Many failure never undoes the SaaS erase: the case becomes `needs_action` with a
+  plain reason and **Try again** repeats the Many call with the same request id.
+- Routes (permission `org.customer_erase`, Owner and Admin, not agency, not location-limited, 404
+  while the flag is off): `POST customer-links/{id}/erase`, `GET erasure-cases`,
+  `POST erasure-cases/{id}/retry`.
+- Web: an Erase button per row and an "Erasure requests" card with retry.
+
+Changes to the design:
+1. **The raw external id is now stored** on the link row (`external_id`) until the erasure
+   completes. Reason: Many can only be asked to erase a person by external id, a client cannot read
+   it from Many, and the SaaS has it only if it keeps it. It never goes to the browser and is
+   removed at completion. (The digest stays for uniqueness.) The owner should confirm this.
+2. **"Complete" means Many reports its local erase.** Many's `remote_status` describes Many's own
+   forward back to the SaaS, which is a no-op here (already erased); it is stored for information.
+3. Erasing one channel identity deletes the SaaS **contact** (the existing routine does this), so
+   the same person's links on other channels stay until each is erased too. The dialog says so.
+4. Many's side is still "UNVERIFIED live" (its own runbook); everything here ran against a fake.
+
+## 17. Change log
 
 - 2026-11-28, Claude Code: design written from a read of both data models, the Many erasure
   routes and runbook, the proxy allowlist and the SaaS erase code. Docs only; nothing run.

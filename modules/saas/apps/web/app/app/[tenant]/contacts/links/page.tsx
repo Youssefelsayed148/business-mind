@@ -5,9 +5,13 @@ import { useParams } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
 
 import * as api from "@/lib/api";
-import type { CustomerLink } from "@/lib/api";
+import type { CustomerLink, ErasureCase } from "@/lib/api";
 import {
+  ERASE_WARNING,
   PAGE_SIZE,
+  canRetry,
+  erasureLabel,
+  erasureTone,
   nextOffset,
   personName,
   platformLabel,
@@ -20,6 +24,7 @@ import { roleSatisfies, useSession } from "@/lib/session";
 import {
   Button,
   Card,
+  ConfirmAction,
   DataTable,
   Field,
   Loading,
@@ -43,6 +48,9 @@ export default function PeopleAcrossChannelsPage() {
   const [rows, setRows] = useState<CustomerLink[] | null>(null);
   const [total, setTotal] = useState(0);
   const [failure, setFailure] = useState<Failure>(null);
+  const [cases, setCases] = useState<ErasureCase[]>([]);
+  const [notice, setNotice] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
 
   const load = useCallback(async () => {
     try {
@@ -65,11 +73,64 @@ export default function PeopleAcrossChannelsPage() {
     }
   }, [tenantId, platform, state, query, offset]);
 
+  const loadCases = useCallback(async () => {
+    try {
+      setCases((await api.erasureCases(tenantId)).items);
+    } catch {
+      setCases([]);
+    }
+  }, [tenantId]);
+
   useEffect(() => {
     if (!allowed) return;
-    const timer = setTimeout(() => void load(), 0);
+    const timer = setTimeout(() => {
+      void load();
+      void loadCases();
+    }, 0);
     return () => clearTimeout(timer);
-  }, [load, allowed]);
+  }, [load, loadCases, allowed]);
+
+  async function erase(row: CustomerLink) {
+    setBusy(true);
+    try {
+      const result = await api.eraseCustomerLink(
+        tenantId,
+        row.id,
+        crypto.randomUUID(),
+      );
+      setNotice(
+        result.state === "complete"
+          ? "The person was erased."
+          : (result.message ?? "The erasure was started."),
+      );
+    } catch (caught) {
+      setNotice(
+        caught instanceof Error
+          ? caught.message
+          : "Could not erase this person.",
+      );
+    } finally {
+      setBusy(false);
+      await Promise.all([load(), loadCases()]);
+    }
+  }
+
+  async function retry(item: ErasureCase) {
+    setBusy(true);
+    try {
+      const result = await api.retryErasureCase(tenantId, item.id);
+      setNotice(
+        result.state === "complete"
+          ? "The erasure is complete."
+          : (result.message ?? "Still waiting."),
+      );
+    } catch (caught) {
+      setNotice(caught instanceof Error ? caught.message : "Could not retry.");
+    } finally {
+      setBusy(false);
+      await loadCases();
+    }
+  }
 
   const next = nextOffset(offset, total);
   const previous = previousOffset(offset);
@@ -104,6 +165,7 @@ export default function PeopleAcrossChannelsPage() {
           message="Could not load people. Try again in a moment."
         />
       )}
+      {allowed && notice && <Notice tone="info" message={notice} />}
       {allowed && !failure && (
         <>
           <Card title="Filters">
@@ -215,6 +277,22 @@ export default function PeopleAcrossChannelsPage() {
                       ),
                   },
                   {
+                    key: "erase",
+                    header: "Erase",
+                    cell: (row) => (
+                      <ConfirmAction
+                        testId={`erase-${row.id}`}
+                        title={`Erase ${personName(row)}?`}
+                        description={ERASE_WARNING}
+                        confirmLabel="Erase this person"
+                        disabled={busy}
+                        onConfirm={() => void erase(row)}
+                      >
+                        Erase
+                      </ConfirmAction>
+                    ),
+                  },
+                  {
                     key: "seen",
                     header: "First seen",
                     cell: (row) =>
@@ -242,6 +320,35 @@ export default function PeopleAcrossChannelsPage() {
                   </Button>
                 </div>
               )}
+            </Card>
+          )}
+          {cases.length > 0 && (
+            <Card title="Erasure requests">
+              <ul className="contacts-list" data-testid="erasure-cases">
+                {cases.map((item) => (
+                  <li key={item.id}>
+                    {platformLabel(item.platform)}{" "}
+                    <StatusBadge
+                      value={item.state}
+                      tone={erasureTone(item.state)}
+                    >
+                      {erasureLabel(item.state)}
+                    </StatusBadge>
+                    {item.message && (
+                      <span className="muted"> {item.message}</span>
+                    )}
+                    {canRetry(item.state) && item.state !== "complete" && (
+                      <Button
+                        variant="quiet"
+                        disabled={busy}
+                        onClick={() => void retry(item)}
+                      >
+                        Try again
+                      </Button>
+                    )}
+                  </li>
+                ))}
+              </ul>
             </Card>
           )}
         </>

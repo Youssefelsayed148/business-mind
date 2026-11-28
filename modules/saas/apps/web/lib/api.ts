@@ -326,6 +326,49 @@ export function customerLinks(
   );
 }
 
+export type ErasureState =
+  "requested" | "saas_erased" | "complete" | "needs_action";
+
+export interface ErasureCase {
+  id: string;
+  platform: LinkPlatform;
+  state: ErasureState;
+  reason: string | null;
+  /** A plain sentence for a state that needs attention; no technical detail. */
+  message: string | null;
+  created_at: string;
+  completed_at: string | null;
+}
+
+export function eraseCustomerLink(
+  tenantId: string,
+  linkId: string,
+  requestId: string,
+): Promise<ErasureCase> {
+  return api<ErasureCase>(
+    `tenants/${tenantId}/customer-links/${linkId}/erase`,
+    {
+      method: "POST",
+      body: { request_id: requestId },
+    },
+  );
+}
+
+export function erasureCases(
+  tenantId: string,
+): Promise<{ items: ErasureCase[] }> {
+  return api<{ items: ErasureCase[] }>(`tenants/${tenantId}/erasure-cases`);
+}
+
+export function retryErasureCase(
+  tenantId: string,
+  caseId: string,
+): Promise<ErasureCase> {
+  return api<ErasureCase>(`tenants/${tenantId}/erasure-cases/${caseId}/retry`, {
+    method: "POST",
+  });
+}
+
 export function contactCustomerLinks(
   tenantId: string,
   contactId: string,

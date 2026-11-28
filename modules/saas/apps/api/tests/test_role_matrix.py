@@ -54,6 +54,7 @@ GOLDEN: dict[str, set[str]] = {
     "conversations.delete": {OWN, A},
     "contacts.export": {OWN, A},
     "org.customer_links": {OWN, A},
+    "org.customer_erase": {OWN, A},
     "analytics.export": {OWN, A},
     "data.export": {OWN, A},
     "knowledge.write": {OWN, A, M},

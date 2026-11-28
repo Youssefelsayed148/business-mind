@@ -264,6 +264,12 @@ export async function safetyFixture(page: Page, platform = false) {
         status: 404,
         json: { error: { code: "NOT_FOUND", message: "Not found." } },
       });
+    // Phase 5B: the people-across-channels routes answer 404 while their flag is off.
+    if (suffix.endsWith("/customer-links"))
+      return route.fulfill({
+        status: 404,
+        json: { error: { code: "NOT_FOUND", message: "Not found." } },
+      });
     if (suffix === "/summary")
       return route.fulfill({
         status: 404,

@@ -68,3 +68,17 @@ test("paging offsets stop at both ends", () => {
   assert.equal(links.previousOffset(20), 0);
   assert.equal(links.previousOffset(100), 50);
 });
+
+test("erasure states have plain words, tones and a retry rule", () => {
+  assert.equal(links.erasureLabel("complete"), "Complete");
+  assert.equal(links.erasureLabel("needs_action"), "Needs attention");
+  assert.match(links.erasureLabel("saas_erased"), /waiting/);
+  assert.equal(links.erasureLabel("new_state"), "new_state");
+  assert.equal(links.erasureTone("complete"), "success");
+  assert.equal(links.erasureTone("needs_action"), "warning");
+  assert.equal(links.erasureTone("requested"), "neutral");
+  assert.equal(links.canRetry("needs_action"), true);
+  assert.equal(links.canRetry("saas_erased"), true);
+  assert.equal(links.canRetry("complete"), false);
+  assert.match(links.ERASE_WARNING, /cannot be undone/);
+});

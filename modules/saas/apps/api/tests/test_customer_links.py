@@ -232,15 +232,17 @@ def test_the_digest_is_scoped_and_hides_the_raw_id() -> None:
     assert a != link_digest(t1, "facebook", "c1", "+201001234567")  # other platform
 
 
-def test_no_raw_external_id_or_text_is_stored(
+def test_the_raw_identity_lives_only_in_its_own_column_until_erased(
     uni_app: FastAPI, db: Session, many: FakeMany
 ) -> None:
     users, w1, *_ = _world(uni_app, db, "cl-raw")
     _sync(users, many, [w1], [], [_lead("whatsapp", w1, "SECRET-EXTERNAL-ID-123")])
-    rows = db.execute(text("SELECT * FROM customer_links")).all()
-    assert rows
-    for row in rows:
-        assert "SECRET-EXTERNAL-ID-123" not in " ".join(str(v) for v in row)
+    (row,) = _links(db, users.tenant_id)
+    assert row.external_id == "SECRET-EXTERNAL-ID-123"  # kept so Many can be asked to erase
+    assert row.external_id not in row.external_id_digest
+    for line in db.execute(text("SELECT * FROM customer_links")).all():
+        others = [str(v) for k, v in line._mapping.items() if k != "external_id"]
+        assert "SECRET-EXTERNAL-ID-123" not in " ".join(others)
 
 
 # --- Instagram claims -------------------------------------------------------------------------

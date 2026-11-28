@@ -53,6 +53,9 @@ class CustomerLink(Base):
     many_channel_id: Mapped[str] = mapped_column(Text, nullable=False)
     external_id_digest: Mapped[str] = mapped_column(Text, nullable=False)
     many_lead_id: Mapped[str | None] = mapped_column(Text)
+    # The raw external id, kept only so Many can be asked to erase this person (Phase 5C). It is
+    # scrubbed when the erasure completes. Never sent to the browser.
+    external_id: Mapped[str | None] = mapped_column(Text)
     # What a client sees for a person known only to Many (the username Many holds). Personal data:
     # erasure removes the whole row.
     display_name: Mapped[str | None] = mapped_column(Text)
@@ -88,3 +91,49 @@ class ManyChannelClaim(Base):
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, default=utcnow
     )
+
+
+ERASURE_STATES = ("requested", "saas_erased", "complete", "needs_action")
+
+
+class ErasureCase(Base):
+    """One request to erase one person on one channel, in the SaaS and in Many (5C).
+
+    Holds no name, message or identifier: only opaque ids, a state and a reason code.
+    """
+
+    __tablename__ = "erasure_cases"
+    __table_args__ = (
+        UniqueConstraint("tenant_id", "request_id", name="uq_erasure_cases_request"),
+        CheckConstraint(
+            "state IN ('requested', 'saas_erased', 'complete', 'needs_action')",
+            name="ck_erasure_cases_state",
+        ),
+        CheckConstraint(
+            "platform IN ('instagram', 'facebook', 'whatsapp')", name="ck_erasure_cases_platform"
+        ),
+        Index("ix_erasure_cases_tenant_created", "tenant_id", "created_at"),
+    )
+
+    id: Mapped[UUID] = mapped_column(primary_key=True, default=uuid4)
+    tenant_id: Mapped[UUID] = mapped_column(
+        ForeignKey("tenants.id", ondelete="CASCADE"), nullable=False
+    )
+    request_id: Mapped[UUID] = mapped_column(nullable=False)
+    link_id: Mapped[UUID | None] = mapped_column(
+        ForeignKey("customer_links.id", ondelete="SET NULL")
+    )
+    platform: Mapped[str] = mapped_column(Text, nullable=False)
+    many_channel_id: Mapped[str] = mapped_column(Text, nullable=False)
+    state: Mapped[str] = mapped_column(Text, nullable=False, default="requested")
+    reason: Mapped[str | None] = mapped_column(Text)
+    many_event_id: Mapped[str | None] = mapped_column(Text)
+    many_remote_status: Mapped[str | None] = mapped_column(Text)
+    requested_by: Mapped[UUID | None] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"))
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=utcnow
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=utcnow
+    )
+    completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))

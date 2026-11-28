@@ -1,5 +1,5 @@
 /** Words and rules for the people-across-channels view (Phase 5B). Pure, unit tested. */
-import type { LinkPlatform, LinkState } from "./api";
+import type { ErasureState, LinkPlatform, LinkState } from "./api";
 
 export const PLATFORM_LABEL: Record<LinkPlatform, string> = {
   whatsapp: "WhatsApp",
@@ -66,3 +66,30 @@ export function previousOffset(
 ): number | null {
   return offset > 0 ? Math.max(0, offset - size) : null;
 }
+
+export const ERASURE_LABEL: Record<ErasureState, string> = {
+  requested: "Started",
+  saas_erased: "Erased here, waiting for the outreach service",
+  complete: "Complete",
+  needs_action: "Needs attention",
+};
+
+export function erasureLabel(value: string): string {
+  return (ERASURE_LABEL as Record<string, string>)[value] ?? value;
+}
+
+export function erasureTone(value: string): "success" | "warning" | "neutral" {
+  if (value === "complete") return "success";
+  if (value === "needs_action") return "warning";
+  return "neutral";
+}
+
+/** Only a case that stopped, or one still waiting, can be tried again. */
+export function canRetry(value: string): boolean {
+  return (
+    value === "needs_action" || value === "saas_erased" || value === "requested"
+  );
+}
+
+export const ERASE_WARNING =
+  "This erases the person's chat contact, conversations and messages here, and asks the outreach service to erase them too. It cannot be undone. Their other channels stay until you erase each one.";
