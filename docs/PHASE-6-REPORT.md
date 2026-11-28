@@ -1,6 +1,6 @@
-# Phase 6 report (TEMPLATE)
+# Phase 6 report (IN PROGRESS)
 
-Status: **EMPTY TEMPLATE. No cell below has a result yet.** Written 2026-11-28 for `docs/PHASE-6-PLAN.md`. Each result cell is filled only from a command or document that produced it (rule 6 in `CLAUDE.md`: never invent results). Owner-run steps are filled from the output the owner sends back. "NOT RUN" is a valid entry and must say why.
+Status: **IN PROGRESS, 2026-11-28. Claude's code and document parts of 6A to 6G are written and checked here; every live step is NOT RUN (no staging server, Docker engine or Meta test number in the cloud container). 6.0, 6H and all owner-run cells are empty.** Written 2026-11-28 for `docs/PHASE-6-PLAN.md`. Each result cell is filled only from a command or document that produced it (rule 6 in `CLAUDE.md`: never invent results). Owner-run steps are filled from the output the owner sends back. "NOT RUN" is a valid entry and must say why.
 
 Header (fill in at the end): staging commit ______; Many head ______; SaaS head ______; report date (UTC) ______; author of each section ______.
 
@@ -11,13 +11,13 @@ Result values: PASS, FAIL, BLOCKED, NOT RUN. Evidence is a file path, a command 
 | Step | What | Who runs | Date (UTC) | Result | Evidence | Notes / open items |
 |---|---|---|---|---|---|---|
 | 6.0 | Readiness: gates A1 to A9, restored-copy link check (B), decisions C (`docs/PHASE-6-0-READINESS.md`) | Owner | | | | |
-| 6A | Edge and internal TLS: overlay passes `docker compose config`; TLS checks scripted; allowlist tests pass with HTTPS (`docs/staging/6A-*`) | Claude writes, owner decides | | | | |
-| 6B | Staging stack: stack healthy; edge deny checks pass from outside (`docs/staging/6B-*`) | Owner deploys | | | | |
-| 6C | Backup and restore drill: restored on a clean machine; row counts and Alembic heads match (`docs/staging/6C-backup-restore-drill.md`) | Owner | | | | |
-| 6D | Alerts: a deliberate failure raises one alert (`docs/staging/6D-alerts.md`) | Owner | | | | |
-| 6E | End-to-end on the Meta test number: written results per channel; failures triaged (`docs/staging/6E-e2e-test-number.md`) | Owner | | | | |
-| 6F | Load check: numbers recorded against stated targets (`docs/staging/6F-load-check.md`; targets pending decision D3) | Owner | | | | |
-| 6G | Security review: no open critical finding; every open item has an owner and a date | Claude reviews, owner reads | | | | |
+| 6A | Edge and internal TLS: overlay passes `docker compose config`; TLS checks scripted; allowlist tests pass with HTTPS (`docs/staging/6A-*`) | Claude writes, owner decides | 2026-11-28 | PARTLY (static PASS, live NOT RUN) | `scripts/test_edge_tls.py` 8 passed (real handshakes, `nginx -t` dev and HTTPS modes); `scripts/test_unified_nginx.py` 4 passed; `docker compose config` OK for base, e2e, prod | No container ran; real certificate and TLS between services first exercised in 6B; transport-pinning decision pending |
+| 6B | Staging stack: stack healthy; edge deny checks pass from outside (`docs/staging/6B-*`) | Owner deploys | 2026-11-28 | NOT RUN (files written) | `scripts/staging/test_check_outside.py` 6 passed; preflight fails on placeholders and passes on a filled env with a real generated PKI | Needs the staging server (D6), DNS, secrets |
+| 6C | Backup and restore drill: restored on a clean machine; row counts and Alembic heads match (`docs/staging/6C-backup-restore-drill.md`) | Owner | 2026-11-28 | NOT RUN (scripts written) | `scripts/ops/test_ops_compare.sh` ALL OK (stub docker; shell logic only) | Real `pg_dump`/`pg_restore` untested |
+| 6D | Alerts: a deliberate failure raises one alert (`docs/staging/6D-alerts.md`) | Owner | 2026-11-28 | NOT RUN (script written) | `scripts/ops/test_alert_check.py` 23 passed (fakes); `--dry-run` printed one FAIL line and the mail it would send | No mail server tried; certificate, token expiry and failed-message alerts not covered |
+| 6E | End-to-end on the Meta test number: written results per channel; failures triaged (`docs/staging/6E-e2e-test-number.md`) | Owner | 2026-11-28 | NOT RUN (case list written) | n/a | Several cases UNVERIFIED from code; erasure cases need the data flag, which waits for 6G sign-off |
+| 6F | Load check: numbers recorded against stated targets (`docs/staging/6F-load-check.md`; targets pending decision D3) | Owner | 2026-11-28 | NOT RUN (script written) | `scripts/ops/test_load_saas_api.py` 14 passed (fake server) | Targets empty until you send peak traffic; `/webhooks/meta` limit answers 503 not 429 (checked in the nginx files) |
+| 6G | Security review: no open critical finding; every open item has an owner and a date | Claude reviews, owner reads | 2026-11-28 | PARTLY (no critical or high found; medium and low items open for owner decisions) | `docs/PHASE-6G-SECURITY-REVIEW.md`, `docs/PHASE-6G-FIXES.md`; SaaS suite 1615 passed, 10 failed (the same 10 pgvector 0.6.0 tests); web Playwright on Next 16.4.6: 306 passed, 0 failed, 3 skipped; ruff, format, mypy clean; `npm audit --omit=dev` SaaS web 0 vulnerabilities | Open: G-05, G-06, G-07, G-12, G-13, Many dashboard Next 14 (critical advisory), Phase 3 items 4, 5, 8 to 11; owners and dates to be set by you |
 | 6H | Soak and report: one week of test traffic, daily notes (section 4) | Owner | | | | |
 
 ### 1.1 Detail per step (copy the step's own result template here, or link it)
@@ -25,13 +25,13 @@ Result values: PASS, FAIL, BLOCKED, NOT RUN. Evidence is a file path, a command 
 | Step | Key numbers or answers | Result |
 |---|---|---|
 | 6.0 | A1 to A9 results; link check counts and elapsed time | |
-| 6A | TLS checks run; certificates and renewal path | |
-| 6B | Services healthy; edge deny checks; secrets rotation procedure written | |
-| 6C | Backup size, copy time, restore times for many and saas, tables compared, mismatches, Alembic heads (source / restored / repo) | |
-| 6D | Test mail received; closed-port alert; stop/start alert and recovery mail; thresholds in use | |
-| 6E | Cases passed / failed / blocked per channel (WhatsApp W1 to W11, Facebook F1 to F8, Instagram I1 to I8, cross-cutting X1 to X4) | |
-| 6F | Webhook burst summary; SaaS p50/p95/p99, error rate, requests/s; targets met or not | |
-| 6G | Findings count by severity; dependency scan; Next upgrade PR | |
+| 6A | Edge and internal TLS: overlay passes `docker compose config`; TLS checks scripted; allowlist tests pass with HTTPS (`docs/staging/6A-*`) | Claude writes, owner decides | 2026-11-28 | PARTLY (static PASS, live NOT RUN) | `scripts/test_edge_tls.py` 8 passed (real handshakes, `nginx -t` dev and HTTPS modes); `scripts/test_unified_nginx.py` 4 passed; `docker compose config` OK for base, e2e, prod | No container ran; real certificate and TLS between services first exercised in 6B; transport-pinning decision pending |
+| 6B | Staging stack: stack healthy; edge deny checks pass from outside (`docs/staging/6B-*`) | Owner deploys | 2026-11-28 | NOT RUN (files written) | `scripts/staging/test_check_outside.py` 6 passed; preflight fails on placeholders and passes on a filled env with a real generated PKI | Needs the staging server (D6), DNS, secrets |
+| 6C | Backup and restore drill: restored on a clean machine; row counts and Alembic heads match (`docs/staging/6C-backup-restore-drill.md`) | Owner | 2026-11-28 | NOT RUN (scripts written) | `scripts/ops/test_ops_compare.sh` ALL OK (stub docker; shell logic only) | Real `pg_dump`/`pg_restore` untested |
+| 6D | Alerts: a deliberate failure raises one alert (`docs/staging/6D-alerts.md`) | Owner | 2026-11-28 | NOT RUN (script written) | `scripts/ops/test_alert_check.py` 23 passed (fakes); `--dry-run` printed one FAIL line and the mail it would send | No mail server tried; certificate, token expiry and failed-message alerts not covered |
+| 6E | End-to-end on the Meta test number: written results per channel; failures triaged (`docs/staging/6E-e2e-test-number.md`) | Owner | 2026-11-28 | NOT RUN (case list written) | n/a | Several cases UNVERIFIED from code; erasure cases need the data flag, which waits for 6G sign-off |
+| 6F | Load check: numbers recorded against stated targets (`docs/staging/6F-load-check.md`; targets pending decision D3) | Owner | 2026-11-28 | NOT RUN (script written) | `scripts/ops/test_load_saas_api.py` 14 passed (fake server) | Targets empty until you send peak traffic; `/webhooks/meta` limit answers 503 not 429 (checked in the nginx files) |
+| 6G | Security review: no open critical finding; every open item has an owner and a date | Claude reviews, owner reads | 2026-11-28 | PARTLY (no critical or high found; medium and low items open for owner decisions) | `docs/PHASE-6G-SECURITY-REVIEW.md`, `docs/PHASE-6G-FIXES.md`; SaaS suite 1615 passed, 10 failed (the same 10 pgvector 0.6.0 tests); web Playwright on Next 16.4.6: 306 passed, 0 failed, 3 skipped; ruff, format, mypy clean; `npm audit --omit=dev` SaaS web 0 vulnerabilities | Open: G-05, G-06, G-07, G-12, G-13, Many dashboard Next 14 (critical advisory), Phase 3 items 4, 5, 8 to 11; owners and dates to be set by you |
 | 6H | Days completed; incidents; alerts raised | |
 
 ## 2. Exit criteria (copied from `docs/MERGE-PLAN.md`, Phase 6)
