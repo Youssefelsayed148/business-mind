@@ -153,6 +153,16 @@ def mint_assertion(
             raise ApiError(403, "FORBIDDEN", "You do not have permission for this action.")
         if mfa_required(settings, user, role=None, membership=None) and not claims["mfa"]:
             raise ApiError(403, "MFA_ENROLLMENT_REQUIRED", "Enroll in MFA to continue.")
+        if org_id is not None:
+            # Staff may name one organization (Phase 4A, P2): the assertion then carries its
+            # mapped workspace, and Many gives the staff user an admin membership there.
+            tenant = db.get(Tenant, org_id)
+            if tenant is None or tenant.status != "active" or tenant.many_workspace_id is None:
+                raise ApiError(404, "NOT_FOUND", "Resource not found.")
+            tenant_id = tenant.id
+            workspace_id = tenant.many_workspace_id
+            claims.update(org=str(tenant.id), workspace=str(workspace_id))
+            audit.update(org=str(tenant.id))
     else:
         if org_id is None:
             raise ApiError(422, "VALIDATION_ERROR", "An organization is required.")

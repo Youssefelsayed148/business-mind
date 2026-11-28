@@ -2,7 +2,9 @@
 
 import base64
 import re
+import threading
 import time
+from concurrent.futures import ThreadPoolExecutor
 from datetime import timedelta
 from typing import Any
 
@@ -10,6 +12,7 @@ import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from sqlalchemy import select, update
+from sqlalchemy.engine import Engine
 from sqlalchemy.orm import Session
 
 from app.channels.secrets import decrypt_secret
@@ -17,6 +20,7 @@ from app.core.config import get_settings
 from app.db.base import utcnow
 from app.db.models import AuditEvent, Membership, User
 from app.db.models.identity import UserMfa, UserRecoveryCode
+from app.db.session import session_factory
 from app.identity import mfa
 from tests.conftest import build_test_settings
 from tests.helpers import PASSWORD, csrf_headers
@@ -270,3 +274,47 @@ def test_flag_off_mfa_routes_are_404_and_login_ignores_the_code(app: FastAPI, db
     legacy = _fresh_login(app, person)
     assert legacy.status_code == 200  # no second factor is asked for while the flag is off
     assert _fresh_login(app, person, mfa_code="123456").status_code == 200
+
+
+# --- Phase 4A, review item 1: two requests must not both spend the same code -------------------
+
+
+def _race(engine: Engine, user_id: Any, code: str, workers: int = 4) -> list[bool]:
+    """Verify one code from several sessions at the same moment; return each outcome."""
+    settings = v2_settings(mfa_verify_attempts=100)
+    barrier = threading.Barrier(workers)
+
+    def attempt() -> bool:
+        session = session_factory(engine)()
+        try:
+            user = session.get(User, user_id)
+            assert user is not None
+            barrier.wait()
+            return mfa.verify_second_factor(session, settings, user, code)
+        finally:
+            session.close()
+
+    with ThreadPoolExecutor(workers) as pool:
+        return [future.result() for future in [pool.submit(attempt) for _ in range(workers)]]
+
+
+def test_a_recovery_code_cannot_be_spent_twice_at_once(
+    mfa_app: FastAPI, db: Session, engine: Engine
+) -> None:
+    person = make_person(mfa_app, "race-recovery", db=db)
+    _secret, codes = enroll(person, db)
+    user_id = db.scalar(select(User.id).where(User.email == person.email))
+    for code in codes[:5]:
+        assert _race(engine, user_id, code).count(True) == 1
+
+
+def test_a_totp_code_cannot_be_used_twice_at_once(
+    mfa_app: FastAPI, db: Session, engine: Engine
+) -> None:
+    person = make_person(mfa_app, "race-totp", db=db)
+    secret, _codes = enroll(person, db)
+    user_id = db.scalar(select(User.id).where(User.email == person.email))
+    for _ in range(5):
+        db.execute(update(UserMfa).where(UserMfa.user_id == user_id).values(last_used_step=None))
+        db.commit()
+        assert _race(engine, user_id, mfa.totp(secret, time.time())).count(True) == 1

@@ -167,8 +167,11 @@ def confirm_enrollment(db: OrmSession, settings: Settings, user: User, code: str
 def verify_second_factor(db: OrmSession, settings: Settings, user: User, code: str) -> bool:
     """A valid TOTP code, or an unused recovery code (which is then spent)."""
     throttle_verification(db, settings, user.id)
-    row = db.get(UserMfa, user.id)
+    # The row lock serializes concurrent verifications for one user, so a code (TOTP step or
+    # recovery code) spent by one request is seen as spent by the next (Phase 4A, review item 1).
+    row = db.get(UserMfa, user.id, with_for_update=True)
     if row is None or row.confirmed_at is None:
+        db.rollback()
         return False
     if settings.mfa_secret_encryption_keys is not None:
         secret = decrypt_secret(row.secret_ciphertext, settings.mfa_secret_encryption_keys)
@@ -185,6 +188,7 @@ def verify_second_factor(db: OrmSession, settings: Settings, user: User, code: s
         )
     )
     if recovery is None:
+        db.rollback()
         return False
     recovery.used_at = utcnow()
     record_audit(

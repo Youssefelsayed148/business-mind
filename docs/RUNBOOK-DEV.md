@@ -45,7 +45,7 @@ Set to `saas-api` for Many and `many-api` for SaaS in the compose files.
 | Many `/api/saas/*` and `/saas/*` (HMAC-signed service-to-service) | public, with the `saas_signed` rate limit (lines 64 and 71) | **denied, 403**, `^~` prefix locations; SaaS reaches them as `http://many-api:8000` |
 | SaaS `/api/channels/*` (signed events endpoint) | not proxied | **denied, 403** on both SaaS hosts (the web host rewrites `/api/*` to saas-api) |
 | All other Many routes (`/webhooks/meta`, `/api/`, `/auth/`, `/instagram/`, ..., `/`) | as is | copied unchanged (upstream names differ) |
-| `/auth/sso/exchange` (Phase 3) | not present | exact location with its own rate-limit zone and a case-insensitive twin, Many host only |
+| `/auth/sso/exchange` (Phase 3, closed in Phase 4F) | not present | **denied, 403**, exact locations and case-insensitive twins, Many host only; SaaS reaches it as `http://many-api:8000/auth/sso/exchange` |
 | SaaS web and API | not present | served by hostname (no Next basePath, so no SaaS code change) |
 
 The deny response is `403` with body `denied at the edge` and header `X-Edge-Deny: 1`, so it cannot be confused with an application answer. `e2e/phase2/check_nginx.py` proves the deny rules for spelling variants (double slash, percent-encoding, dot segments) and that they do not shadow the JWT/session admin routes; results are in `docs/PHASE-2-RESULTS.md`.
@@ -84,7 +84,7 @@ SaaS startup refuses an unusable signing key when `SSO_ISSUER_ENABLED=true`; Man
 
 ### Edge: the exchange route
 
-`nginx/unified.conf` has `location = /auth/sso/exchange` (public on the Many host only) with its own limit zone (`sso_exchange`, 30 requests per minute per client address, burst 10, answers 429) and a case-insensitive twin `~* ^/auth/sso/exchange/?$` so no spelling dodges the limit. The SaaS hosts do not route that path to Many. `nginx/default.conf` is not edited. Re-run `scripts/dev-up.sh test` after any change to `unified.conf`.
+`nginx/unified.conf` denies `/auth/sso/exchange` (and `/api/auth/sso/exchange`) on the Many host with the same `403` and `X-Edge-Deny: 1` as the signed routes, in every spelling (exact locations plus case-insensitive twins). Since Phase 4F the SaaS API exchanges server-side over the internal network, so the browser never needs the route. The SaaS hosts do not route that path to Many. `nginx/default.conf` is not edited. Rollback: restore the previous `unified.conf` (the public location with the `sso_exchange` limit). Re-run `scripts/dev-up.sh test` after any change to `unified.conf`.
 
 ### Migrating Many users (rehearsal only, never production in Phase 3)
 
@@ -97,7 +97,36 @@ python scripts/identity_migrate.py apply --report-hash <hash from the report> --
 python scripts/identity_migrate.py verify
 ```
 
-Only argon2id hashes are carried; any other algorithm is reported as "needs set-password link" and gets an unusable password until a link is used. Memberships and the organization to workspace mapping are not applied by the tool. Its tests need a disposable Postgres (`APP_ENV=test`, `TEST_DATABASE_URL`).
+Only argon2id hashes are carried; any other algorithm is reported as "needs set-password link" and gets an unusable password until a link is used. Memberships are not applied by this tool. The organization to workspace mapping is a separate step (next section). Its tests need a disposable Postgres (`APP_ENV=test`, `TEST_DATABASE_URL`).
+
+### Organization to workspace mapping and the Many proxy (Phase 4A)
+
+The owner decides which SaaS organization belongs to which Many workspace and writes a JSON file of
+`{"tenant_id": "...", "workspace_id": "..."}` pairs (one organization to one workspace, both ids as UUIDs).
+Same environment and safety rules as above (`MANY_DATABASE_URL`, `SAAS_DATABASE_URL`, throwaway databases for tests, a backup before any apply):
+
+```bash
+python scripts/identity_migrate.py map-report --mapping pairs.json     # read-only; prints the hash and any conflict
+python scripts/identity_migrate.py map-apply --mapping pairs.json --report-hash <hash> --confirm-databases <many_db>,<saas_db> --yes
+python scripts/identity_migrate.py verify-mapping                       # both sides point at each other
+```
+
+`map-apply` refuses on any conflict (unknown or archived organization, unknown workspace, either side already mapped elsewhere), writes only empty pointers, and a stopped run is finished by running it again.
+
+The proxy (`MANY_PROXY_ENABLED`, off by default) also needs `IDENTITY_V2_ENABLED`, `SSO_ISSUER_ENABLED` and a Many with `SSO_ASSERTION_ENABLED` and the matching `SSO_PUBLIC_KEYS`. `MANY_API_BASE_URL` defaults to `http://many-api:8000`, the one host `CHANNEL_INTERNAL_ALLOWED_HOSTS` allows. With it off, every `/api/v1/many/*` path answers 404 like an unknown route. The browser never receives a Many token or a workspace id; only the paths listed in `modules/saas/apps/api/app/identity/many_routes.py` are forwarded. Turning the flag off is the rollback.
+
+#### The public opt-in call (Phase 4C)
+
+`POST /api/v1/many/public/whatsapp/opt-in/{token}` is the only proxy call without a login. It is
+off with the proxy flag, accepts only `{"phone": "+<6 to 20 digits>"}`, is limited here (10 per
+address and 100 per link per hour) and is forwarded with the customer's address in
+`X-Forwarded-For`. **Prerequisite before turning it on:** Many records the address it sees as
+consent evidence and applies its own per-address limit (`WHATSAPP_PUBLIC_OPT_IN_IP_LIMIT`, 10 per
+hour). `docker-compose.unified.yml` starts Many's uvicorn without `--proxy-headers`, so Many would
+see this API's address for every customer: one shared limit and wrong evidence. Start Many with
+`--proxy-headers --forwarded-allow-ips=<the SaaS API's address>` (not `*`) before relying on it, or
+keep serving the opt-in page from the old dashboard (the link base is `DASHBOARD_BASE_URL`).
+Not tested here (no Docker daemon).
 
 ### Rollback ladder
 

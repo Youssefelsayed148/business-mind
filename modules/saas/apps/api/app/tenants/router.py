@@ -112,6 +112,7 @@ def update_tenant(
 ) -> TenantOut:
     """Tenant settings (P4-04): retention window (admin only, audited)."""
     context.require_role("admin")
+    context.require_every_location()  # retention applies to the whole organization
     service = TenantService(context.db)
     tenant = service.update_tenant(context, body.retention_days)
     return TenantOut.model_validate(tenant)

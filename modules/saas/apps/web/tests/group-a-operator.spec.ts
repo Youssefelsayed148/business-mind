@@ -124,11 +124,30 @@ test("non-staff /app keeps invitation empty state and membership switcher", asyn
   await expect(
     page.getByRole("link", { name: "Open Client membership", exact: true }),
   ).toBeVisible();
+  // One organization and no staff flag: nothing to switch (plan 12.3, Phase 4B).
+  await expect(
+    page.getByRole("combobox", { name: "Organization selector" }),
+  ).toHaveCount(0);
+  await session(page, false, [
+    {
+      tenant_id: tenantId,
+      tenant_name: "Client membership",
+      tenant_slug: "client-membership",
+      role: "admin",
+    },
+    {
+      tenant_id: "33333333-3333-4333-8333-333333333333",
+      tenant_name: "Second membership",
+      tenant_slug: "second-membership",
+      role: "viewer",
+    },
+  ]);
+  await page.reload();
   await expect(
     page
       .getByRole("combobox", { name: "Organization selector" })
       .locator("option"),
-  ).toHaveCount(2);
+  ).toHaveCount(3);
   expect(platformRequests).toBe(0);
 });
 

@@ -8,7 +8,6 @@ import http.client
 import json
 import os
 import sys
-import time
 import uuid
 
 EDGE = (os.environ.get("EDGE_HOST", "nginx"), int(os.environ.get("EDGE_PORT", "80")))
@@ -122,8 +121,8 @@ check("many-dashboard", "GET", MANY, "/", "ok")
 check("saas-api-ready", "GET", SAAS_API, "/ready", "ok")
 check("saas-web", "GET", SAAS_WEB, "/", "ok")
 
-# (c) SSO exchange (Phase 3, design 2.6). The stack runs with the flags off, so the app answers 404;
-# with SSO on it would answer 400/401. Either way it is the APP answering, never an edge deny.
+# (c) SSO exchange (Phase 4F, design D3 option b). The SaaS API exchanges server-side over the
+# internal network, so the public Many host denies the route at the edge in every spelling.
 for path in (
     "/auth/sso/exchange",
     "//auth/sso/exchange",
@@ -131,23 +130,17 @@ for path in (
     "/auth/sso/../sso/exchange",
     "/auth/%73so/exchange",
     "/auth/sso/%65xchange",
+    "/auth/sso/exchange/",
+    "/AUTH/sso/exchange",
+    "/Auth/SSO/Exchange",
+    "/auth/SSO/exchange",
+    "/auth/sso/EXCHANGE",
+    "/api/auth/sso/exchange",
+    "//api/auth/%73so/exchange",
+    "/API/auth/sso/exchange",
+    "/api/auth/sso/exchange/",
 ):
-    check("sso-exchange-reaches-the-app", "POST", MANY, path, "app_4xx_json")
-# Mixed case: the regex twin applies the same limit and forwards as written; FastAPI is case
-# sensitive, so the handler is not reached and the app answers 404.
-for path in ("/AUTH/sso/exchange", "/Auth/SSO/Exchange", "/auth/SSO/exchange", "/auth/sso/EXCHANGE"):
-    check("sso-exchange-mixedcase", "POST", MANY, path, "app_4xx_json")
-check("sso-exchange-trailing-slash", "POST", MANY, "/auth/sso/exchange/", "redirect_or_4xx")
-# The /api/ prefix is stripped before Many sees it, so it reaches the same handler. These share
-# the limit zone with the checks above, so wait for the allowance to refill (30 a minute) first.
-for path, expect in (
-    ("/api/auth/sso/exchange", "app_4xx_json"),  # exact location
-    ("//api/auth/%73so/exchange", "app_4xx_json"),
-    ("/API/auth/sso/exchange", "app_4xx_json"),  # regex location, forwarded without the prefix
-    ("/api/auth/sso/exchange/", "redirect_or_4xx"),
-):
-    time.sleep(2.5)
-    check("sso-exchange-api-prefix-reaches-the-app", "POST", MANY, path, expect)
+    check("sso-exchange-denied-at-the-edge", "POST", MANY, path, "deny")
 # Not routed to Many on the SaaS hosts (404 from the SaaS API or from Next, never 2xx).
 for host in (SAAS_API, SAAS_WEB):
     for path in ("/auth/sso/exchange", "/AUTH/sso/exchange"):
@@ -158,22 +151,8 @@ for host in (SAAS_API, SAAS_WEB):
     check("sso-issuer-authorize-reaches-the-saas-app", "GET", host, "/api/v1/sso/authorize", "app_4xx_json")
 # The signed routes stay denied right next to the new location.
 check("signed-still-denied-after-sso", "POST", MANY, "/api/saas/messages", "deny")
-
-
-def burst(name: str, host: str, path: str, total: int = 30) -> None:
-    """The exchange zone limits per client address, so a burst gets 429s from the edge itself.
-
-    The earlier exchange checks already spent part of the burst allowance, so the first requests
-    here may be limited too; what matters is that the 429s come from nginx (a plain error page,
-    never the app's JSON) and that none of the answers is a 2xx.
-    """
-    answers = [call("POST", host, path, b"{}") for _ in range(total)]
-    edge_429 = [a for a in answers if a["status"] == 429 and not a["body"].lstrip().startswith("{")]
-    ok = len(edge_429) >= 5 and not any(200 <= a["status"] < 300 for a in answers)
-    results.append({"check": name, "method": "POST", "host": host, "path": path, "expect": "rate_limited",
-                    "status": 429 if edge_429 else answers[-1]["status"], "edge_deny": False,
-                    "body": f"{len(edge_429)} of {total} requests answered 429 by the edge", "ok": ok})
-    print(json.dumps(results[-1]), flush=True)
+# Other Many auth routes (the old dashboard login) are not shadowed by the exchange deny.
+check("many-login-not-shadowed", "POST", MANY, "/auth/login", "app_4xx_json")
 
 
 def spoofed_login(host: str, attempt: int) -> dict:
@@ -197,9 +176,6 @@ def forwarded_for_cannot_be_forged() -> None:
 
 
 forwarded_for_cannot_be_forged()
-# Last on purpose: it trips the limiter for this client address on the exchange path only.
-burst("sso-exchange-rate-limited-at-the-edge", MANY, "/auth/sso/exchange")
-burst("sso-exchange-api-prefix-rate-limited-at-the-edge", MANY, "/api/auth/sso/exchange")
 
 failed = [r for r in results if not r["ok"]]
 print(f"SUMMARY nginx_checks total={len(results)} passed={len(results) - len(failed)} failed={len(failed)}")

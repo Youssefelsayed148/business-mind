@@ -34,7 +34,12 @@ CsrfOk = Annotated[None, Depends(cookies.require_csrf)]
 
 @router.get("/config")
 def auth_config(settings: CurrentSettings) -> dict[str, bool]:
-    return {"self_serve_signup": settings.self_serve_signup}
+    config = {"self_serve_signup": settings.self_serve_signup}
+    if settings.identity_v2_enabled:
+        # Only when on, so the answer is byte-for-byte what it was with the flag off: the web
+        # app uses it to offer password reset and two-step verification (Phase 4E).
+        config["identity_v2"] = True
+    return config
 
 
 def _login_rate_limited(db: OrmSession, request: Request, settings: Settings) -> None:

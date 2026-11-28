@@ -58,6 +58,7 @@ def _out(row: ChangeRequest) -> ChangeRequestOut:
 @router.get("/api/v1/tenants/{tenant_id}/change-requests", response_model=list[ChangeRequestOut])
 def list_change_requests(context: TenantContextDep) -> list[ChangeRequestOut]:
     context.require_role("admin")
+    context.require_every_location()
     return [
         _out(row)
         for row in context.db.scalars(
@@ -83,6 +84,7 @@ def create_change_request(
     files: Annotated[list[UploadFile] | None, File()] = None,
 ) -> ChangeRequestOut:
     context.require_role("admin")
+    context.require_every_location()
     lock_tenant(context.db, context.tenant_id)
     if not text.strip():
         raise ApiError(422, "VALIDATION_ERROR", "Describe the requested change.")
@@ -137,6 +139,7 @@ def download_change_attachment(
     request_id: UUID, attachment_id: UUID, context: TenantContextDep, settings: CurrentSettings
 ) -> Response:
     context.require_role("admin")
+    context.require_every_location()
     row = context.db.scalar(
         select(ChangeRequest).where(
             ChangeRequest.id == request_id, ChangeRequest.tenant_id == context.tenant_id

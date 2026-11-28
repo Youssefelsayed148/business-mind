@@ -45,6 +45,17 @@ class Settings(BaseSettings):
     sso_return_allowlist: list[str] = Field(default_factory=list)
     sso_mint_rate_limit_attempts: int = Field(default=30, ge=1, le=1000)
     sso_mint_rate_limit_window_seconds: int = Field(default=60, ge=1, le=3600)
+    # Server-side proxy to the Many API (Phase 4A, decision P1). Off by default: with it off every
+    # /api/v1/many/* path answers like an unknown route. It needs identity v2 and SSO issuing.
+    many_proxy_enabled: bool = False
+    many_api_base_url: str = ""
+    # How long a Many session token is reused; Many's own token lives 10 minutes by default.
+    many_proxy_token_cache_seconds: int = Field(default=420, ge=30, le=540)
+    many_proxy_timeout_seconds: float = Field(default=30.0, ge=1.0, le=120.0)
+    many_proxy_max_body_bytes: int = Field(default=20 * 1024 * 1024, ge=1024, le=128 * 1024 * 1024)
+    many_proxy_max_response_bytes: int = Field(
+        default=10 * 1024 * 1024, ge=1024, le=64 * 1024 * 1024
+    )
     # Outgoing identity email (design 6.1, 6.3). D4 (provider) is open: console only, which
     # sends nothing. Links are built from this base URL, never from a request Host header.
     mailer_backend: Literal["console"] = "console"
@@ -248,6 +259,11 @@ def validate_startup_settings(settings: Settings) -> None:
         settings.mfa_secret_encryption_keys is None
     ):
         raise RuntimeError("MFA enforcement needs MFA_SECRET_ENCRYPTION_KEYS to be set.")
+    if settings.many_proxy_enabled:
+        if not (settings.identity_v2_enabled and settings.sso_issuer_enabled):
+            raise RuntimeError("The Many proxy needs IDENTITY_V2_ENABLED and SSO_ISSUER_ENABLED.")
+        if not settings.many_api_base_url.strip():
+            raise RuntimeError("The Many proxy needs MANY_API_BASE_URL.")
     if settings.sso_issuer_enabled:
         from app.identity.sso import load_signing_key
 

@@ -100,7 +100,7 @@ export function ConfirmAction({
         {children}
       </button>
       <dialog ref={dialog} aria-label={title}>
-        <h2>{title}</h2>
+        <h2 dir="auto">{title}</h2>
         <p>{description}</p>
         <div className="action-row">
           <button

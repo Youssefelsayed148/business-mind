@@ -205,7 +205,18 @@ def invite(
         )
         if member is not None:
             return InviteResult(link_path=None)  # already a member: same answer, no mail
-    # A new invitation supersedes older pending ones for this address (rotation).
+    # A new invitation supersedes older pending ones for this address (rotation). Replacing a
+    # pending Owner or Admin invitation needs the same right as creating one (Phase 4A, item 7).
+    pending_roles = db.execute(
+        select(Invitation.role, Invitation.org_role).where(
+            Invitation.tenant_id == ctx.tenant_id,
+            Invitation.email == address,
+            Invitation.accepted_at.is_(None),
+            Invitation.revoked_at.is_(None),
+        )
+    ).all()
+    for legacy_role, pending_org_role in pending_roles:
+        _require_may_edit(ctx, org_role_of(legacy_role, pending_org_role))
     db.execute(
         update(Invitation)
         .where(

@@ -161,6 +161,11 @@ def verify_assertion(token: str, redis_client: Redis | None = None) -> Assertion
         if agency is not None and not isinstance(agency, str):
             raise SSOAssertionError("bad_via_agency")
         via_agency = agency
+    elif claims.get("org") is not None or claims.get("workspace") is not None:
+        # Staff may name ONE organization and its workspace (Phase 4A, P2) so the shell can open
+        # that organization's WhatsApp and Facebook pages. Both or neither; no role is carried.
+        org = _uuid(claims.get("org"), "bad_org")
+        workspace = _uuid(claims.get("workspace"), "bad_workspace")
     if settings.SSO_REQUIRE_MFA_FOR_ADMIN and not mfa and (scope == "staff" or role in ADMIN_ROLES):
         raise SSOAssertionError("mfa_required")
 

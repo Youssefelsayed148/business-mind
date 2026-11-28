@@ -1,11 +1,13 @@
 "use client";
 
 import { useSearchParams } from "next/navigation";
-import { Suspense, useState } from "react";
+import { Suspense, useEffect, useState } from "react";
 
 import * as api from "@/lib/api";
 import { useSession } from "@/lib/session";
-import { Button, LinkButton, Loading, Notice } from "@/lib/ui";
+import { passwordProblem } from "@/lib/identity";
+import { PasswordField } from "@/lib/password-field";
+import { Button, Field, LinkButton, Loading, Notice } from "@/lib/ui";
 import "@/app/auth-screen.css";
 
 function AcceptForm() {
@@ -15,6 +17,42 @@ function AcceptForm() {
   const [joined, setJoined] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+
+  // Identity v2: a person without an account can create it here (the link is the proof).
+  const [identityV2, setIdentityV2] = useState(false);
+  const [password, setPassword] = useState("");
+  const [confirm, setConfirm] = useState("");
+  useEffect(() => {
+    void api
+      .authConfig()
+      .then((config) => setIdentityV2(config.identity_v2 === true))
+      .catch(() => undefined);
+  }, []);
+
+  async function onCreateAccount(event: React.FormEvent) {
+    event.preventDefault();
+    const problem = passwordProblem(password, confirm);
+    if (problem) {
+      setError(problem);
+      return;
+    }
+    setError(null);
+    setBusy(true);
+    try {
+      await api.acceptInviteNewAccount(token, password);
+      const meAfter = await refresh();
+      const latest = meAfter?.memberships[meAfter.memberships.length - 1];
+      setJoined(latest ? latest.tenant_name : "the organization");
+    } catch (caught) {
+      setError(
+        caught instanceof Error
+          ? caught.message
+          : "Could not create the account from this invitation.",
+      );
+    } finally {
+      setBusy(false);
+    }
+  }
 
   const next = `/accept-invite?token=${encodeURIComponent(token)}`;
 
@@ -92,6 +130,46 @@ function AcceptForm() {
               Sign in
             </LinkButton>
           </p>
+          {identityV2 && (
+            <form
+              onSubmit={onCreateAccount}
+              noValidate
+              data-testid="create-account"
+            >
+              <h2>New here? Create your account</h2>
+              <p className="page-purpose">
+                Choose a password. The account is created for the invited email
+                address.
+              </p>
+              <Field label="Password">
+                {(control) => (
+                  <PasswordField
+                    {...control}
+                    type="password"
+                    name="new-password"
+                    autoComplete="new-password"
+                    value={password}
+                    onChange={(event) => setPassword(event.target.value)}
+                  />
+                )}
+              </Field>
+              <Field label="Confirm password">
+                {(control) => (
+                  <PasswordField
+                    {...control}
+                    type="password"
+                    name="confirm-password"
+                    autoComplete="new-password"
+                    value={confirm}
+                    onChange={(event) => setConfirm(event.target.value)}
+                  />
+                )}
+              </Field>
+              <Button type="submit" disabled={busy}>
+                {busy ? "Creating..." : "Create account and join"}
+              </Button>
+            </form>
+          )}
         </>
       )}
       {joined && (

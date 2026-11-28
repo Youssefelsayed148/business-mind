@@ -243,3 +243,21 @@ def test_default_config_keeps_registration_closed(app: Any, db: Any, monkeypatch
         assert db.execute(select(User)).scalars().all() == []
     finally:
         guest.close()
+
+
+def test_auth_config_names_identity_v2_only_when_it_is_on(app: Any) -> None:
+    client = TestClient(app)
+    try:
+        app.dependency_overrides[get_settings] = lambda: build_test_settings(
+            identity_v2_enabled=False
+        )
+        assert client.get("/api/v1/auth/config").json() == {"self_serve_signup": True}
+        app.dependency_overrides[get_settings] = lambda: build_test_settings(
+            identity_v2_enabled=True
+        )
+        assert client.get("/api/v1/auth/config").json() == {
+            "self_serve_signup": True,
+            "identity_v2": True,
+        }
+    finally:
+        client.close()

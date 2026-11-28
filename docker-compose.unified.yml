@@ -52,6 +52,10 @@ x-saas-env: &saas-env
   # come from .env.unified only, never from a default here.
   IDENTITY_V2_ENABLED: ${IDENTITY_V2_ENABLED:-false}
   SSO_ISSUER_ENABLED: ${SSO_ISSUER_ENABLED:-false}
+  # Phase 4A: server-side proxy to Many (off by default; needs the two flags above).
+  # many-api is the one internal host CHANNEL_INTERNAL_ALLOWED_HOSTS already allows.
+  MANY_PROXY_ENABLED: ${MANY_PROXY_ENABLED:-false}
+  MANY_API_BASE_URL: ${MANY_API_BASE_URL:-http://many-api:8000}
   MFA_ENFORCE_STAFF: ${MFA_ENFORCE_STAFF:-false}
   MFA_ENFORCE_ADMINS: ${MFA_ENFORCE_ADMINS:-false}
   PUBLIC_BASE_URL: ${PUBLIC_BASE_URL:-http://localhost:3000}

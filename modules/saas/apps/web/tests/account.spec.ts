@@ -15,7 +15,7 @@ const OLD_PASSWORD = "Str0ngPass!";
 const NEW_PASSWORD = "Br4ndNewPass!";
 
 async function openAccount(page: Page) {
-  await page.getByRole("link", { name: "Account" }).click();
+  await page.getByRole("link", { name: "Account", exact: true }).click();
   await page.waitForURL(/\/account$/);
 }
 

@@ -95,7 +95,7 @@ test("workspace theme persists and keyboard palette only navigates", async ({
   page,
 }) => {
   const { tenantId } = await registerAdmin(page, "Shell");
-  await expect(page.getByTestId("workspace-context")).toContainText("admin");
+  await expect(page.getByTestId("workspace-context")).toContainText("Admin");
   const before = await page.locator("html").getAttribute("data-theme");
   await page.getByTestId("theme-toggle").first().click();
   await expect(page.locator("html")).toHaveAttribute(
