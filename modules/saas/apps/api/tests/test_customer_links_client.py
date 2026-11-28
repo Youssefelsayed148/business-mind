@@ -14,7 +14,7 @@ from sqlalchemy.orm import Session
 from app.core.config import get_settings
 from tests.helpers import seeded_tenant
 from tests.identity_helpers import build_org
-from tests.test_customer_links import (  # noqa: F401  (fixtures and helpers)
+from tests.test_customer_links import (  # type: ignore[attr-defined]  # noqa: F401
     FakeMany,
     _connection,
     _identity,

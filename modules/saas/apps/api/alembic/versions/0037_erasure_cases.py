@@ -54,9 +54,7 @@ def upgrade() -> None:
             "platform IN ('instagram', 'facebook', 'whatsapp')", name="ck_erasure_cases_platform"
         ),
     )
-    op.create_index(
-        "ix_erasure_cases_tenant_created", "erasure_cases", ["tenant_id", "created_at"]
-    )
+    op.create_index("ix_erasure_cases_tenant_created", "erasure_cases", ["tenant_id", "created_at"])
 
 
 def downgrade() -> None:

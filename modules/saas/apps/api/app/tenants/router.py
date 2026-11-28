@@ -186,7 +186,12 @@ def create_invitation(
         org_role = team_service.authorize_new_invitation(context, body.role)
     service = TenantService(context.db)
     invitation, token = service.create_invitation(
-        context, body.email, body.role, body.expiry_days, org_role=org_role
+        context,
+        body.email,
+        body.role,
+        body.expiry_days,
+        org_role=org_role,
+        hide_account_existence=context.permissions is not None,
     )
     return invitation_payload(invitation, token)
 

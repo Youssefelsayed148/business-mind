@@ -16,6 +16,7 @@ person's links on other channels stay until each is erased too.
 from __future__ import annotations
 
 import json
+import re
 from datetime import UTC, datetime
 from uuid import UUID, uuid4
 
@@ -31,6 +32,7 @@ from app.db.models import ChannelConnection, ChannelEvent, CustomerLink, Erasure
 from app.identity import many_proxy
 from app.linking.service import SAAS_CHANNEL
 
+_SAFE_SEGMENT = re.compile(r"[A-Za-z0-9_.-]{1,128}")
 _JSON = {"content-type": "application/json", "accept": "application/json"}
 
 
@@ -119,18 +121,24 @@ def resume(
     """Continue a case from where it stopped. Safe to call again."""
     if case.state == "complete":
         return case
+    # Two retries at once must not both run: lock the case row until this call commits (G-01).
+    db.execute(select(ErasureCase.id).where(ErasureCase.id == case.id).with_for_update())
+    db.refresh(case)
+    if case.state == "complete":
+        return case
     link = db.get(CustomerLink, case.link_id) if case.link_id else None
     if link is None or link.tenant_id != tenant.id:
         _set(case, "needs_action", "link_missing")
         db.commit()
         return case
     if case.state in ("requested", "needs_action") and link.state != "erased":
-        _erase_saas(db, tenant, case, link)
+        if not _erase_saas(db, tenant, case, link):
+            return case  # nothing was erased in the SaaS: do not ask Many either
     _ask_many(db, settings, user, tenant, case, link, session_hash)
     return case
 
 
-def _erase_saas(db: Session, tenant: Tenant, case: ErasureCase, link: CustomerLink) -> None:
+def _erase_saas(db: Session, tenant: Tenant, case: ErasureCase, link: CustomerLink) -> bool:
     connection = db.scalar(
         select(ChannelConnection).where(
             ChannelConnection.tenant_id == tenant.id,
@@ -138,20 +146,36 @@ def _erase_saas(db: Session, tenant: Tenant, case: ErasureCase, link: CustomerLi
             ChannelConnection.channel == SAAS_CHANNEL[link.platform],
         )
     )
+    if connection is None and link.contact_id is not None:
+        # A contact is still attached but its channel connection cannot be found: nothing was
+        # erased, so the link must not be marked erased (security review G-02).
+        _set(case, "needs_action", "connection_missing")
+        db.commit()
+        return False
     if connection is not None and link.external_id:
-        event = ChannelEvent(
-            tenant_id=tenant.id,
-            connection_id=connection.id,
-            event_id=f"customer-erasure-{case.id}",
-            event_type="contact.erasure",
-            payload={"external_contact_id": link.external_id},
-            status="received",
+        event_id = f"customer-erasure-{case.id}"
+        # A retry after a crash between the erase commit and the case update finds the event
+        # that already ran; it must not insert it again (security review G-01).
+        already = db.scalar(
+            select(ChannelEvent.id).where(
+                ChannelEvent.connection_id == connection.id,
+                ChannelEvent.event_id == event_id,
+            )
         )
-        db.add(event)
-        db.flush()
-        erase_channel_contact(db, event, uuid4())  # commits
-        db.refresh(case)
-        db.refresh(link)
+        if already is None:
+            event = ChannelEvent(
+                tenant_id=tenant.id,
+                connection_id=connection.id,
+                event_id=event_id,
+                event_type="contact.erasure",
+                payload={"external_contact_id": link.external_id},
+                status="received",
+            )
+            db.add(event)
+            db.flush()
+            erase_channel_contact(db, event, uuid4())  # commits
+            db.refresh(case)
+            db.refresh(link)
     link.state = "erased"
     link.display_name = None
     link.many_lead_id = None
@@ -168,6 +192,7 @@ def _erase_saas(db: Session, tenant: Tenant, case: ErasureCase, link: CustomerLi
         metadata={"platform": case.platform},
     )
     db.commit()
+    return True
 
 
 def _ask_many(
@@ -185,6 +210,11 @@ def _ask_many(
             "needs_action",
             "workspace_not_mapped" if not tenant.many_workspace_id else "identity_unavailable",
         )
+        db.commit()
+        return
+    if not _SAFE_SEGMENT.fullmatch(case.many_channel_id) or case.many_channel_id in (".", ".."):
+        # The channel reference is staff-set text: never let it change the Many path (G-04).
+        _set(case, "needs_action", "channel_ref_invalid")
         db.commit()
         return
     path = f"privacy/contact-erasure/{case.platform}/{case.many_channel_id}"
@@ -262,4 +292,8 @@ REASON_TEXT = {
     ),
     "identity_unavailable": "The identity is no longer stored here. Ask staff.",
     "link_missing": "The person's record is gone. Ask staff.",
+    "connection_missing": (
+        "The channel connection for this person cannot be found, so nothing was erased. Ask staff."
+    ),
+    "channel_ref_invalid": "The channel reference is not valid. Ask staff to check the mapping.",
 }

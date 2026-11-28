@@ -4,7 +4,7 @@ Nothing in this document has been executed or approved. There is no deploy scrip
 
 ## Open decisions before any deployment
 
-**Owner decision 2026-11-24:** the production HTTPS requirement stays (not relaxed). Decisions 1 and 2 below (edge TLS; internal TLS with a private CA) are Phase 6 items and remain OPEN. Until they are done the prod overlay is written but not deployable.
+**Owner decision 2026-11-24:** the production HTTPS requirement stays (not relaxed). **2026-11-28 (Phase 6A):** decisions 1 and 2 below are now written (nginx TLS block with certbot; private CA, `scripts/tls/`, prod overlay) and checked statically only; see `docs/staging/6A-edge-and-internal-tls.md`. They are proven only when the staging stack (6B) runs them.
 
 1. **TLS at the edge.** `nginx/unified.conf` is plain HTTP. Choose: TLS terminated by a load balancer in front, or a TLS server block in nginx with certificates.
 2. **Internal TLS.** In production the allowlist policy still requires HTTPS for the listed service names, so the internal URLs stored on the channel rows (`http://saas-api:8000`, `http://many-api:8000`) are rejected. Production needs `https://` internal URLs (internal CA or service certificates) before delegation can be enabled. Without it, delegation stays off.

@@ -89,7 +89,9 @@ def _many_rows(db: Session, settings: Settings, staff: User, limit: int) -> list
                 "source": "many",
                 "at": at,
                 "action": str(row.get("event_type") or "")[:100],
-                "summary": str(row.get("message") or "")[:300],
+                # Many's free-text message can hold an email or a handle (security review G-03):
+                # staff see the event type only, never the text.
+                "summary": str(row.get("event_type") or "")[:100],
                 "level": level if level in {"info", "warning", "error", "danger"} else "info",
                 "tenant_id": None,
             }

@@ -22,7 +22,7 @@ from app.core.config import get_settings
 from app.db.models import AuditEvent, Contact, Conversation, ErasureCase, Message
 from app.identity import many_proxy
 from tests.identity_helpers import build_org
-from tests.test_customer_links import (  # noqa: F401  (fixtures and helpers)
+from tests.test_customer_links import (  # type: ignore[attr-defined]  # noqa: F401
     FakeMany,
     _connection,
     _identity,
@@ -150,6 +150,7 @@ def test_erasing_a_linked_person_empties_both_sides(
     # The link is erased and scrubbed; the case is complete.
     db.expire_all()
     row = db.get(type(link), link.id)
+    assert row is not None
     assert (row.state, row.external_id, row.display_name, row.many_lead_id, row.contact_id) == (
         "erased",
         None,
@@ -181,7 +182,8 @@ def test_a_person_known_only_to_many_is_erased_in_many(
     assert call["path"] == f"/privacy/contact-erasure/whatsapp/{w2}"
     assert json.loads(call["body"])["external_contact_id"] == "SECRET-EXT-U2"
     db.expire_all()
-    assert db.get(type(link), link.id).external_id is None
+    other = db.get(type(link), link.id)
+    assert other is not None and other.external_id is None
     # The other person is untouched.
     assert db.scalar(select(func.count(Contact.id))) == 1
 
@@ -221,6 +223,7 @@ def test_many_down_leaves_the_saas_erased_and_a_retry_finishes_it(
     db.expire_all()
     assert db.scalar(select(func.count(Contact.id)).where(Contact.id == contact_id)) == 0
     held = db.get(type(link), link.id)
+    assert held is not None
     assert held.state == "erased" and held.external_id == "SECRET-EXT-U1"  # kept for the retry
     many.plan.append(ERASED)
     retried = users.call(
@@ -230,7 +233,8 @@ def test_many_down_leaves_the_saas_erased_and_a_retry_finishes_it(
     sent = [json.loads(c["body"])["request_id"] for c in _privacy_calls(many)]
     assert sent == [str(request_id), str(request_id)]  # the same id both times
     db.expire_all()
-    assert db.get(type(link), link.id).external_id is None
+    done = db.get(type(link), link.id)
+    assert done is not None and done.external_id is None
     listed = users.call("admin", "GET", f"/api/v1/tenants/{users.tenant_id}/erasure-cases").json()
     assert [c["state"] for c in listed["items"]] == ["complete"]
 
