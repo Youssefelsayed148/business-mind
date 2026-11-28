@@ -61,7 +61,7 @@ Consequences for the design:
 | Step | Content | Done when |
 |---|---|---|
 | 5.0 Design | `docs/DATA-UNIFICATION.md` (what is read, Q1 to Q7 answered, data model, API, failure cases). Docs only. | Owner approves |
-| 5A Link | SaaS table for links, reversible migration, deterministic job that fills it from Many reads through the internal call, backfill idempotent, duplicate and conflict rules | Synthetic dataset: no duplicates, re-run changes nothing, tenant isolation tests; the same on a restored copy |
+| 5A Link (built 2026-11-28, in review) | SaaS table for links, reversible migration, deterministic job that fills it from Many reads through the internal call, backfill idempotent, duplicate and conflict rules | Synthetic dataset: no duplicates, re-run changes nothing, tenant isolation tests; the same on a restored copy |
 | 5B Timeline | Contact page in the SaaS shows linked Many conversations (read only) | Role and tenant tests, browser spec |
 | 5C Erasure | One SaaS-started flow, per-side status, retries, tests with fakes first | Erasing a person removes data in both parts on test data; idempotent re-run; failure of one side is visible and retryable |
 | 5D Analytics | Combined read model and page | Numbers equal the sources on a fixed dataset |

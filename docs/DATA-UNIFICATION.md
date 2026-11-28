@@ -1,6 +1,6 @@
 # Data unification design (Phase 5, step 5.0)
 
-Status: **design only, for the owner's review.** No code, migration or test exists yet. Written
+Status: **design approved 2026-11-28; 5A implemented (section 14).** Written
 2026-11-28 from a read of the code. The owner accepted Q1 to Q7 of `docs/PHASE-5-PLAN.md` on
 2026-11-28 ("yes for all the recommendations"); this document turns them into a buildable design.
 Facts marked **(read)** come from files. Facts marked **(verify in 5A)** are not yet confirmed and
@@ -210,7 +210,46 @@ tables; nothing in Many changes.
    separate, since it adds a Many route. (Recommended: not in Phase 5.)
 5. **The restored copy** for test 2: the owner supplies it (never a live database).
 
-## 13. Change log
+## 13. Owner decisions (2026-11-28)
+
+- Q1 to Q7 of the plan: accepted as recommended.
+- Section 12 question 1 **changed by the owner**: a client Owner or Admin may see WhatsApp,
+  Instagram **and** Facebook people in the customer view (not staff-only). The browser still never
+  reaches Many's global routes: the SaaS reads Many on the server (5A, staff-triggered) and the
+  client reads the SaaS link table. Rows are tied to the organization by the channels it owns
+  (section 14), so one organization never sees another's people. This widens 5B; it is built there
+  with role and isolation tests.
+- Section 12 questions 2 to 5: recommendations accepted (case retention like audit events; staff
+  button first; no Many-side audit route in Phase 5; the owner supplies the restored copy).
+
+## 14. 5A record (2026-11-28)
+
+Built: flag `DATA_UNIFICATION_ENABLED` (default off), migration `0036_customer_links` (tables
+`customer_links` and `many_channel_claims`, reversible), `app/linking/{service,fetch,router}.py`,
+staff routes under `/api/v1/platform/tenants/{id}/` (`customer-links/sync` with `dry_run`,
+`customer-links`, `many-channel-claims`). All answer 404 while the flag is off.
+
+Verified from Many's code (this closes the "(verify in 5A)" items):
+- `GET /leads` returns **every workspace's** leads with no workspace id; each lead names its
+  channel (`instagram_account_id`, `whatsapp_account_id` or `facebook_page_id`), `platform`, and
+  the external id in `ig_user_id`.
+- `GET /instagram/accounts` is global and does **not** name a workspace; `routes_instagram.py` is
+  frozen for client scope, so it is not changed. WhatsApp and Facebook account lists are
+  workspace-scoped.
+- Therefore ownership of channels is: WhatsApp and Facebook from the workspace-scoped lists;
+  Instagram from the organization's own channel connections **plus explicit staff claims**
+  (`many_channel_claims`, one channel to one organization, audited). Leads on channels the
+  organization does not own are ignored. No Many or Instagram change was needed.
+
+Deviations from section 3: the digest is a domain-separated SHA-256 (same family as the existing
+erasure fence), not an HMAC, because no secret exists in every environment. It is pseudonymous,
+not anonymous (a guessable phone number could be tested against it); the table is tenant data and
+cascades with the tenant. A keyed digest is a later hardening. The contact foreign key is a plain
+`SET NULL`; the tenant match is enforced in code and by tests.
+
+Not in 5A: the periodic job (staff button only), the client-facing view (5B), erasure (5C).
+
+## 15. Change log
 
 - 2026-11-28, Claude Code: design written from a read of both data models, the Many erasure
   routes and runbook, the proxy allowlist and the SaaS erase code. Docs only; nothing run.

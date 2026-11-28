@@ -67,8 +67,8 @@ def test_single_head_chains_on_previous_head() -> None:
     config = Config(API_DIR / "alembic.ini")
     config.set_main_option("script_location", str(API_DIR / "alembic"))
     script = ScriptDirectory.from_config(config)
-    assert script.get_heads() == ["0035_invitation_locations"]
-    chain = [rev.revision for rev in script.walk_revisions()][:5]
+    assert script.get_heads() == ["0036_customer_links"]
+    chain = [rev.revision for rev in script.walk_revisions()][1:6]
     assert chain == [
         "0035_invitation_locations",
         "0034_roles_backfill",

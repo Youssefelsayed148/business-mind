@@ -46,10 +46,13 @@ from .knowledge import (
     Source,
     SourcePage,
 )
+from .linking import CustomerLink, ManyChannelClaim
 from .operations import ChangeRequest, OrganizationDeletion
 from .widget import RateLimitCounter, VisitorSession
 
 __all__ = [
+    "CustomerLink",
+    "ManyChannelClaim",
     "Agency",
     "AgencyGrant",
     "AgencyGrantAssignee",
