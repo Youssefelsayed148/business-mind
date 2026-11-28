@@ -249,7 +249,30 @@ cascades with the tenant. A keyed digest is a later hardening. The contact forei
 
 Not in 5A: the periodic job (staff button only), the client-facing view (5B), erasure (5C).
 
-## 15. Change log
+## 15. 5B record (2026-11-28)
+
+Built (client view of the link, Owner and Admin only):
+- API: `GET /api/v1/tenants/{id}/customer-links` (filters `platform`, `state`, `q`; paging) and
+  `GET /api/v1/tenants/{id}/contacts/{contact_id}/customer-links`. Both need the new permission
+  `org.customer_links` (Owner and Admin; the `org.` prefix keeps agency people out, so an agency
+  Admin does not see a client's people), refuse location-limited access, hide erased rows, answer
+  404 while the flag is off, and never return a raw external id.
+- `customer_links` gained `display_name` (the username Many holds) and `lead_seen_at`, so a client
+  can see who a Many-only person is. This is personal data; erasure (5C) removes the whole row.
+  The unreleased migration `0036` was amended instead of adding `0037`.
+- `GET /auth/config` names `data_unification: true` only while the flag is on.
+- Web: `/app/{tenant}/contacts/links` ("People across channels": filters, search, paging, Arabic
+  names isolate their direction), a button on the Contacts page and a "Channels across systems"
+  card on the contact page, both shown only when the API answers.
+- Existing tests changed: `tests/test_role_matrix.py` (new permission row `org.customer_links`).
+  The two new routes are in `TENANT_ROUTE_PERMISSIONS` and `TENANT_ROUTE_ROLES`.
+
+Not in 5B: Many conversation summaries inside the customer view (Many's conversations and
+messages are global staff-only routes; showing them to clients needs a workspace-scoped read that
+does not exist, so it stays a later, separate ask), a menu entry, role-specific browser tests
+(roles are covered by the API matrix).
+
+## 16. Change log
 
 - 2026-11-28, Claude Code: design written from a read of both data models, the Many erasure
   routes and runbook, the proxy allowlist and the SaaS erase code. Docs only; nothing run.

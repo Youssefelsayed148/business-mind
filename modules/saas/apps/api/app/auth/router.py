@@ -39,6 +39,9 @@ def auth_config(settings: CurrentSettings) -> dict[str, bool]:
         # Only when on, so the answer is byte-for-byte what it was with the flag off: the web
         # app uses it to offer password reset and two-step verification (Phase 4E).
         config["identity_v2"] = True
+    if settings.data_unification_enabled:
+        # Phase 5B: the web app shows the cross-channel people view only while this is on.
+        config["data_unification"] = True
     return config
 
 

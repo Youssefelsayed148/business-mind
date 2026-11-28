@@ -27,6 +27,8 @@ def upgrade() -> None:
         sa.Column("many_channel_id", sa.Text(), nullable=False),
         sa.Column("external_id_digest", sa.Text(), nullable=False),
         sa.Column("many_lead_id", sa.Text(), nullable=True),
+        sa.Column("display_name", sa.Text(), nullable=True),
+        sa.Column("lead_seen_at", sa.DateTime(timezone=True), nullable=True),
         sa.Column("source", sa.Text(), nullable=False),
         sa.Column("state", sa.Text(), nullable=False),
         sa.Column("created_at", sa.DateTime(timezone=True), nullable=False),

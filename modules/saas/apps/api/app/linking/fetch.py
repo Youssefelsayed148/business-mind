@@ -11,6 +11,7 @@ Leads come from Many's global staff list, which names channels but no workspace;
 from __future__ import annotations
 
 import json
+from datetime import datetime
 from typing import Any
 from uuid import UUID
 
@@ -72,6 +73,17 @@ def _ids(rows: Any) -> set[str]:
     return {str(row["id"]) for row in rows if isinstance(row, dict) and row.get("id")}
 
 
+def _name(value: Any) -> str | None:
+    return value.strip()[:200] or None if isinstance(value, str) else None
+
+
+def _when(value: Any) -> datetime | None:
+    try:
+        return datetime.fromisoformat(value) if isinstance(value, str) else None
+    except ValueError:
+        return None
+
+
 def _leads(rows: Any) -> list[LeadRow]:
     if not isinstance(rows, list):
         raise many_proxy.ManyUnavailable("lead list unusable")
@@ -83,7 +95,16 @@ def _leads(rows: Any) -> list[LeadRow]:
         external_id = row.get("ig_user_id")
         channel_id = row.get(_LEAD_ID_FIELD.get(str(platform), ""))
         if platform in _LEAD_ID_FIELD and external_id and channel_id and row.get("id"):
-            out.append(LeadRow(str(row["id"]), platform, str(channel_id), str(external_id)))
+            out.append(
+                LeadRow(
+                    str(row["id"]),
+                    platform,
+                    str(channel_id),
+                    str(external_id),
+                    display_name=_name(row.get("username")),
+                    seen_at=_when(row.get("captured_at")),
+                )
+            )
     return out
 
 

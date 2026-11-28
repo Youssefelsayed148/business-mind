@@ -261,3 +261,21 @@ def test_auth_config_names_identity_v2_only_when_it_is_on(app: Any) -> None:
         }
     finally:
         client.close()
+
+
+def test_auth_config_names_data_unification_only_when_it_is_on(app: Any) -> None:
+    client = TestClient(app)
+    try:
+        app.dependency_overrides[get_settings] = lambda: build_test_settings(
+            data_unification_enabled=False
+        )
+        assert client.get("/api/v1/auth/config").json() == {"self_serve_signup": True}
+        app.dependency_overrides[get_settings] = lambda: build_test_settings(
+            data_unification_enabled=True
+        )
+        assert client.get("/api/v1/auth/config").json() == {
+            "self_serve_signup": True,
+            "data_unification": True,
+        }
+    finally:
+        client.close()

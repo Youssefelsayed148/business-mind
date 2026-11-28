@@ -47,6 +47,7 @@ const ROUTES: [RegExp, string][] = [
   [/\/settings\/requests$/, "Request a change"],
   [/\/inbox\/[^/]+$/, "Conversation · Inbox"],
   [/\/inbox$/, "Inbox"],
+  [/\/contacts\/links$/, "People across channels"],
   [/\/contacts\/[^/]+$/, "Contact details"],
   [/\/contacts$/, "Contacts"],
   [/\/analytics$/, "Insights"],

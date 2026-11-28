@@ -53,6 +53,10 @@ class CustomerLink(Base):
     many_channel_id: Mapped[str] = mapped_column(Text, nullable=False)
     external_id_digest: Mapped[str] = mapped_column(Text, nullable=False)
     many_lead_id: Mapped[str | None] = mapped_column(Text)
+    # What a client sees for a person known only to Many (the username Many holds). Personal data:
+    # erasure removes the whole row.
+    display_name: Mapped[str | None] = mapped_column(Text)
+    lead_seen_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     source: Mapped[str] = mapped_column(Text, nullable=False)
     state: Mapped[str] = mapped_column(Text, nullable=False)
     created_at: Mapped[datetime] = mapped_column(

@@ -282,9 +282,56 @@ export function authConfig(): Promise<{
   self_serve_signup: boolean;
   /** Present (true) only while identity v2 is on: reset, two-step verification, team screens. */
   identity_v2?: boolean;
+  /** Present (true) only while the Phase 5 people-across-channels view is on. */
+  data_unification?: boolean;
 }> {
-  return api<{ self_serve_signup: boolean; identity_v2?: boolean }>(
-    "auth/config",
+  return api<{
+    self_serve_signup: boolean;
+    identity_v2?: boolean;
+    data_unification?: boolean;
+  }>("auth/config");
+}
+
+export type LinkPlatform = "instagram" | "facebook" | "whatsapp";
+export type LinkState = "linked" | "many_only" | "saas_only" | "conflict";
+
+export interface CustomerLink {
+  id: string;
+  platform: LinkPlatform;
+  state: LinkState;
+  /** The username Many holds (people known only to Many); may be empty. */
+  display_name: string | null;
+  contact_id: string | null;
+  contact_name: string | null;
+  seen_at: string | null;
+}
+
+export function customerLinks(
+  tenantId: string,
+  filters: {
+    platform?: string;
+    state?: string;
+    q?: string;
+    limit?: number;
+    offset?: number;
+  } = {},
+): Promise<{ total: number; items: CustomerLink[] }> {
+  const query = new URLSearchParams();
+  for (const [key, value] of Object.entries(filters)) {
+    if (value !== undefined && value !== "") query.set(key, String(value));
+  }
+  const suffix = query.size ? `?${query.toString()}` : "";
+  return api<{ total: number; items: CustomerLink[] }>(
+    `tenants/${tenantId}/customer-links${suffix}`,
+  );
+}
+
+export function contactCustomerLinks(
+  tenantId: string,
+  contactId: string,
+): Promise<{ items: CustomerLink[] }> {
+  return api<{ items: CustomerLink[] }>(
+    `tenants/${tenantId}/contacts/${contactId}/customer-links`,
   );
 }
 
