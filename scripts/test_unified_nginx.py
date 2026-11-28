@@ -21,7 +21,7 @@ def _server(name_variable: str) -> str:
 def test_saas_hosts_replace_the_client_supplied_forwarded_for_header() -> None:
     # The SaaS API scopes its rate limits by the first X-Forwarded-For value, so the edge must
     # overwrite that header instead of appending to whatever the client sent.
-    for host in ("SAAS_WEB_HOST", "SAAS_API_HOST"):
+    for host in ("MANY_HOST", "SAAS_WEB_HOST", "SAAS_API_HOST"):
         values = re.findall(r"proxy_set_header X-Forwarded-For (\S+);", _server(host))
         assert values == ["$remote_addr"], (host, values)
 

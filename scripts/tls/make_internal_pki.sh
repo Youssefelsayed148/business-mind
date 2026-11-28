@@ -10,6 +10,7 @@ out="${1:-}"
 [ -n "$out" ] || { echo "usage: $0 <output-dir>" >&2; exit 2; }
 [ ! -e "$out/ca.pem" ] || { echo "refusing to overwrite $out/ca.pem" >&2; exit 3; }
 mkdir -p "$out" "$out/ca-private"
+chmod 755 "$out"   # containers must be able to enter it; protect the PARENT folder (owner-only) instead
 umask 077
 cd "$out"
 

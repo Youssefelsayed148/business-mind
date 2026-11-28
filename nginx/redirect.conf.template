@@ -7,3 +7,9 @@ server {
     location = /health { default_type text/plain; return 200 "ok\n"; }
     location / { return 301 https://$host$request_uri; }
 }
+
+# Unknown host names or SNI on 443 are refused before any certificate is sent (security review G-10).
+server {
+    listen 443 ssl default_server;
+    ssl_reject_handshake on;
+}
