@@ -160,6 +160,7 @@ Not done / open:
 - The SSE stream fixes the caller's scope when it connects.
 
 ## Next
+- **The Phase 4 plan, status, open decisions (P1 to P8) and known gaps are in `docs/PHASE-4-PLAN.md`; update it every Phase 4 session.**
 - **Phase 4 (one dashboard), step 1: GREENLIT by the owner on 2026-11-26.** Write `docs/UI-INVENTORY.md` (every page of both apps: route, purpose, API, role) and the menu, naming, language/RTL and theme proposal, then stop for approval. Owner decision 2026-11-26: Many pages that client logins cannot open (campaigns, conversations, messages, leads, logs, stats, Instagram) start as staff-only in the unified UI.
 - Phase 4 must also cover the identity wiring Phase 3 left out: server-side SSO exchange in the new shell (the public exchange is removed then, D3), the organization to workspace mapping, and the team, invitation, reset and MFA screens.
 - Before enabling any identity flag: decide the items in `docs/PHASE-3-REVIEW.md`, "Open before enabling any flag".
@@ -188,6 +189,7 @@ Not done / open:
 - Root `.gitignore` does not ignore a root-level `.env.local` (only `dashboard/.env.local`).
 
 ## Last session
+- 2026-11-26 (Phase 4 planning), Claude Code: wrote `docs/PHASE-4-PLAN.md`, replaced the Phase 4 prompt in `docs/PHASE-PROMPTS.md`, added a pointer in `docs/MERGE-PLAN.md` (branch `docs/phase-4-plan`, docs only; gaps found by reading code, no tests run, no application code changed). Next: Phase 4 step 1, planned in a cloud session cloned from GitHub (see PHASE-4-PLAN section 9). Noticed: the GitHub repository is public, although Phase 0 called for a private one (owner to decide).
 - 2026-11-26 (Phase 3 review and merge), Claude Code on WSL + Docker: reviewed PRs #6 to #9, wrote failing tests, fixed findings 1 to 9 on `phase-3/review-fixes`, ran the gates in `docs/PHASE-3-REVIEW.md` (SaaS 1491, Many 1286, scripts 50, nginx 75/75, six e2e PASS), opened the review PR and merged the stack with the owner's approval. No deploy, no live systems. Local leftovers: stopped containers `phase3-pg15` and `phase3-pg17`, WSL `~/phase3/`, `unified-*` images, session scratchpad scripts. Next: Phase 4 step 1.
 - 2026-11-25 (Phase 3 PR D), Claude Code on WSL + Docker: implemented location filters and scope assignment on `phase-3/identity-impl-d`, gated as above, pushed, opened the draft PR. Stopped for review; nothing merged. Full suite not re-run after the last two commits.
 - 2026-11-25 (Phase 3 PR C), Claude Code on WSL + Docker: reviewed PRs #6 and #7, fixed the five nits, implemented PR C commits (a) to (h) on `phase-3/identity-impl-c`, ran the end-of-PR gate (table above), pushed, opened the draft PR. Stopped for the owner's review; PR D not started. Nothing merged. Local leftovers: containers `phase3-pg15` and `phase3-pg17`, WSL `~/phase3/` (snapshot, results), the rebuilt `unified-*` images, session scratchpad scripts (outside the repo). The unified e2e stack was torn down by `dev-up.sh test`.

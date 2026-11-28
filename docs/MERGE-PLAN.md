@@ -39,6 +39,7 @@ Work: single sign-on first (log in once, open both parts); then map Many workspa
 Exit: one login reaches every page; role matrix tested for every route (allowed and forbidden cases); no user can see another tenant's data (isolation tests).
 
 ## Phase 4: One dashboard
+Detailed living plan: `docs/PHASE-4-PLAN.md`.
 Work: SaaS web app becomes the shell. Many's pages move in as modules: Overview, Accounts, Campaigns, Facebook campaigns, Leads, Logs, WhatsApp. SaaS pages stay: bots, knowledge, conversations, analytics, team. One menu, one theme, one language/RTL handling. Retire Many's Conversations / Take Over page for delegated channels (the SaaS inbox is used there).
 Exit: every old tab has a place in the new menu (checklist with screenshots); each page works against the right backend; Playwright smoke tests pass.
 
