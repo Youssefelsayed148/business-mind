@@ -1,6 +1,6 @@
 # Phase 5 plan: unified data and behaviour
 
-Status: **plan only, awaiting the owner's approval.** Written 2026-11-27 from a read of the code
+Status: **plan approved 2026-11-28 (owner accepted Q1 to Q7 as recommended and approved merging PRs #11 and #12, both merged). Step 5.0 design: `docs/DATA-UNIFICATION.md`, awaiting review.** Written 2026-11-27 from a read of the code
 (nothing here was run or tested). Facts marked "read" come from files; "owner-reported" comes from
 the owner's message and was not observed by me.
 
