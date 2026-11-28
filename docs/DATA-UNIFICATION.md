@@ -355,7 +355,37 @@ A synthetic stand-in runs in `tests/test_customer_links.py` (2,000 people repeat
 already chat contacts): 2,000 rows, none duplicated, the second run changes nothing, about a second
 per run. It is not a substitute for the real copy.
 
-## 19. Change log
+## 19. 5F record (2026-11-28, cloud container: Node 24.22.3, Postgres 16, no Docker)
+
+Gates observed:
+| Gate | Result |
+|---|---|
+| SaaS API suite (pgvector 0.6.0) | 1608 passed, 10 failed: the same 10 named pgvector tests as the 4F run (embedding readiness 3, hybrid retrieval 4, r19 index 1, RAG evaluation 2) |
+| Phase 5 API tests (links 16, client view 7, erasure 15, overview 5, audit 6) plus migrations, role matrix, route matrix | all pass |
+| Web (Node 24): lint, typecheck, logical-CSS | clean; unit tests 6 files |
+| Full web Playwright suite (Node 24) | 306 passed, 0 failed, 3 skipped |
+| ruff, format, strict mypy; `check_instagram_frozen.py` | clean; OK. No Many file changed in Phase 5 |
+
+Real faults the regression suites caught, all fixed with a test:
+1. The combined audit route first used `GET /api/v1/platform/audit`, which already exists for the
+   Operations page; with the flag off it answered 404 and broke that page. Renamed to
+   `/combined-audit`; a test now checks the old route stays untouched with the flag on and off.
+2. The new people routes ran the role check before the flag check, so a low role got 403 instead of
+   the "unknown route" 404 with the flag off. The flag now runs first, like the identity routes.
+3. The new routes were missing from the exact route-contract test and the platform route list.
+
+Existing tests changed in Phase 5: `test_role_matrix.py` (two permission rows, flag helper for its
+three HTTP matrices), `test_tenant_route_matrix.py` (route count 102 to 108, flagged routes, two
+path ids), `test_identity_migrations.py` (head and chain), `group-b-client-visibility.spec.ts` and
+`group-c-fixtures.ts` (fake API answers 404 for the new routes).
+
+Not run here and needed on the owner's side: the restored-copy duplicate check (section 18, needs
+a copy from the owner), `scripts/dev-up.sh test` and nginx checks (no Docker), the Many suite (no
+Many file changed, but the owner's gate), both backend suites on Postgres 15 and 17 (WSL), real Many
+behind the sync and the erasure call (only a fake answered), a real Meta-side erasure, mobile and
+right-to-left screenshots of the new pages.
+
+## 20. Change log
 
 - 2026-11-28, Claude Code: design written from a read of both data models, the Many erasure
   routes and runbook, the proxy allowlist and the SaaS erase code. Docs only; nothing run.

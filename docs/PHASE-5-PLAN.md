@@ -66,7 +66,7 @@ Consequences for the design:
 | 5C Erasure (built 2026-11-28, in review) | One SaaS-started flow, per-side status, retries, tests with fakes first | Erasing a person removes data in both parts on test data; idempotent re-run; failure of one side is visible and retryable |
 | 5D Analytics (built 2026-11-28, in review) | Combined read model and page | Numbers equal the sources on a fixed dataset |
 | 5E Audit (built 2026-11-28, in review) | Combined read view | Role and isolation tests |
-| 5F Close | WSL full gates, restored-copy link test, record | Exit criteria |
+| 5F Close (gates run 2026-11-28; the restored-copy check and WSL gates are the owner's) | WSL full gates, restored-copy link test, record | Exit criteria |
 
 Gates for every step (as before): both backend suites, script tests, policy and contract copy
 checks, `scripts/check_instagram_frozen.py`, `scripts/dev-up.sh test`, web lint, typecheck,
