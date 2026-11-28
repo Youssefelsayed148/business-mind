@@ -127,11 +127,15 @@ class TenantService:
         expiry_days: int,
         *,
         org_role: str | None = None,
+        hide_account_existence: bool = False,
     ) -> tuple[Invitation, str]:
         email = email.strip().lower()
         tenant = lock_tenant(self.db, context.tenant_id)
         require_capacity(self.db, tenant, "seats")
-        if self.db.scalar(select(User.id).where(User.email == email)) is None:
+        account_exists = self.db.scalar(select(User.id).where(User.email == email)) is not None
+        # Identity v2 on: an unknown address gets the same answer as a known one (an invitation
+        # for a new account, as on the team route), so the route is no account oracle (6G, item 6).
+        if not account_exists and not hide_account_existence:
             raise ApiError(
                 404,
                 "USER_NOT_FOUND",
@@ -162,6 +166,7 @@ class TenantService:
             token_hash=hash_token(token),
             expires_at=datetime.now(UTC) + timedelta(days=expiry_days),
             created_by=context.user.id,
+            new_account=not account_exists,
         )
         self.db.add(invitation)
         record_audit(

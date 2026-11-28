@@ -105,7 +105,8 @@ def active_grant_for(
         # one, then fewer locations; the id makes the choice deterministic.
         grant = pair[0]
         count = len(located[grant.id])
-        return (_CAP_RANK[grant.role_cap], 0 if count else 1, count, str(grant.id))
+        limited = grant.location_scope == "limited"
+        return (_CAP_RANK[grant.role_cap], 0 if limited else 1, count, str(grant.id))
 
     grant, agency = min(candidates, key=narrowness)
     return ActiveGrant(
@@ -113,7 +114,8 @@ def active_grant_for(
         agency_id=agency.id,
         agency_name=agency.name,
         role_cap=grant.role_cap,
-        location_ids=frozenset(located[grant.id]) or None,
+        # A limited grant whose locations are all gone is an empty set: it matches nothing.
+        location_ids=frozenset(located[grant.id]) if grant.location_scope == "limited" else None,
     )
 
 
@@ -185,6 +187,7 @@ def create_grant(
     except ValueError:
         raise _not_found() from None
     grant = AgencyGrant(
+        location_scope="limited" if scoped else "all",
         agency_id=agency_id,
         tenant_id=ctx.tenant_id,
         role_cap=role_cap,

@@ -157,6 +157,10 @@ class AgencyGrant(Base):
         ForeignKey("tenants.id", ondelete="CASCADE"), nullable=False
     )
     role_cap: Mapped[str] = mapped_column(Text, nullable=False)
+    # 'limited' with no agency_grant_locations rows means no access (fail closed).
+    location_scope: Mapped[str] = mapped_column(
+        Text, nullable=False, default="all", server_default=text("'all'")
+    )
     status: Mapped[str] = mapped_column(
         Text, nullable=False, default="active", server_default=text("'active'")
     )
@@ -177,6 +181,9 @@ class AgencyGrant(Base):
             "role_cap IN ('admin','manager','agent','viewer')", name="ck_agency_grants_role_cap"
         ),
         CheckConstraint("status IN ('active','revoked')", name="ck_agency_grants_status"),
+        CheckConstraint(
+            "location_scope IN ('all','limited')", name="ck_agency_grants_location_scope"
+        ),
         CheckConstraint(
             "(status = 'revoked') = (revoked_at IS NOT NULL)", name="ck_agency_grants_revoked"
         ),
